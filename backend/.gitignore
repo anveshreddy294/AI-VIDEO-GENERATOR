@@ -1,0 +1,45 @@
+# Environment
+.env
+
+# Virtual environments
+.venv
+venv
+env
+uv.lock
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Project specific
+bin/
+media
+content
+video-output.json
+data/json/*
+data/audio/*
+data/timelines/*
+data/manim/*
+data/renders/*
+data/models/*
+data/user/*
+!data/**/.gitkeep
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

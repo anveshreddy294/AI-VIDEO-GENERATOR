@@ -1,0 +1,64 @@
+{
+  "topics": [
+    {
+      "id": "chem-bohr-model",
+      "title": "Bohr's Atomic Model",
+      "subject": "Chemistry",
+      "duration": "28s",
+      "difficulty": "Medium",
+      "difficulty_color": "var(--accent-amber)",
+      "prerequisite": "Atomic Structure",
+      "summary": "Visualizes energy shells and quantum transitions as electrons jump orbits, releasing photons."
+    },
+    {
+      "id": "phys-newton-third",
+      "title": "Newton's Third Law",
+      "subject": "Physics",
+      "duration": "32s",
+      "difficulty": "Easy",
+      "difficulty_color": "var(--accent-teal)",
+      "prerequisite": "Force and Motion",
+      "summary": "Simulates action-reaction vectors between interacting blocks and colliding bodies in motion."
+    },
+    {
+      "id": "math-quadratic-derivation",
+      "title": "Quadratic Formula Derivation",
+      "subject": "Mathematics",
+      "duration": "45s",
+      "difficulty": "Medium",
+      "difficulty_color": "var(--accent-amber)",
+      "prerequisite": "Polynomials",
+      "summary": "Walks through completion of squares visually on a coordinate grid, isolating x."
+    },
+    {
+      "id": "bio-photosynthesis-light",
+      "title": "Photosynthesis Light Reactions",
+      "subject": "Biology",
+      "duration": "50s",
+      "difficulty": "Hard",
+      "difficulty_color": "var(--accent-rose)",
+      "prerequisite": "Cell Biology",
+      "summary": "Traces the electron transport chain across the thylakoid membrane generating ATP."
+    },
+    {
+      "id": "chem-benzene-resonance",
+      "title": "Benzene Ring Resonance",
+      "subject": "Chemistry",
+      "duration": "60s",
+      "difficulty": "Hard",
+      "difficulty_color": "var(--accent-rose)",
+      "prerequisite": "Organic Chemistry",
+      "summary": "Demonstrates delocalized pi electrons shifting rings in a beautiful aromatic system."
+    },
+    {
+      "id": "phys-em-induction",
+      "title": "Electromagnetic Induction",
+      "subject": "Physics",
+      "duration": "55s",
+      "difficulty": "Hard",
+      "difficulty_color": "var(--accent-rose)",
+      "prerequisite": "Magnetic Fields",
+      "summary": "Visualizes flux loops changing through copper coils, triggering induced electric vectors."
+    }
+  ]
+}

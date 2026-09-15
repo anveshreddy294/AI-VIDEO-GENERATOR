@@ -1,0 +1,49 @@
+litellm==1.83.0
+# openai-agents # optional: required for examples/agentic_vectorless_rag_demo.py
+pymupdf==1.26.4
+PyPDF2==3.0.1
+python-dotenv==1.1.0
+pyyaml==6.0.2
+# ── Core LLM & LangChain ──────────────────────────────────────────
+openai>=1.30.0
+google-generativeai>=0.7.0
+langchain>=0.2.0
+langchain-google-genai>=1.0.0
+langchain-community>=0.2.0
+langchain-core>=0.2.0
+
+# ── PageIndex (RAG engine) ────────────────────────────────────────
+# Install separately from GitHub after pip install -r requirements.txt:
+# cd PageIndex && pip install -e .
+
+# ── PDF Processing ────────────────────────────────────────────────
+pypdf>=4.0.0
+pdfminer.six>=20221105
+
+# ── Animation ─────────────────────────────────────────────────────
+manim>=0.18.0
+
+# ── Text to Speech ────────────────────────────────────────────────
+gtts>=2.5.0
+pydub>=0.25.0
+
+# ── Video Processing ──────────────────────────────────────────────
+# ffmpeg is a SYSTEM package — do NOT pip install it
+# Install via: brew install ffmpeg (Mac) or sudo apt install ffmpeg (Linux)
+# This Python wrapper lets you call ffmpeg from Python:
+ffmpeg-python>=0.2.0
+
+# ── Web UI ────────────────────────────────────────────────────────
+streamlit>=1.35.0
+
+# ── Utilities ─────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+tenacity>=8.2.0
+tiktoken>=0.7.0
+requests>=2.31.0
+tqdm>=4.66.0
+rapidfuzz>=3.0.0
+
+# ── Data handling ─────────────────────────────────────────────────
+pandas>=2.0.0

@@ -1,0 +1,25 @@
+{
+  "scene_id": 1,
+  "audio_duration": 4.2,
+  "timeline": {
+    "title": 0.63,
+    "puck": 0.84,
+    "arrow": 0.63,
+    "total": 4.2
+  },
+  "word_timestamps": [
+    {"word": "An", "start": 0.0, "end": 0.15},
+    {"word": "object", "start": 0.15, "end": 0.45},
+    {"word": "at", "start": 0.45, "end": 0.55},
+    {"word": "rest", "start": 0.55, "end": 0.85},
+    {"word": "stays", "start": 0.85, "end": 1.15},
+    {"word": "at", "start": 1.15, "end": 1.25},
+    {"word": "rest", "start": 1.25, "end": 1.55},
+    {"word": "unless", "start": 1.55, "end": 1.95},
+    {"word": "a", "start": 1.95, "end": 2.05},
+    {"word": "force", "start": 2.05, "end": 2.45},
+    {"word": "acts", "start": 2.45, "end": 2.85},
+    {"word": "on", "start": 2.85, "end": 3.05},
+    {"word": "it.", "start": 3.05, "end": 4.2}
+  ]
+}

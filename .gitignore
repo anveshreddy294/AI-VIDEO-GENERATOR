@@ -1,0 +1,49 @@
+# ── Secrets (never commit) ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Generated / runtime outputs ───────────────────────────────────────────────
+results/
+logs/
+*.log
+
+# PageIndex runtime (submodule tree is tracked; ignore generated/local files)
+PageIndex/venv/
+PageIndex/logs/
+PageIndex/results/
+PageIndex/.env
+PageIndex/**/__pycache__/
+
+# VR_Classroom local-only
+VR_Classroom/.env
+VR_Classroom/**/__pycache__/
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── OS & editors ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.cursor/
+.claude/
+.zencoder/
+.zenflow/

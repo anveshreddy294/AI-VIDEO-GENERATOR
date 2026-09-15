@@ -1,0 +1,25 @@
+manim==0.19.1
+numpy==2.2.6
+google-genai>=1.0,<3
+python-multipart
+Pillow
+requests
+python-dotenv
+pydub
+ffmpeg-python
+moviepy
+fastapi
+uvicorn
+gtts
+piper-tts
+pymupdf
+PyPDF2
+# NOTE: Manim 0.19+ requires numpy>=2, but the installed PyTorch 2.2.x wheels
+# were built against numpy 1.x and crash on import. We resolve this by NOT
+# importing WhisperX/torch at all — the audio alignment module falls back to
+# proportional (uniform) word timestamps, which is perfectly adequate for the
+# anchor-phrase timeline builder.
+# If you want true WhisperX forced alignment, upgrade torch to >=2.4 (which
+# supports numpy 2.x) in a separate environment.
+ollama
+PyYAML

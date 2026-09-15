@@ -1,0 +1,12 @@
+AICARLS incremental fixes
+
+This ZIP contains 12 replacement/additional source files relative to the project
+root. Extract it over a COPY of the exact uploaded repository. Preserve your
+private .env. No credentials or environment files are included.
+
+Read AICARLS-audit.md for test evidence, discrepancies, remaining blockers,
+and verification commands. AICARLS.patch is the equivalent reviewable diff.
+
+The included video is a deterministic component verification with a curated
+plan and narration. Live LLM generation and chat remain blocked by a Gemini
+401 ACCESS_TOKEN_TYPE_UNSUPPORTED authentication error.

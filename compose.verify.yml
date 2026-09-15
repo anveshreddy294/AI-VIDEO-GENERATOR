@@ -1,0 +1,26 @@
+services:
+  backend:
+    image: aicarls-merged-baseline
+    container_name: aicarls-mvp-backend
+    command: ["python", "backend/api.py"]
+    working_dir: /app
+    env_file: .env
+    environment:
+      MANIM_QUALITY: "-ql"
+      STRICT_SEMANTIC: "true"
+    ports: ["5002:5000"]
+    volumes: ["./:/app"]
+  frontend:
+    image: node:20-alpine
+    container_name: aicarls-mvp-frontend
+    working_dir: /app/frontend
+    command: sh -lc "npm ci && npm run dev -- --host 0.0.0.0"
+    ports: ["3002:3000"]
+    volumes:
+      - "./:/app"
+      - verify_node_modules:/app/frontend/node_modules
+    environment:
+      VITE_BACKEND_URL: "http://localhost:5002"
+    depends_on: [backend]
+volumes:
+  verify_node_modules:

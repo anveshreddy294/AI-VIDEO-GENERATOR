@@ -1,0 +1,17 @@
+{
+  "scene_id": 1,
+  "concept": "inertia",
+  "anchor_example": "hockey puck",
+  "narration": "An object at rest stays at rest unless a force acts on it.",
+  "visual_instruction": "Show a hockey puck on ice, then a hand pushing it.",
+  "beats": [
+    {
+      "phrase": "An object at rest",
+      "visual": "Display a stationary hockey puck on an ice surface"
+    },
+    {
+      "phrase": "stays at rest unless a force acts on it",
+      "visual": "Animate a hand pushing the puck, then the puck sliding"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "scene_id": 1,
+  "objects": [
+    {
+      "id": "title",
+      "type": "Text",
+      "content": "Newton's First Law",
+      "action": "Write",
+      "weight": 0.3
+    },
+    {
+      "id": "puck",
+      "type": "Circle",
+      "content": "hockey puck",
+      "action": "FadeIn",
+      "weight": 0.4
+    },
+    {
+      "id": "arrow",
+      "type": "Arrow",
+      "content": "push force",
+      "action": "Create",
+      "weight": 0.3
+    }
+  ]
+}

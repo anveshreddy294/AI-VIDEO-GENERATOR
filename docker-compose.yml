@@ -1,0 +1,61 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aicarls-backend
+    working_dir: /app
+    command: ["python", "backend/api.py"]
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      LOG_LEVEL: INFO
+    volumes:
+      - ./:/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health').read()\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    image: node:20-alpine
+    container_name: aicarls-frontend
+    working_dir: /app/frontend
+    command: sh -lc "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./:/app
+      - frontend_node_modules:/app/frontend/node_modules
+    environment:
+      VITE_BACKEND_URL: http://localhost:5000
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  frontend_node_modules:
+
+# Optional local Ollama service for PageIndex / local inference.
+# Uncomment this block if you want to run Ollama in a separate container.
+#  ollama:
+#    image: ollama/ollama:latest
+#    container_name: aicarls-ollama
+#    ports:
+#      - "11434:11434"
+#    volumes:
+#      - ollama_data:/root/.ollama
+#    restart: unless-stopped
+#
+#volumes:
+#  frontend_node_modules:
+#  ollama_data:
