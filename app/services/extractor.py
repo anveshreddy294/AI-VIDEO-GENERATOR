@@ -10,7 +10,7 @@ Strategy (matches the blueprint):
 
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz
 
 from .vision import describe_image
 
