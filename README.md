@@ -1,138 +1,200 @@
 # VisualAI
 
-**Step 1: Multimodal Ingestion & Verification — Layer A Population**
+**Step 1: Multimodal Input, Ingestion, Normalization & Knowledge Preparation**
 
-VisualAI ingests student study materials — **documents** (PDF, PNG, JPG, TXT) **and recorded lectures** (MP4, MOV, MKV) — extracts text and diagram descriptions via vision AI, structures the knowledge into a topic blueprint, and locks everything into a RAG vector store tagged as **Layer A** (authoritative ground truth). Lecture chunks carry clock timestamps so retrieval can point students at the exact 30-second window of the source recording.
+VisualAI ingests student study materials — **documents** (PDF, PNG, JPG, TXT) and **recorded lectures** (MP4, MOV, MKV) — normalizes all modalities into canonical `ContentUnit` abstractions, extracts structured concepts and prerequisite relationships into a persistent **Knowledge Graph**, and locks provenanced chunks into Qdrant vector storage tagged as **Layer A** (authoritative ground truth).
 
-## Architecture (Layer A)
+---
+
+## Step 1 Complete Architecture
 
 ```
-Student File
-    │  (multipart/form-data POST /upload)
-    ▼
-API Gateway (FastAPI)
-    │  validate extension → save temp
-    ▼
-Extraction Engine (Dispatcher)
-    ├─ PDF     → PyMuPDF (raw text + embedded image cropping)
-    ├─ Image   → direct bytes → Gemini Vision API
-    ├─ TXT     → raw text passthrough
-    └─ Video   → VIDEO MATRIX (below)
-    ▼
-Knowledge Structuring (LLM)
-    └─ Topic JSON blueprint
-       { topic_name, key_concepts[], prerequisites[], difficulty_level }
-    ▼
-Layer A RAG Sync
-    ├─ Recursive splitter → 1000-token overlapping chunks
-    ├─ Tag: layer=A, type=authoritative_source | authoritative_video
-    └─ Embed + upsert → Qdrant collection
-
-═══════════ VIDEO MATRIX (mp4 / mov / mkv) ═══════════
-Phase 1  FFmpeg ────────────── audio track (16kHz mono WAV) ──┐
-         (original video kept for visuals)                   │
-Phase 2  faster-whisper ────── timestamped transcript  ──────┤
-Phase 3  OpenCV (frame/12s) ── Gemini Vision descriptions ───┤
-Phase 4  Fusion engine ─────── chronological merge ──────────┘
-         [01:15 - 01:30] Spoken: "..." | Visible on screen: "..."
-Phase 5  chunker → layer=A, type=authoritative_video,
-         start_timestamp, end_timestamp → Qdrant
+STUDENT
+  │
+  ▼
+┌─────────────────────────────┐
+│ 1. Upload / Input Interface │
+│ PDF / Image / TXT / Video   │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 2. File Validation          │
+│ Extension / MIME / Hash     │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 3. File Registration        │
+│ source_id / asset_id        │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 4. Modality Dispatcher      │
+│ PDF / Image / TXT / Video   │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 5. Modality Extraction      │
+│ text / OCR / vision / audio │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 6. ContentUnit Normalization│
+│ Canonical ContentUnit model │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 7. Structure Detection      │
+│ chapter/section hierarchy   │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 8. Concept Extraction       │
+│ concepts / prerequisites    │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 9. Semantic Chunking        │
+│ concept-aware RichChunks    │
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 10. Provenance Mapping      │
+│ source → CU → chunk → concept│
+└──────────────┬──────────────┘
+               ▼
+┌─────────────────────────────┐
+│ 11. Quality Validation      │
+│ 5-layer Quality Gateway     │
+└──────────────┬──────────────┘
+               ▼
+       ┌───────┴────────┐
+       ▼                ▼
+┌─────────────┐  ┌────────────────┐
+│ Qdrant      │  │ Knowledge Graph│
+│ RichChunks  │  │ concept nodes  │
+└─────────────┘  └────────────────┘
+       │
+       ▼
+┌─────────────────────────────┐
+│ 12. Persistent Registry     │
+│ status = READY              │
+└─────────────────────────────┘
 ```
+
+---
 
 ## Project Structure
 
 ```
-VisualAI/
+AI-VIDEO-GENERATOR/
 ├── app/
 │   ├── api/
-│   │   └── upload.py          # POST /upload entry point
+│   │   └── upload.py          # POST /upload Step 1 pipeline endpoint
 │   ├── core/
-│   │   └── config.py          # Env config, allowed extensions
+│   │   └── config.py          # Environment settings & thresholds
 │   ├── db/
-│   │   └── vector_store.py    # Qdrant upsert logic
+│   │   └── vector_store.py    # Qdrant vector store & payload upsert
 │   ├── services/
-│   │   ├── dispatcher.py      # File-type router logic
-│   │   ├── extractor.py       # PyMuPDF text + image cropping
-│   │   ├── vision.py          # Gemini Vision API calls (diagrams + frames)
-│   │   ├── structurer.py      # Topic JSON blueprint w/ Pydantic
-│   │   ├── chunker.py         # Recursive splitting (page + clock tags)
-│   │   └── video/             # The Video Matrix
-│   │       ├── av_splitter.py     # Phase 1: FFmpeg audio rip
-│   │       ├── transcriber.py     # Phase 2: faster-whisper timestamps
-│   │       ├── frame_extractor.py # Phase 3: OpenCV keyframes + dedupe
-│   │       ├── fusion.py          # Phase 4: speech × visuals merge
-│   │       └── pipeline.py        # Orchestrator entry point
-│   └── main.py                # FastAPI app entry
+│   │   ├── registry.py        # Source registration, hashing, versioning, storage
+│   │   ├── schemas.py         # ContentUnit, SourceRecord, ConceptNode, RichChunk
+│   │   ├── dispatcher.py      # Modality router logic
+│   │   ├── extractor.py       # PDF block + image vision extractor
+│   │   ├── vision.py          # Gemini Vision API wrappers
+│   │   ├── structurer.py      # Structure detection & KnowledgeGraph generator
+│   │   ├── chunker.py         # Concept-aware semantic chunking
+│   │   ├── validator.py       # Quality Validation Gateway
+│   │   └── video/             # Video Matrix pipeline
+│   │       ├── av_splitter.py     # FFmpeg audio track rip
+│   │       ├── transcriber.py     # faster-whisper ASR with timestamps
+│   │       ├── frame_extractor.py # OpenCV keyframe sampling & deduplication
+│   │       ├── fusion.py          # Speech × visual fusion into ContentUnits
+│   │       └── pipeline.py        # Video pipeline orchestrator
+│   └── main.py                # FastAPI application entry
 ├── storage/
-│   ├── uploads/               # Temp validated uploads
-│   └── processed/             # Authoritative source strings + JSON
+│   ├── uploads/               # Persistent source files ({source_id}/original.<ext>)
+│   ├── registry/              # Source records, ContentUnits & KnowledgeGraphs
+│   ├── processed/             # Audio tracks & extraction output cache
+│   └── qdrant/                # Embedded local vector DB (zero-Docker fallback)
+├── start.bat                  # One-click Windows starter script
+├── test_step1.py              # Step 1 verification test suite
 ├── .env.example
 └── requirements.txt
 ```
 
-## Core Libraries
+---
 
-- **FastAPI** — upload endpoint / lifecycle
-- **PyMuPDF (fitz)** — text + image extraction from PDFs
-- **google-generativeai** — Gemini Vision + LLM structuring
-- **langchain-text-splitters** — recursive character splitting
-- **qdrant-client** — vector storage & retrieval (Layer A)
-- **FFmpeg** (system) — audio-track rip for the Video Matrix (`brew install ffmpeg`)
-- **faster-whisper** — offline, CPU-friendly timestamped transcription
-- **opencv-python** — keyframe sampling from lecture videos
+## Canonical Data Models
+
+### 1. `ContentUnit` (Canonical Source of Truth)
+Unified output schema across all input modalities:
+```json
+{
+  "content_id": "CU_8f72a910bc42",
+  "source_id": "SRC_1138d072e1a6",
+  "asset_id": "AST_b39cdc457a4f",
+  "modality": "pdf",
+  "text": "Force is defined as an interaction...",
+  "visual_description": "Diagram of block on incline with force vectors",
+  "page_number": 15,
+  "sequence_index": 42,
+  "chapter": "Mechanics",
+  "section": "Force and Acceleration",
+  "bbox": [54.0, 120.0, 400.0, 250.0],
+  "region_id": "REG_15_1",
+  "image_id": "IMG_15_201",
+  "extraction_method": "pymupdf_block",
+  "confidence_score": 0.95
+}
+```
+
+### 2. `RichChunk` (Qdrant Vector Payload)
+Provenanced RAG chunk stored with `layer: "A"` security tag:
+```json
+{
+  "chunk_id": "CHUNK_a2b2ff0e938f",
+  "source_id": "SRC_1138d072e1a6",
+  "asset_id": "AST_b39cdc457a4f",
+  "layer": "A",
+  "type": "rich_chunk",
+  "text": "[chunk text]",
+  "modality": "pdf",
+  "chapter": "Mechanics",
+  "section": "Newton's Laws",
+  "concept_ids": ["CONCEPT_FORCE", "CONCEPT_NEWTON_2"],
+  "content_ids": ["CU_0d7444c2d8cf", "CU_cc4d6bfc1f2d"],
+  "page_start": 15,
+  "page_end": 16,
+  "extraction_method": "pymupdf_block"
+}
+```
+
+---
 
 ## Quickstart
 
+### Method 1: Using `start.bat` (Windows)
+```powershell
+cd "d:\ai video generation\AI-VIDEO-GENERATOR"
+.\start.bat
+```
+
+### Method 2: Manual Python Execution
 ```bash
-cd VisualAI
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv
+# Windows: .venv\Scripts\activate | Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env        # add your GEMINI_API_KEY
-uvicorn app.main:app --reload
+cp .env.example .env        # Add your GEMINI_API_KEY
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Then upload a file:
+- **FastAPI API Server**: `http://127.0.0.1:8000`
+- **Swagger Interactive Docs**: `http://127.0.0.1:8000/docs`
 
+---
+
+## Running Verification Tests
+
+To verify the complete Step 1 ingestion pipeline:
 ```bash
-curl -X POST http://localhost:8000/upload \
-  -F "file=@physics_chapter_4.pdf"
+python test_step1.py
 ```
-
-## The Locked Ground-Truth Payload
-
-Every chunk upserted to the vector DB is tagged so downstream agents can never confuse Layer A truth with generated content:
-
-**Document chunk** — located by *page*:
-
-```json
-{
-  "layer": "A",
-  "type": "authoritative_source",
-  "document_name": "physics_chapter_4.pdf",
-  "text": "[chunked text...]",
-  "page": 4
-}
-```
-
-**Video chunk** — located by *clock window*, so a student question can point to the exact moment in the recording:
-
-```json
-{
-  "layer": "A",
-  "type": "authoritative_video",
-  "video_name": "lecture_4.mp4",
-  "start_timestamp": "01:15",
-  "end_timestamp": "01:45",
-  "text": "[01:15 - 01:45] Spoken: \"...\" | Visible on screen: \"...\""
-}
-```
-
-The two shapes are enforced by a Pydantic discriminated union — a document chunk literally cannot carry video metadata and vice versa.
-
-## Video Tuning (env)
-
-| Variable | Default | Meaning |
-|---|---|---|
-| `WHISPER_MODEL_SIZE` | `base` | faster-whisper model (`tiny`…`large-v3`); bigger = slower but more accurate |
-| `FRAME_INTERVAL_SECONDS` | `12` | Keyframe sampling rate for the vision pipeline |
-| `VIDEO_FRAME_SIMILARITY_THRESHOLD` | `0.04` | Below this mean pixel diff, a frame is treated as a duplicate and skipped (saves Gemini calls on static slides) |
