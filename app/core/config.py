@@ -37,7 +37,7 @@ class Settings:
         # --- Video Matrix ---
         self.video_extensions: set[str] = {"mp4", "mov", "mkv"}
         self.frame_interval_seconds: int = int(os.getenv("FRAME_INTERVAL_SECONDS", "12"))
-        self.whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "base")
+        self.whisper_model_size: str = os.getenv("WHISPER_MODEL_SIZE", "large-v3")
         # Frames whose mean pixel difference vs the previous kept frame is
         # *below* this threshold are treated as duplicates and skipped.
         self.video_frame_similarity_threshold: float = float(

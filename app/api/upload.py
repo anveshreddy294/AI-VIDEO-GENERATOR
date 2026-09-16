@@ -6,6 +6,7 @@ into the vector DB. One request completes the whole ingestion pipeline.
 """
 
 import shutil
+import traceback
 from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
@@ -41,10 +42,24 @@ async def upload_file(file: UploadFile = File(...)):
 
     try:
         # 2. Extraction engine: text + vision descriptions -> Authoritative Source.
-        result = dispatch(temp_path)
+        try:
+            result = dispatch(temp_path)
+        except UnsupportedFileType as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            tb = traceback.format_exc()
+            print(f"[upload] Extraction failed for {filename}: {tb}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Extraction failed for '{filename}': {exc}",
+            ) from exc
+
         authoritative_text = result.text
         if not authoritative_text.strip():
-            raise HTTPException(status_code=422, detail="No extractable text found in file.")
+            raise HTTPException(
+                status_code=422,
+                detail=f"No extractable content found in '{filename}'. The file may be empty or corrupted.",
+            )
 
         # Persist the raw source for audit/debugging.
         (settings.processed_dir / f"{temp_name}.source.txt").write_text(
@@ -52,27 +67,39 @@ async def upload_file(file: UploadFile = File(...)):
         )
 
         # 3. Knowledge structuring -> TopicBlueprint.
-        blueprint = structure_topic(authoritative_text)
+        try:
+            blueprint = structure_topic(authoritative_text)
+        except Exception as exc:
+            print(f"[upload] Structuring failed for {filename}: {exc}")
+            # Don't kill the upload — return the raw extraction without a blueprint.
+            blueprint = None
 
         # 4. Layer A RAG sync — document chunks are tagged by page,
         #    video chunks by their clock window.
-        if result.kind == "video":
-            chunks = chunk_video_text(authoritative_text, video_name=filename)
-        else:
-            chunks = chunk_authoritative_text(authoritative_text, document_name=filename)
-        synced = upsert_safely(chunks)
+        synced = 0
+        try:
+            if result.kind == "video":
+                chunks = chunk_video_text(authoritative_text, video_name=filename)
+            else:
+                chunks = chunk_authoritative_text(authoritative_text, document_name=filename)
+            synced = upsert_safely(chunks)
+        except Exception as exc:
+            print(f"[upload] RAG sync failed for {filename}: {exc}")
 
-        return {
+        response = {
             "status": "ingested",
             "media_type": result.kind,
             "document_name": filename,
-            "topic": blueprint.model_dump(),
             "layer_a": {
                 "chunks_synced": synced,
                 "collection": settings.collection_name,
             },
             "source_chars": len(authoritative_text),
         }
+        if blueprint:
+            response["topic"] = blueprint.model_dump()
+
+        return response
     finally:
         temp_path.unlink(missing_ok=True)  # temp file is always cleaned up
 

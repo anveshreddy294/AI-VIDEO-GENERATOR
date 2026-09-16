@@ -13,19 +13,29 @@ import google.generativeai as genai
 from ..core.config import settings
 
 _DIAGRAM_PROMPT = (
-    "You are a textbook diagram reader. Describe this image/diagram precisely "
-    "as plain text that captures EVERY label, every relationship between the "
-    "parts, and the flow/process it represents. If there is a title, caption, "
-    "axis labels, or numbered callouts, transcribe them exactly. Do not add "
-    "information that is not in the image. Output only the description."
+    "You are an expert textbook diagram and image reader with perfect visual "
+    "recognition. Analyze this image with extreme precision:\n"
+    "1. Transcribe ALL text exactly as written — every label, title, caption, "
+    "axis label, equation, number, and callout. Preserve spelling and formatting.\n"
+    "2. Describe ALL visual elements — shapes, arrows, lines, colors, symbols, "
+    "graphs, charts, tables, and their spatial relationships.\n"
+    "3. Explain the flow, process, or concept the diagram represents.\n"
+    "4. If it contains a graph or chart, describe the axes, data points, and trends.\n"
+    "5. If it contains equations, write them out exactly with all notation.\n"
+    "Output ONLY the description. Do NOT add information not present in the image."
 )
 
 _FRAME_PROMPT = (
-    "You are analyzing a single frame from a recorded lecture video. "
-    "Describe any equations, bullet points, or diagrams visible in this frame, "
-    "and transcribe any legible text exactly as written. If the frame shows "
-    "only the speaker with no board or slide content, say so in one short "
-    "sentence. Do not add information that is not visible. Output only the description."
+    "You are an expert lecture frame analyzer with perfect visual recognition. "
+    "Analyze this single frame from a recorded lecture video with extreme precision:\n"
+    "1. Transcribe ALL text visible — whiteboard writing, slide text, subtitles, "
+    "equations, bullet points. Preserve exact spelling and formatting.\n"
+    "2. Describe ALL diagrams, charts, figures, and visual aids with their labels.\n"
+    "3. If equations are shown, write them out with full mathematical notation.\n"
+    "4. Describe the speaker's actions if relevant (pointing at something, writing).\n"
+    "5. If the frame shows only the speaker with no content, say: "
+    "'Speaker visible, no board/slide content.'\n"
+    "Output ONLY the description. Do NOT add information not visible in the frame."
 )
 
 
