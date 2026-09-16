@@ -49,13 +49,15 @@ def _generate(prompt: str, image_bytes: bytes, source: str, mime_type: str) -> s
     """Shared call: prompt + base64 media -> the model's text answer."""
     model = _client()
 
-    if isinstance(image_bytes, bytes):
-        media = {
-            "mime_type": mime_type,
-            "data": base64.b64encode(image_bytes).decode("utf-8"),
-        }
-    else:
-        media = Path(image_bytes)
+    if not isinstance(image_bytes, bytes):
+        raise TypeError(
+            f"_generate() expects raw bytes, got {type(image_bytes).__name__}. "
+            "Use describe_image_file() to pass a file path."
+        )
+    media = {
+        "mime_type": mime_type,
+        "data": base64.b64encode(image_bytes).decode("utf-8"),
+    }
 
     response = model.generate_content([prompt, media])
     text = (response.text or "").strip()

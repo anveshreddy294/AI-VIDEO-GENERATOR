@@ -19,7 +19,7 @@ from typing import Literal
 
 from .extractor import extract_from_pdf
 from .video import process_video
-from .vision import describe_image
+from .vision import describe_image_file
 
 VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
 IMAGE_EXTENSIONS: set[str] = {"png", "jpg", "jpeg"}
@@ -45,7 +45,7 @@ def dispatch(file_path: Path) -> ExtractionResult:
         return ExtractionResult(kind="document", text=extract_from_pdf(file_path))
 
     if ext in IMAGE_EXTENSIONS:
-        description = describe_image(file_path)
+        description = describe_image_file(file_path)
         text = (
             f"[SOURCE: {file_path.name} — image]\n"
             f"Vision description:\n{description}\n"
