@@ -1,17 +1,10 @@
-"""Video Matrix — Phase 4: The Multimodal Fusion Engine.
+"""Video Matrix — Phase 4: Multimodal Fusion Engine into ContentUnits.
 
-Merges the timestamped transcript (what the professor *said*) with the
-timestamped keyframe descriptions (what they *showed*) into unified,
-chronological blocks:
-
-    [01:15 - 01:30] Spoken: "Notice the equation here..."
-    Visible at 01:2X: "Diagram of a block on an incline with F=ma written next to it."
-
-Frames are attached to the spoken segment that was happening at their capture
-time (with a ±2s shrug window for ASR/seek jitter), and each frame is consumed
-once so a static slide doesn't repeat next to every segment it spans.
+Merges timestamped transcript segments and keyframe descriptions into
+normalized ContentUnits.
 """
 
+from ..schemas import ContentUnit
 from .frame_extractor import FrameCapture
 from .transcriber import Segment
 
@@ -23,41 +16,102 @@ def fmt_timestamp(seconds: float) -> str:
     return f"{int(seconds // 60):02d}:{int(seconds % 60):02d}"
 
 
-def fuse(segments: list[Segment], frames: list[FrameCapture]) -> str:
-    """Stitch speech + visuals into one authoritative, timestamped string."""
+def fuse_units(
+    segments: list[Segment],
+    frames: list[FrameCapture],
+    source_id: str,
+    asset_id: str,
+) -> list[ContentUnit]:
+    """Stitch speech + visuals into a list of normalized ContentUnits."""
+    units: list[ContentUnit] = []
+    seq_index = 0
+
     if not segments:
-        # Lecture with no speech (e.g. a silent animation) — visuals alone.
-        return "\n\n".join(
-            f"[{fmt_timestamp(f.timestamp)} - {fmt_timestamp(f.timestamp)}] "
-            f"Visible on screen: {f.description}"
-            for f in frames
-        )
+        for f in frames:
+            unit = ContentUnit(
+                source_id=source_id,
+                asset_id=asset_id,
+                modality="video",
+                text=f"Visible on screen: {f.description}",
+                visual_description=f.description,
+                timestamp_start=f.timestamp,
+                timestamp_end=f.timestamp + 2.0,
+                frame_id=f"FRAME_{int(f.timestamp)}",
+                sequence_index=seq_index,
+                extraction_method="opencv_vision",
+                confidence_score=0.90,
+            )
+            units.append(unit)
+            seq_index += 1
+        return units
 
     frames_used = [False] * len(frames)
-    blocks: list[str] = []
 
     for seg in segments:
-        # Attach every unused frame captured within this segment's window.
         visible: list[FrameCapture] = []
         for i, f in enumerate(frames):
-            if not frames_used[i] and seg.start - _SHRUG_SECONDS <= f.timestamp <= seg.end + _SHRUG_SECONDS:
+            if (
+                not frames_used[i]
+                and seg.start - _SHRUG_SECONDS <= f.timestamp <= seg.end + _SHRUG_SECONDS
+            ):
                 frames_used[i] = True
                 visible.append(f)
 
-        line = f"[{fmt_timestamp(seg.start)} - {fmt_timestamp(seg.end)}] Spoken: \"{seg.text}\""
-        if visible:
-            visuals = " | ".join(
-                f"Visible at {fmt_timestamp(f.timestamp)}: {f.description}" for f in visible
+        vis_desc = (
+            " | ".join(
+                f"Visible at {fmt_timestamp(f.timestamp)}: {f.description}"
+                for f in visible
             )
-            line += f"\n{visuals}"
-        blocks.append(line)
+            if visible
+            else None
+        )
+        full_text = f"[{fmt_timestamp(seg.start)} - {fmt_timestamp(seg.end)}] Spoken: \"{seg.text}\""
+        if vis_desc:
+            full_text += f"\n{vis_desc}"
 
-    # Frames captured in silence gaps / after the final segment still matter.
+        frame_id = (
+            f"FRAME_{int(visible[0].timestamp)}" if visible else None
+        )
+
+        unit = ContentUnit(
+            source_id=source_id,
+            asset_id=asset_id,
+            modality="video",
+            text=full_text,
+            visual_description=vis_desc,
+            timestamp_start=seg.start,
+            timestamp_end=seg.end,
+            frame_id=frame_id,
+            sequence_index=seq_index,
+            extraction_method="whisper_gemini_fusion",
+            confidence_score=0.95,
+        )
+        units.append(unit)
+        seq_index += 1
+
+    # Remaining frames outside speech segments
     for i, f in enumerate(frames):
         if not frames_used[i]:
-            blocks.append(
-                f"[{fmt_timestamp(f.timestamp)} - {fmt_timestamp(f.timestamp)}] "
-                f"Visible on screen: {f.description}"
+            unit = ContentUnit(
+                source_id=source_id,
+                asset_id=asset_id,
+                modality="video",
+                text=f"[{fmt_timestamp(f.timestamp)} - {fmt_timestamp(f.timestamp)}] Visible on screen: {f.description}",
+                visual_description=f.description,
+                timestamp_start=f.timestamp,
+                timestamp_end=f.timestamp + 2.0,
+                frame_id=f"FRAME_{int(f.timestamp)}",
+                sequence_index=seq_index,
+                extraction_method="opencv_vision_gap",
+                confidence_score=0.85,
             )
+            units.append(unit)
+            seq_index += 1
 
-    return "\n\n".join(blocks)
+    return units
+
+
+def fuse(segments: list[Segment], frames: list[FrameCapture]) -> str:
+    """Stitch speech + visuals into legacy single authoritative text string."""
+    units = fuse_units(segments, frames, source_id="SRC_LEGACY", asset_id="AST_LEGACY")
+    return "\n\n".join(u.text for u in units)

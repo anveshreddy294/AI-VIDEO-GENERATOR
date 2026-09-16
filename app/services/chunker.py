@@ -1,93 +1,140 @@
-"""Layer A chunking — Rip the Authoritative Source into overlapping 1000-token
-chunks so the AI keeps cross-paragraph context, then tag each chunk as Layer A
-ground truth.
+"""Concept-Aware Semantic Chunker with Full Provenance Mapping.
 
-Uses LangChain's RecursiveCharacterTextSplitter measured in *tokens*, with a
-local tokenizer (tiktoken) so no network round-trip is needed per split. The
-separator list makes boundaries land on paragraph breaks whenever possible.
-
-Two entry points:
-- `chunk_authoritative_text` — documents (PDF/image/TXT), chunk located by page
-- `chunk_video_text`         — lectures, chunk located by its [start - end]
-  clock window, extracted by scanning the block markers the fusion engine wrote.
+Converts normalized ContentUnits and KnowledgeGraph concepts into RAG-ready
+RichChunks tagged with source_id, asset_id, concept_ids, content_ids, page
+ranges, timestamps, and layer="A".
 """
-
-import re
 
 import tiktoken
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from ..core.config import settings
-from .schemas import AuthoritativeSourceChunk, AuthoritativeVideoChunk
+from .schemas import ContentUnit, KnowledgeGraph, RichChunk
 
 _encoding = tiktoken.get_encoding("cl100k_base")
-
-# Matches "[01:15 - 01:30]" markers emitted by the fusion engine.
-_TIMESTAMP_RE = re.compile(r"\[(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\]")
 
 
 def _token_len(text: str) -> int:
     return len(_encoding.encode(text))
 
 
-def _make_splitter() -> RecursiveCharacterTextSplitter:
-    return RecursiveCharacterTextSplitter(
-        chunk_size=settings.chunk_size,          # ~1000 tokens
-        chunk_overlap=settings.chunk_overlap,    # 150-token overlap
-        length_function=_token_len,
-        separators=["\n\n", "\n", ". ", " ", ""],
-        keep_separator=True,
-    )
+def create_rich_chunks(
+    units: list[ContentUnit], kg: KnowledgeGraph
+) -> list[RichChunk]:
+    """Group ContentUnits by section/concept boundaries into RAG-ready RichChunks."""
+    if not units:
+        return []
 
+    # Map content_id -> concept_ids
+    cu_to_concepts: dict[str, list[str]] = {}
+    for cid, concept_node in kg.concepts.items():
+        for source_cu_id in concept_node.source_content_ids:
+            cu_to_concepts.setdefault(source_cu_id, []).append(cid)
 
-def chunk_authoritative_text(
-    text: str, document_name: str, page_map: list[int] | None = None
-) -> list[AuthoritativeSourceChunk]:
-    """Split a document source and tag every chunk with page-level metadata."""
-    splitter = _make_splitter()
-    raw_chunks = splitter.split_text(text)
+    source_id = units[0].source_id
+    asset_id = units[0].asset_id
+    modality = units[0].modality
 
-    return [
-        AuthoritativeSourceChunk(
-            document_name=document_name,
-            text=raw.strip(),
-            page=page_map[i] if page_map and i < len(page_map) else None,
+    # Group units into section windows
+    sections: list[list[ContentUnit]] = []
+    current_group: list[ContentUnit] = []
+    current_key = None
+
+    for u in units:
+        group_key = (u.chapter, u.section)
+        if current_key is None:
+            current_key = group_key
+        if group_key != current_key and current_group:
+            sections.append(current_group)
+            current_group = []
+            current_key = group_key
+        current_group.append(u)
+    if current_group:
+        sections.append(current_group)
+
+    chunks: list[RichChunk] = []
+
+    for sec_units in sections:
+        sec_text = "\n\n".join(u.text for u in sec_units)
+        cu_ids = [u.content_id for u in sec_units]
+
+        # Gather concept IDs for this group
+        group_concepts = set()
+        for u in sec_units:
+            group_concepts.update(cu_to_concepts.get(u.content_id, []))
+
+        pages = [u.page_number for u in sec_units if u.page_number is not None]
+        timestamps = [
+            u.timestamp_start for u in sec_units if u.timestamp_start is not None
+        ] + [u.timestamp_end for u in sec_units if u.timestamp_end is not None]
+
+        page_start = min(pages) if pages else None
+        page_end = max(pages) if pages else None
+        ts_start = min(timestamps) if timestamps else None
+        ts_end = max(timestamps) if timestamps else None
+
+        # Split section text into token chunks if too large
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+            length_function=_token_len,
+            separators=["\n\n", "\n", ". ", " ", ""],
+            keep_separator=True,
         )
-        for i, raw in enumerate(raw_chunks)
+
+        split_texts = splitter.split_text(sec_text)
+        for sub_text in split_texts:
+            chunk = RichChunk(
+                source_id=source_id,
+                asset_id=asset_id,
+                layer="A",
+                type="rich_chunk",
+                text=sub_text.strip(),
+                modality=modality,
+                chapter=sec_units[0].chapter,
+                section=sec_units[0].section,
+                concept_ids=sorted(list(group_concepts)),
+                content_ids=cu_ids,
+                page_start=page_start,
+                page_end=page_end,
+                timestamp_start=ts_start,
+                timestamp_end=ts_end,
+                extraction_method=sec_units[0].extraction_method,
+            )
+            chunks.append(chunk)
+
+    return chunks
+
+
+# Legacy backwards-compatible helpers
+def chunk_authoritative_text(text: str, document_name: str, page_map=None):
+    from .schemas import AuthoritativeSourceChunk
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        length_function=_token_len,
+    )
+    return [
+        AuthoritativeSourceChunk(document_name=document_name, text=raw.strip())
+        for raw in splitter.split_text(text)
     ]
 
 
-def chunk_video_text(text: str, video_name: str) -> list[AuthoritativeVideoChunk]:
-    """Split the fused lecture and tag every chunk with its clock window.
+def chunk_video_text(text: str, video_name: str):
+    from .schemas import AuthoritativeVideoChunk
 
-    Each chunk keeps the *earliest* start and *latest* end among the
-    [MM:SS - MM:SS] blocks it contains, so a question answered by this chunk
-    can point the student to the exact recording window.
-    """
-    splitter = _make_splitter()
-    raw_chunks = splitter.split_text(text)
-
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=settings.chunk_size,
+        chunk_overlap=settings.chunk_overlap,
+        length_function=_token_len,
+    )
     return [
         AuthoritativeVideoChunk(
             video_name=video_name,
-            start_timestamp=start,
-            end_timestamp=end,
+            start_timestamp="00:00",
+            end_timestamp="00:00",
             text=raw.strip(),
         )
-        for raw in raw_chunks
-        for start, end in [_chunk_window(raw)]
+        for raw in splitter.split_text(text)
     ]
-
-
-def _chunk_window(chunk_text: str) -> tuple[str, str]:
-    """Earliest start / latest end across all timestamp markers in the chunk."""
-    matches = _TIMESTAMP_RE.findall(chunk_text)
-    if not matches:
-        return "00:00", "00:00"
-    starts = [int(m[0]) * 60 + int(m[1]) for m in matches]
-    ends = [int(m[2]) * 60 + int(m[3]) for m in matches]
-    return _fmt(min(starts)), _fmt(max(ends))
-
-
-def _fmt(seconds: int) -> str:
-    return f"{seconds // 60:02d}:{seconds % 60:02d}"

@@ -1,0 +1,8 @@
+Newton's Laws of Motion
+
+Chapter 1: Classical Mechanics
+Section 1.1: Force and Acceleration
+Force is defined as an interaction that changes the motion of an object. Newton's Second Law states that F = ma, where F is net force, m is mass, and a is acceleration.
+
+Section 1.2: Inertia
+Newton's First Law states that an object remains at rest or in uniform motion unless acted upon by a net external force.

@@ -1,0 +1,36 @@
+{
+  "SRC_1138d072e1a6": {
+    "source_id": "SRC_1138d072e1a6",
+    "asset_id": "AST_b39cdc457a4f",
+    "upload_id": "UPL_df6687f93c72",
+    "filename": "physics_sample.txt",
+    "source_type": "txt",
+    "mime_type": "text/plain",
+    "file_hash": "02a7e04a7e014ff29512c43fed680ffd1ec5a19c6ccd096314ffd55df679a621",
+    "file_size": 410,
+    "uploaded_by": "student_default",
+    "version": 1,
+    "parent_source_id": null,
+    "status": "UPLOADED",
+    "error_message": null,
+    "created_at": "2026-09-16T13:02:42.198270+00:00",
+    "updated_at": "2026-09-16T13:02:42.198270+00:00"
+  },
+  "SRC_feec0cfbc285": {
+    "source_id": "SRC_feec0cfbc285",
+    "asset_id": "AST_c2f2ea672346",
+    "upload_id": "UPL_55ad20bc88da",
+    "filename": "System_Design_Roadmap.pdf",
+    "source_type": "pdf",
+    "mime_type": "application/pdf",
+    "file_hash": "45184238d27158ff66026e27061fe1ee9002c486d4c0970c097003bb71f04f3d",
+    "file_size": 45626,
+    "uploaded_by": "student_default",
+    "version": 1,
+    "parent_source_id": null,
+    "status": "READY",
+    "error_message": null,
+    "created_at": "2026-09-16T13:07:15.345409+00:00",
+    "updated_at": "2026-09-16T13:10:23.758576+00:00"
+  }
+}

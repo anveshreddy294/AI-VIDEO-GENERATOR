@@ -1,13 +1,23 @@
-"""Layer A RAG sync — embed tagged chunks and upsert them into Qdrant.
+"""Layer A RAG sync — embed RichChunks and upsert into Qdrant.
 
-Every chunk carries the `layer: "A"` security tag. Payload shape differs by type:
-
-    Document chunk:  { layer, type=authoritative_source, document_name, text, page }
-    Video chunk:     { layer, type=authoritative_video, video_name,
-                       start_timestamp, end_timestamp, text }
-
-Embeddings come from Gemini's embedding model. The collection is created
-once with cosine similarity; subsequent upserts are idempotent by point id.
+Every chunk carries layer: "A" and full provenance payload metadata:
+{
+  "layer": "A",
+  "type": "rich_chunk",
+  "chunk_id": "...",
+  "source_id": "...",
+  "asset_id": "...",
+  "text": "...",
+  "modality": "...",
+  "chapter": "...",
+  "section": "...",
+  "concept_ids": [...],
+  "content_ids": [...],
+  "page_start": 15,
+  "page_end": 16,
+  "timestamp_start": ...,
+  "timestamp_end": ...
+}
 """
 
 import logging
@@ -19,7 +29,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from ..core.config import settings
-from ..services.schemas import AuthoritativeSourceChunk, AuthoritativeVideoChunk, LayerAChunk
+from ..services.schemas import AuthoritativeSourceChunk, AuthoritativeVideoChunk, LayerAChunk, RichChunk
 
 logger = logging.getLogger(__name__)
 
@@ -27,34 +37,33 @@ _client_instance: QdrantClient | None = None
 
 
 def get_client() -> QdrantClient:
-    """Return a singleton QdrantClient.
-    
-    If QDRANT_URL points to a cloud/remote instance, connect to it.
-    If it points to localhost and is unreachable, or if embedded mode is desired,
-    seamlessly falls back to embedded on-disk storage (zero-docker needed).
-    """
     global _client_instance
     if _client_instance is not None:
         return _client_instance
 
     url = (settings.qdrant_url or "").strip()
 
-    # 1. Remote cloud instance (e.g. https://...cloud.qdrant.io)
-    if url.startswith("https://") or (url and not any(h in url for h in ("localhost", "127.0.0.1"))):
+    if url.startswith("https://") or (
+        url and not any(h in url for h in ("localhost", "127.0.0.1"))
+    ):
         _client_instance = QdrantClient(url=url, api_key=settings.qdrant_api_key or None)
         return _client_instance
 
-    # 2. Localhost server — probe with short timeout to see if Docker / daemon is running
     if url:
         try:
-            probe_client = QdrantClient(url=url, api_key=settings.qdrant_api_key or None, timeout=2.0)
+            probe_client = QdrantClient(
+                url=url, api_key=settings.qdrant_api_key or None, timeout=2.0
+            )
             probe_client.get_collections()
             _client_instance = probe_client
             return _client_instance
         except Exception:
-            logger.info("Local Qdrant server unreachable at %s; using embedded storage at %s", url, settings.qdrant_path)
+            logger.info(
+                "Local Qdrant server unreachable at %s; using embedded storage at %s",
+                url,
+                settings.qdrant_path,
+            )
 
-    # 3. Embedded on-disk Qdrant storage (runs directly inside process without Docker)
     settings.qdrant_path.mkdir(parents=True, exist_ok=True)
     _client_instance = QdrantClient(path=str(settings.qdrant_path))
     return _client_instance
@@ -72,7 +81,6 @@ def _embed(texts: list[str]) -> list[list[float]]:
 
 
 def ensure_collection(client: QdrantClient) -> None:
-    """Idempotent collection creation with the right vector size."""
     existing = [c.name for c in client.get_collections().collections]
     if settings.collection_name in existing:
         return
@@ -88,18 +96,18 @@ def ensure_collection(client: QdrantClient) -> None:
 
 
 def _point_id(chunk: LayerAChunk) -> str:
-    """Deterministic UUID per (doc, text) so re-uploads don't duplicate points.
-    Qdrant requires point IDs to be valid unsigned integers or UUID strings.
-    """
-    name = getattr(chunk, "document_name", None) or getattr(chunk, "video_name", "unknown")
-    raw_key = f"{name}::{chunk.text[:200]}"
+    if isinstance(chunk, RichChunk):
+        raw_key = f"{chunk.source_id}::{chunk.chunk_id}::{chunk.text[:100]}"
+    else:
+        name = getattr(chunk, "document_name", None) or getattr(chunk, "video_name", "unknown")
+        raw_key = f"{name}::{chunk.text[:200]}"
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, raw_key))
 
 
 def _payload(chunk: LayerAChunk) -> dict[str, Any]:
-    """Build the exact payload shape that Layer A retrieval and downstream
-    agents rely on to distinguish source types.
-    """
+    if isinstance(chunk, RichChunk):
+        return chunk.model_dump()
+
     payload: dict[str, Any] = {
         "layer": "A",
         "type": chunk.type,
@@ -116,7 +124,9 @@ def _payload(chunk: LayerAChunk) -> dict[str, Any]:
 
 
 def upsert_chunks(chunks: list[LayerAChunk]) -> int:
-    """Embed and upsert all chunks into the Layer A collection. Returns count."""
+    if not chunks:
+        return 0
+
     client = get_client()
     ensure_collection(client)
 
@@ -138,7 +148,6 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
 
 
 def search_layer_a(query: str, limit: int = 5) -> list[dict[str, Any]]:
-    """Retrieve only Layer A ground truth — the guardrail helper for agents."""
     client = get_client()
     vector = _embed([query])[0]
     hits = client.search(

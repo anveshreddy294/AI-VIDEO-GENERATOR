@@ -1,118 +1,152 @@
-"""POST /upload — the Reception Point of VisualAI.
+"""POST /upload — Reception Point & Full Step 1 Ingestion Pipeline.
 
-Validates the extension, saves the file temporarily, dispatches it through the
-extraction engine, structures the topic blueprint, and syncs Layer A chunks
-into the vector DB. One request completes the whole ingestion pipeline.
+Executes the complete Step 1 sequence:
+1. User Input & Temporary Save
+2. File Validation & Persistent Source Registration (source_id, asset_id, upload_id, hash, version)
+3. Modality Dispatching -> ContentUnit Normalization
+4. Structure Detection, Concept Extraction & Knowledge Graph Generation
+5. Concept-Aware Semantic Chunking with Full Provenance Mapping
+6. Rich Qdrant Payload Upsert
+7. Quality Validation Gateway Check
+8. Topic Blueprint derivation & Status READY transition.
 """
 
 import shutil
 import traceback
-from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..core.config import settings
-from ..services.chunker import chunk_authoritative_text, chunk_video_text
+from ..services.chunker import create_rich_chunks
 from ..services.dispatcher import UnsupportedFileType, dispatch
-from ..services.structurer import structure_topic
+from ..services.registry import (
+    register_source,
+    save_content_units,
+    save_knowledge_graph,
+    update_source_status,
+)
+from ..services.structurer import process_structure_and_concepts
+from ..services.validator import ValidationFailed, validate_ingestion_quality
 
 router = APIRouter(prefix="/upload", tags=["ingestion"])
 
 
 @router.post("")
 async def upload_file(file: UploadFile = File(...)):
-    """Accept a study file; return the TopicBlueprint + ingest stats."""
+    """Accept study file; execute full Step 1 pipeline and return structured knowledge stats."""
     filename = file.filename or "unnamed"
-    if not settings.is_allowed(filename):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Extension not allowed: '{Path(filename).suffix}'. "
-                f"Allowed: {sorted(settings.allowed_extensions)}"
-            ),
-        )
 
-    # 1. Save temporarily to the local working directory.
-    temp_name = f"{uuid4().hex}_{Path(filename).stem}{Path(filename).suffix}"
+    # Save to temp location for hash calculation and validation
+    temp_name = f"{uuid4().hex}_{Path(filename).name}"
     temp_path = settings.upload_dir / temp_name
     with temp_path.open("wb") as out:
         shutil.copyfileobj(file.file, out)
 
+    source_record = None
+
     try:
-        # 2. Extraction engine: text + vision descriptions -> Authoritative Source.
+        # Step 2 & 3: File Validation & Registration
         try:
-            result = dispatch(temp_path)
+            source_record, persistent_file = register_source(temp_path, filename)
+        except ValueError as val_err:
+            raise HTTPException(status_code=400, detail=str(val_err)) from val_err
+
+        source_id = source_record.source_id
+        asset_id = source_record.asset_id
+
+        # Update status -> PROCESSING / EXTRACTING
+        update_source_status(source_id, "PROCESSING")
+        update_source_status(source_id, "EXTRACTING")
+
+        # Step 4 & 5: Dispatcher & Modality Extraction -> ContentUnits
+        try:
+            extraction_result = dispatch(
+                persistent_file, source_id=source_id, asset_id=asset_id
+            )
+            raw_units = extraction_result.units
         except UnsupportedFileType as exc:
+            update_source_status(source_id, "FAILED", error_message=str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             tb = traceback.format_exc()
             print(f"[upload] Extraction failed for {filename}: {tb}")
+            update_source_status(source_id, "FAILED", error_message=str(exc))
             raise HTTPException(
-                status_code=500,
-                detail=f"Extraction failed for '{filename}': {exc}",
+                status_code=500, detail=f"Extraction failed for '{filename}': {exc}"
             ) from exc
 
-        authoritative_text = result.text
-        if not authoritative_text.strip():
+        if not raw_units:
+            update_source_status(source_id, "FAILED", error_message="No content extracted")
             raise HTTPException(
                 status_code=422,
-                detail=f"No extractable content found in '{filename}'. The file may be empty or corrupted.",
+                detail=f"No extractable content found in '{filename}'.",
             )
 
-        # Persist the raw source for audit/debugging.
-        (settings.processed_dir / f"{temp_name}.source.txt").write_text(
-            authoritative_text, encoding="utf-8"
+        # Step 6, 7 & 8: Structure Detection, Concept Extraction & Knowledge Graph
+        update_source_status(source_id, "NORMALIZING")
+        enriched_units, knowledge_graph, blueprint = process_structure_and_concepts(raw_units)
+
+        # Persist normalized ContentUnits and Knowledge Graph to registry storage
+        save_content_units(source_id, enriched_units)
+        save_knowledge_graph(source_id, knowledge_graph)
+
+        # Step 9 & 10: Semantic Chunking & Provenance Mapping
+        update_source_status(source_id, "INDEXING")
+        rich_chunks = create_rich_chunks(enriched_units, knowledge_graph)
+        blueprint.chunk_count = len(rich_chunks)
+
+        # Step 15: Qdrant Payload Upsert
+        synced_count = 0
+        if rich_chunks:
+            synced_count = upsert_safely(rich_chunks)
+
+        # Step 17: Quality Validation Gateway
+        val_report = validate_ingestion_quality(
+            record=source_record,
+            file_path=persistent_file,
+            units=enriched_units,
+            kg=knowledge_graph,
+            chunks=rich_chunks,
+            upserted_count=synced_count,
         )
 
-        # 3. Knowledge structuring -> TopicBlueprint.
-        try:
-            blueprint = structure_topic(authoritative_text)
-        except Exception as exc:
-            print(f"[upload] Structuring failed for {filename}: {exc}")
-            # Don't kill the upload — return the raw extraction without a blueprint.
-            blueprint = None
+        # Step 12 & 18: Update status -> READY and prepare final response
+        update_source_status(source_id, "READY")
 
-        # 4. Layer A RAG sync — document chunks are tagged by page,
-        #    video chunks by their clock window.
-        synced = 0
-        try:
-            if result.kind == "video":
-                chunks = chunk_video_text(authoritative_text, video_name=filename)
-            else:
-                chunks = chunk_authoritative_text(authoritative_text, document_name=filename)
-            synced = upsert_safely(chunks)
-        except Exception as exc:
-            print(f"[upload] RAG sync failed for {filename}: {exc}")
-
-        response = {
-            "status": "ingested",
-            "media_type": result.kind,
-            "document_name": filename,
-            "layer_a": {
-                "chunks_synced": synced,
-                "collection": settings.collection_name,
-            },
-            "source_chars": len(authoritative_text),
+        return {
+            "status": "READY",
+            "source_id": source_id,
+            "asset_id": asset_id,
+            "upload_id": source_record.upload_id,
+            "filename": filename,
+            "modality": extraction_result.modality,
+            "file_hash": source_record.file_hash,
+            "version": source_record.version,
+            "content_units": len(enriched_units),
+            "chunks_synced": synced_count,
+            "concepts_extracted": len(knowledge_graph.concepts),
+            "validation": val_report,
+            "topic_blueprint": blueprint.model_dump(),
         }
-        if blueprint:
-            response["topic"] = blueprint.model_dump()
 
-        return response
+    except ValidationFailed as val_exc:
+        if source_record:
+            update_source_status(source_record.source_id, "FAILED", error_message=str(val_exc))
+        raise HTTPException(status_code=422, detail=f"Validation failed: {val_exc}") from val_exc
+
     finally:
-        temp_path.unlink(missing_ok=True)  # temp file is always cleaned up
+        temp_path.unlink(missing_ok=True)
 
 
 def upsert_safely(chunks) -> int:
-    """Wrap the vector upsert so a DB outage surfaces as a clear 503, and
-    import it lazily so starting the server doesn't require Qdrant to be up."""
     try:
         from ..db.vector_store import upsert_chunks
 
         return upsert_chunks(chunks)
-    except Exception as exc:  # ConnectionRefusedError, API errors, etc.
+    except Exception as exc:
         raise HTTPException(
             status_code=503,
-            detail=f"Layer A sync failed (is Qdrant running?): {exc}",
+            detail=f"Layer A vector sync failed (Qdrant error): {exc}",
         ) from exc

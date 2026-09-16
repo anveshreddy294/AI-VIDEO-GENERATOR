@@ -1,28 +1,22 @@
-"""Extraction engine — the Dispatcher router.
+"""Modality Dispatcher — routes files to extractors producing ContentUnits.
 
-Routes the temporarily saved file based on its extension:
-
-- `.pdf`  -> PyMuPDF text extraction + per-image vision descriptions
-- `.png/.jpg/.jpeg` -> the whole image goes straight to Gemini Vision
-- `.txt`  -> raw text passthrough
-- `.mp4/.mov/.mkv` -> Video Matrix (A/V split -> whisper -> keyframes -> fusion)
-
-Every route returns an `ExtractionResult`: the massive chronological string —
-the "Authoritative Source" — plus the kind of media it came from, so the
-chunker knows whether to tag chunks by *page* (documents) or by *clock window*
-(videos).
+Supported modalities:
+- PDF   -> PyMuPDF text & diagram blocks -> ContentUnits
+- Image -> Gemini Vision description -> ContentUnit
+- TXT   -> Paragraph/line parsing -> ContentUnits
+- Video -> Multimodal A/V fusion -> ContentUnits
 """
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
 
 from .extractor import extract_from_pdf
-from .video import process_video
+from .schemas import ContentUnit
+from .video.pipeline import process_video_units
 from .vision import describe_image_file
 
-VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
 IMAGE_EXTENSIONS: set[str] = {"png", "jpg", "jpeg"}
+VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
 
 
 class UnsupportedFileType(Exception):
@@ -31,35 +25,89 @@ class UnsupportedFileType(Exception):
 
 @dataclass
 class ExtractionResult:
-    """The authoritative text plus the media kind it was extracted from."""
+    """Extraction output containing list of normalized ContentUnits."""
 
-    text: str
-    kind: Literal["document", "video"]
+    source_id: str
+    asset_id: str
+    modality: str
+    units: list[ContentUnit]
 
 
-def dispatch(file_path: Path) -> ExtractionResult:
-    """Read a validated file and return its stitched authoritative text."""
+def dispatch(
+    file_path: Path, source_id: str, asset_id: str
+) -> ExtractionResult:
+    """Route a validated source file to its modality extractor."""
     ext = file_path.suffix.lstrip(".").lower()
 
     if ext == "pdf":
-        return ExtractionResult(kind="document", text=extract_from_pdf(file_path))
+        units = extract_from_pdf(file_path, source_id=source_id, asset_id=asset_id)
+        return ExtractionResult(
+            source_id=source_id, asset_id=asset_id, modality="pdf", units=units
+        )
 
     if ext in IMAGE_EXTENSIONS:
         description = describe_image_file(file_path)
-        text = (
-            f"[SOURCE: {file_path.name} — image]\n"
-            f"Vision description:\n{description}\n"
+        unit = ContentUnit(
+            source_id=source_id,
+            asset_id=asset_id,
+            modality="image",
+            text=f"[IMAGE: {file_path.name}]\n{description}",
+            visual_description=description,
+            sequence_index=0,
+            image_id=f"IMG_{file_path.stem}",
+            extraction_method="gemini_vision",
+            confidence_score=0.95,
         )
-        return ExtractionResult(kind="document", text=text)
+        return ExtractionResult(
+            source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
+        )
 
     if ext == "txt":
+        raw_text = file_path.read_text(encoding="utf-8", errors="replace")
+        paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
+        units: list[ContentUnit] = []
+        char_cursor = 0
+
+        for idx, para in enumerate(paragraphs):
+            para_len = len(para)
+            unit = ContentUnit(
+                source_id=source_id,
+                asset_id=asset_id,
+                modality="txt",
+                text=para,
+                sequence_index=idx,
+                char_start=char_cursor,
+                char_end=char_cursor + para_len,
+                extraction_method="txt_paragraph",
+                confidence_score=1.0,
+            )
+            units.append(unit)
+            char_cursor += para_len + 2
+
+        if not units:
+            units.append(
+                ContentUnit(
+                    source_id=source_id,
+                    asset_id=asset_id,
+                    modality="txt",
+                    text=raw_text,
+                    sequence_index=0,
+                    extraction_method="txt_raw",
+                    confidence_score=1.0,
+                )
+            )
+
         return ExtractionResult(
-            kind="document",
-            text=file_path.read_text(encoding="utf-8", errors="replace"),
+            source_id=source_id, asset_id=asset_id, modality="txt", units=units
         )
 
     if ext in VIDEO_EXTENSIONS:
-        return ExtractionResult(kind="video", text=process_video(file_path))
+        units = process_video_units(
+            file_path, source_id=source_id, asset_id=asset_id
+        )
+        return ExtractionResult(
+            source_id=source_id, asset_id=asset_id, modality="video", units=units
+        )
 
     raise UnsupportedFileType(
         f"Unsupported extension '.{ext}'. Allowed: pdf, png, jpg, jpeg, txt, mp4, mov, mkv."
