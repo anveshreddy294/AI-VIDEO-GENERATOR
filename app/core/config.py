@@ -19,8 +19,8 @@ class Settings:
         self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a")
 
         # --- Models ---
-        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
-        self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash")
+        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
+        self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-3.5-flash")
 
         # --- Storage ---
         self.upload_dir: Path = BASE_DIR / os.getenv("UPLOAD_DIR", "storage/uploads")

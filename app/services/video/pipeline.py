@@ -38,7 +38,8 @@ def process_video(video_path: Path) -> str:
         for cap in captures:
             if cap.frame_bytes is not None:
                 desc = describe_frame(cap.frame_bytes, cap.timestamp)
-                described.append(FrameCapture(timestamp=cap.timestamp, description=desc))
+                cap.description = desc  # set post-init (description is init=False)
+                described.append(cap)
 
         # Phase 4: fuse speech + visuals chronologically.
         return fuse(segments, described)

@@ -1,0 +1,45 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: visualai-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: visualai-api
+    ports:
+      - "8000:8000"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_API_KEY=
+      - COLLECTION_NAME=visualai_layer_a
+      - UPLOAD_DIR=/app/storage/uploads
+      - PROCESSED_DIR=/app/storage/processed
+      - ALLOWED_EXTENSIONS=pdf,png,jpg,jpeg,txt,mp4,mov,mkv
+      - EMBEDDING_MODEL=text-embedding-004
+      - GENERATION_MODEL=gemini-2.5-pro
+      - VISION_MODEL=gemini-2.5-flash
+      - WHISPER_MODEL_SIZE=base
+      - FRAME_INTERVAL_SECONDS=12
+      - VIDEO_FRAME_SIMILARITY_THRESHOLD=0.04
+    env_file:
+      - .env
+    volumes:
+      - ./storage:/app/storage
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  qdrant_data:
