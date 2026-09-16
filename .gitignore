@@ -6,3 +6,5 @@ storage/uploads/*
 storage/processed/*
 !.gitkeep
 .DS_Store
+
+.env
