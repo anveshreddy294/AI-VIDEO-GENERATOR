@@ -15,11 +15,12 @@ class Settings:
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
+        self.qdrant_path: Path = BASE_DIR / os.getenv("QDRANT_PATH", "storage/qdrant")
         self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a")
 
         # --- Models ---
-        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/embedding-001")
-        self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-1.5-pro")
+        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-001")
+        self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-2.5-flash")
 
         # --- Storage ---
         self.upload_dir: Path = BASE_DIR / os.getenv("UPLOAD_DIR", "storage/uploads")

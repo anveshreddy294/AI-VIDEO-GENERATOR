@@ -10,7 +10,8 @@ Embeddings come from Gemini's embedding model. The collection is created
 once with cosine similarity; subsequent upserts are idempotent by point id.
 """
 
-import hashlib
+import logging
+import uuid
 from typing import Any
 
 import google.generativeai as genai
@@ -20,9 +21,43 @@ from qdrant_client.http import models as qmodels
 from ..core.config import settings
 from ..services.schemas import AuthoritativeSourceChunk, AuthoritativeVideoChunk, LayerAChunk
 
+logger = logging.getLogger(__name__)
+
+_client_instance: QdrantClient | None = None
+
 
 def get_client() -> QdrantClient:
-    return QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+    """Return a singleton QdrantClient.
+    
+    If QDRANT_URL points to a cloud/remote instance, connect to it.
+    If it points to localhost and is unreachable, or if embedded mode is desired,
+    seamlessly falls back to embedded on-disk storage (zero-docker needed).
+    """
+    global _client_instance
+    if _client_instance is not None:
+        return _client_instance
+
+    url = (settings.qdrant_url or "").strip()
+
+    # 1. Remote cloud instance (e.g. https://...cloud.qdrant.io)
+    if url.startswith("https://") or (url and not any(h in url for h in ("localhost", "127.0.0.1"))):
+        _client_instance = QdrantClient(url=url, api_key=settings.qdrant_api_key or None)
+        return _client_instance
+
+    # 2. Localhost server — probe with short timeout to see if Docker / daemon is running
+    if url:
+        try:
+            probe_client = QdrantClient(url=url, api_key=settings.qdrant_api_key or None, timeout=2.0)
+            probe_client.get_collections()
+            _client_instance = probe_client
+            return _client_instance
+        except Exception:
+            logger.info("Local Qdrant server unreachable at %s; using embedded storage at %s", url, settings.qdrant_path)
+
+    # 3. Embedded on-disk Qdrant storage (runs directly inside process without Docker)
+    settings.qdrant_path.mkdir(parents=True, exist_ok=True)
+    _client_instance = QdrantClient(path=str(settings.qdrant_path))
+    return _client_instance
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
@@ -53,9 +88,12 @@ def ensure_collection(client: QdrantClient) -> None:
 
 
 def _point_id(chunk: LayerAChunk) -> str:
-    """Deterministic id per (doc, text) so re-uploads don't duplicate points."""
+    """Deterministic UUID per (doc, text) so re-uploads don't duplicate points.
+    Qdrant requires point IDs to be valid unsigned integers or UUID strings.
+    """
     name = getattr(chunk, "document_name", None) or getattr(chunk, "video_name", "unknown")
-    return hashlib.sha256(f"{name}::{chunk.text[:200]}".encode()).hexdigest()
+    raw_key = f"{name}::{chunk.text[:200]}"
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, raw_key))
 
 
 def _payload(chunk: LayerAChunk) -> dict[str, Any]:
