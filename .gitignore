@@ -4,7 +4,8 @@ __pycache__/
 .env
 storage/uploads/*
 storage/processed/*
+storage/qdrant/*
+storage/qdrant_local/*
+storage/qdrant_storage/*
 !.gitkeep
 .DS_Store
-
-.env
