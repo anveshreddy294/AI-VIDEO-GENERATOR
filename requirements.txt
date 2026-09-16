@@ -1,0 +1,12 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-dotenv==1.0.1
+pymupdf==1.28.2
+google-generativeai==0.8.3
+langchain-text-splitters==0.3.2
+qdrant-client==1.12.1
+tiktoken==0.14.0
+python-multipart==0.0.9
+pydantic==2.13.5
+faster-whisper==1.1.0
+opencv-python==5.0.0.93
