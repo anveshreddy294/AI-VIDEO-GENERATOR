@@ -30,12 +30,20 @@ from ..services.registry import (
 from ..services.structurer import process_structure_and_concepts
 from ..services.validator import ValidationFailed, validate_ingestion_quality
 
-router = APIRouter(prefix="/upload", tags=["ingestion"])
+router = APIRouter(prefix="/upload", tags=["Step 1 — Ingestion"])
 
 
-@router.post("")
+@router.post(
+    "",
+    summary="Upload study material → Get knowledge blueprint",
+    description=(
+        "Upload a PDF, image, text file, or lecture video (MP4/MOV/MKV). "
+        "The system extracts content, builds a knowledge graph with concepts and prerequisites, "
+        "stores everything in the vector database, and returns a structured JSON blueprint. "
+        "Use the returned `source_id` to generate quizzes in Step 2."
+    ),
+)
 async def upload_file(file: UploadFile = File(...)):
-    """Accept study file; execute full Step 1 pipeline and return structured knowledge stats."""
     filename = file.filename or "unnamed"
 
     # Save to temp location for hash calculation and validation

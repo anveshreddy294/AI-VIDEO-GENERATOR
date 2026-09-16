@@ -209,3 +209,28 @@ def save_knowledge_graph(source_id: str, kg: KnowledgeGraph) -> None:
     source_dir.mkdir(parents=True, exist_ok=True)
     kg_file = source_dir / "knowledge_graph.json"
     kg_file.write_text(json.dumps(kg.model_dump(), indent=2), encoding="utf-8")
+
+
+def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
+    """Load Knowledge Graph for a source from disk. Returns None if not found."""
+    kg_file = REGISTRY_DIR / source_id / "knowledge_graph.json"
+    if not kg_file.exists():
+        return None
+    try:
+        data = json.loads(kg_file.read_text(encoding="utf-8"))
+        return KnowledgeGraph.model_validate(data)
+    except Exception as exc:
+        print(f"[registry] Failed to load knowledge graph for {source_id}: {exc}")
+        return None
+
+
+def get_source_record(source_id: str) -> SourceRecord | None:
+    """Load a single SourceRecord by source_id. Returns None if not found."""
+    index = _load_sources_index()
+    record_data = index.get(source_id)
+    if not record_data:
+        return None
+    try:
+        return SourceRecord.model_validate(record_data)
+    except Exception:
+        return None

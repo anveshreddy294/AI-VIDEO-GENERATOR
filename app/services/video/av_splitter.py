@@ -9,6 +9,7 @@ Requires FFmpeg on the host:
     Ubuntu: sudo apt-get install ffmpeg
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -19,14 +20,17 @@ class FFmpegMissingError(RuntimeError):
 
 def extract_audio(video_path: Path, out_wav: Path) -> Path:
     """Extract a 16kHz mono WAV track from the given video file."""
-    if not _ffmpeg_available():
+    ffmpeg = _find_ffmpeg()
+    if ffmpeg is None:
         raise FFmpegMissingError(
-            "FFmpeg is not installed on this server. Install it with "
-            "`brew install ffmpeg` (macOS) or `sudo apt-get install ffmpeg` (Ubuntu)."
+            "FFmpeg is not installed. Install it with:\n"
+            "  macOS:   brew install ffmpeg\n"
+            "  Linux:   sudo apt-get install ffmpeg\n"
+            "  Windows: https://ffmpeg.org/download.html"
         )
 
     cmd = [
-        "ffmpeg",
+        ffmpeg,
         "-y",                      # overwrite without asking
         "-i", str(video_path),     # input
         "-vn",                     # drop the video stream — audio only
@@ -43,8 +47,11 @@ def extract_audio(video_path: Path, out_wav: Path) -> Path:
     return out_wav
 
 
+def _find_ffmpeg() -> str | None:
+    """Locate ffmpeg binary. Returns path or None if not found."""
+    return shutil.which("ffmpeg")
+
+
 def _ffmpeg_available() -> bool:
-    probe = subprocess.run(
-        ["ffmpeg", "-version"], capture_output=True, text=True
-    )
-    return probe.returncode == 0
+    """Check if ffmpeg is available on this system."""
+    return _find_ffmpeg() is not None

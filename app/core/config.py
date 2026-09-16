@@ -48,6 +48,17 @@ class Settings:
         self.chunk_size: int = 1000  # tokens, per the Layer A spec
         self.chunk_overlap: int = 150
 
+        # --- Step 2: Assessment ---
+        self.assessment_dir: Path = BASE_DIR / os.getenv("ASSESSMENT_DIR", "storage/assessment_sessions")
+        self.assessment_dir.mkdir(parents=True, exist_ok=True)
+        self.learning_profiles_dir: Path = BASE_DIR / os.getenv("LEARNING_PROFILES_DIR", "storage/learning_profiles")
+        self.learning_profiles_dir.mkdir(parents=True, exist_ok=True)
+        self.max_questions: int = int(os.getenv("MAX_QUESTIONS", "10"))
+        self.assessment_ttl_hours: int = int(os.getenv("ASSESSMENT_TTL_HOURS", "24"))
+        self.max_question_retries: int = int(os.getenv("MAX_QUESTION_RETRIES", "2"))
+        self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
+        self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
+
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
         ext = Path(filename).suffix.lstrip(".").lower()

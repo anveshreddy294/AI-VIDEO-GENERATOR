@@ -66,7 +66,7 @@ flowchart TD
 
     %% Step 6 & 7
     subgraph Step6And7 ["Step 6 & 7: Embedding & Vector Storage"]
-        N --> P["Gemini Embeddings<br/>models/gemini-embedding-001<br/>(Generates float vectors)"]
+        N --> P["Gemini Embeddings<br/>models/gemini-embedding-2<br/>(Generates float vectors)"]
         O --> P
         P --> Q["Generate Deterministic UUIDv5<br/>uuid5(NAMESPACE_DNS, name + text)"]
         Q --> R[("📦 Qdrant Vector Collection<br/>'visualai_layer_a'<br/>• Docker: localhost:6333<br/>• Fallback: storage/qdrant/")]
@@ -114,7 +114,7 @@ Depending on file type, the file is routed by `app/services/dispatcher.py`:
 
 ### Step 4: Knowledge Structuring (LLM)
 - **Input:** The authoritative text from Step 3.
-- **Engine:** Gemini 2.5 Flash (`app/services/structurer.py`).
+- **Engine:** Gemini 3.5 Flash (`app/services/structurer.py`).
 - **Data Output:** Strict Pydantic model (`TopicBlueprint`):
   ```json
   {
@@ -157,7 +157,7 @@ Depending on file type, the file is routed by `app/services/dispatcher.py`:
 ---
 
 ### Step 6: Embedding Generation
-- **Engine:** Gemini Embeddings (`models/gemini-embedding-001`).
+- **Engine:** Gemini Embeddings (`models/gemini-embedding-2`).
 - **Transformation:** Each chunk's `.text` string is converted into a high-dimensional dense float vector (768 or 1536 dimensions).
 
 ---
