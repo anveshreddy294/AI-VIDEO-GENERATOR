@@ -104,22 +104,20 @@ def _plan_with_profile(
     profile: StudentLearningProfile,
     max_questions: int,
 ) -> list[ConceptNode]:
-    """Plan with existing profile: prioritize weak/unmastered concepts."""
-    concept_map = {c.concept_id: c for c in concepts}
+    """Plan with existing profile: prioritize weak/unmastered concepts, strictly excluding kill-switch concepts."""
+    # Anti-Loop Kill Switch: Concepts requiring human intervention MUST NOT be automatically re-tested
+    kill_switch_ids = {
+        cid for cid, m in profile.concept_masteries.items()
+        if m.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
+    }
+
+    # Filter out kill-switch concepts from candidate pool
+    eligible_concepts = [c for c in concepts if c.concept_id not in kill_switch_ids]
+    concept_map = {c.concept_id: c for c in eligible_concepts}
     selected: list[ConceptNode] = []
     selected_ids: set[str] = set()
 
-    # Priority 1: REQUIRES_HUMAN_FALLBACK concepts (flagged by kill switch)
-    for cid, mastery in profile.concept_masteries.items():
-        if (
-            mastery.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
-            and cid in concept_map
-        ):
-            if cid not in selected_ids:
-                selected.append(concept_map[cid])
-                selected_ids.add(cid)
-
-    # Priority 2: LEARNING concepts (failed or unmastered)
+    # Priority 1: LEARNING concepts (failed or unmastered, excluding kill-switch concepts)
     learning = [
         (cid, m)
         for cid, m in profile.concept_masteries.items()
@@ -131,10 +129,10 @@ def _plan_with_profile(
             selected.append(concept_map[cid])
             selected_ids.add(cid)
 
-    # Priority 3: NOT_ATTEMPTED concepts
+    # Priority 2: NOT_ATTEMPTED concepts (excluding kill-switch concepts)
     unattempted = [
         c
-        for c in concepts
+        for c in eligible_concepts
         if c.concept_id not in selected_ids
         and profile.concept_masteries.get(
             c.concept_id, ConceptMastery(concept_id=c.concept_id)
@@ -146,35 +144,40 @@ def _plan_with_profile(
             selected.append(c)
             selected_ids.add(c.concept_id)
 
-    # Priority 4: Fill remaining with any unselected concepts
-    remaining = [c for c in concepts if c.concept_id not in selected_ids]
+    # Priority 3: Fill remaining with any unselected eligible concepts (e.g. review MASTERED)
+    remaining = [c for c in eligible_concepts if c.concept_id not in selected_ids]
     random.shuffle(remaining)
     for c in remaining:
         if len(selected) < max_questions:
             selected.append(c)
             selected_ids.add(c.concept_id)
 
-    # Apply Prerequisite Pairing Rule
-    selected = _apply_prerequisite_pairing(selected, concepts)
-    return selected[:max_questions]
+    # Apply Prerequisite Pairing Rule on eligible concepts, blocking kill-switch concepts
+    selected = _apply_prerequisite_pairing(selected, eligible_concepts, exclude_ids=kill_switch_ids)
+    return [c for c in selected if c.concept_id not in kill_switch_ids][:max_questions]
 
 
 def _apply_prerequisite_pairing(
     selected: list[ConceptNode],
     all_concepts: list[ConceptNode],
+    exclude_ids: set[str] | None = None,
 ) -> list[ConceptNode]:
     """Prerequisite Pairing Rule:
 
     For every advanced or dependent concept selected, automatically queue the
     foundational concept beneath it (e.g. if testing Machine Learning,
     automatically test Linear Regression first).
-    Ensures foundational concepts precede dependent concepts without duplicates.
+    Ensures foundational concepts precede dependent concepts without duplicates,
+    and never queues excluded concepts (e.g. kill-switch tagged items).
     """
-    concept_map = {c.concept_id: c for c in all_concepts}
+    blocked_ids = exclude_ids or set()
+    concept_map = {c.concept_id: c for c in all_concepts if c.concept_id not in blocked_ids}
     ordered_result: list[ConceptNode] = []
-    seen_ids: set[str] = set()
+    seen_ids: set[str] = set(blocked_ids)
 
     def _add_with_prereqs(concept: ConceptNode) -> None:
+        if concept.concept_id in blocked_ids:
+            return
         # First recursively/iteratively add prerequisites that exist in the map
         for prereq_id in concept.prerequisite_concept_ids:
             if prereq_id in concept_map and prereq_id not in seen_ids:

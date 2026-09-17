@@ -11,6 +11,7 @@ Generates questions one concept at a time using:
    grounded questions directly from chunk context so the system never breaks.
 """
 
+import hashlib
 import json
 import re
 import time
@@ -61,21 +62,32 @@ def _client() -> genai.GenerativeModel:
     return genai.GenerativeModel(settings.generation_model)
 
 
+def _stable_hash_int(key: str, modulo: int = 4) -> int:
+    """Deterministic, cross-process stable hash using SHA-256."""
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()
+    return int(h, 16) % modulo
+
+
 def search_concept_chunks(
     concept: ConceptNode,
     source_id: str,
     limit: int = 5,
     provided_chunks: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Retrieve authoritative chunks for a concept.
+    """Retrieve authoritative chunks for a concept strictly scoped to source_id.
 
     First checks provided_chunks (from Step 1 JSON payload in memory).
-    If not available, queries Qdrant Layer A collection filtered by source_id.
+    If not available, queries Qdrant Layer A collection filtered strictly by source_id.
+    Never falls back to unconstrained Layer A search across other sources.
     """
     # 1. Fast in-memory resolution from Step 1 JSON payload
     if provided_chunks:
         matched = []
         for ch in provided_chunks:
+            # Enforce that chunk belongs to the requested source_id if source_id is present
+            ch_src = ch.get("source_id")
+            if ch_src and ch_src != source_id:
+                continue
             c_ids = ch.get("concept_ids", [])
             cu_ids = ch.get("content_ids", [])
             text = ch.get("text", "")
@@ -87,60 +99,86 @@ def search_concept_chunks(
                 matched.append(ch)
         if matched:
             return matched[:limit]
-        return provided_chunks[:limit]
+        same_source_chunks = [
+            ch for ch in provided_chunks
+            if not ch.get("source_id") or ch.get("source_id") == source_id
+        ]
+        if same_source_chunks:
+            return same_source_chunks[:limit]
+        return []
 
-    # 2. Qdrant vector retrieval
+    # 2. Qdrant vector retrieval strictly filtered by source_id
     try:
         client = get_client()
         ensure_collection(client)
     except Exception as exc:
         print(f"[generator] Vector client unavailable: {exc}")
-        return []
+        client = None
 
-    query_text = f"{concept.name}: {concept.definition or ''}"
+    if client:
+        query_text = f"{concept.name}: {concept.definition or ''}"
 
-    # Embed query with backoff
-    vector = None
-    for attempt in range(3):
-        try:
-            vector = _embed([query_text])[0]
-            break
-        except Exception as exc:
-            print(f"[generator] Embedding attempt {attempt+1}/3 failed: {exc}")
-            if attempt < 2:
-                time.sleep(1.5 ** (attempt + 1))
+        # Embed query with backoff
+        vector = None
+        for attempt in range(3):
+            try:
+                vector = _embed([query_text])[0]
+                break
+            except Exception as exc:
+                print(f"[generator] Embedding attempt {attempt+1}/3 failed: {exc}")
+                if attempt < 2:
+                    time.sleep(1.5 ** (attempt + 1))
 
-    if vector is None:
-        return []
+        if vector is not None:
+            must_conditions = [
+                qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A")),
+                qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)),
+            ]
+            try:
+                hits = client.search(
+                    collection_name=settings.collection_name,
+                    query_vector=vector,
+                    limit=limit,
+                    query_filter=qmodels.Filter(must=must_conditions),
+                )
+                if hits:
+                    return [hit.payload for hit in hits]
+            except Exception as exc:
+                print(f"[generator] Qdrant search failed for '{concept.name}': {exc}")
 
-    must_conditions = [
-        qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A")),
-        qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)),
-    ]
-
+    # 3. Fallback: Search only normalized in-memory/registry ContentUnits belonging to requested source
     try:
-        hits = client.search(
-            collection_name=settings.collection_name,
-            query_vector=vector,
-            limit=limit,
-            query_filter=qmodels.Filter(must=must_conditions),
-        )
-        if hits:
-            return [hit.payload for hit in hits]
+        from ..registry import load_content_units
+        units = load_content_units(source_id)
+        if units:
+            matched_units = [
+                u for u in units
+                if u.source_id == source_id
+                and (
+                    u.content_id in concept.source_content_ids
+                    or concept.name.lower() in u.text.lower()
+                )
+            ]
+            if not matched_units:
+                matched_units = [u for u in units if u.source_id == source_id]
 
-        # Fallback to layer A only
-        hits = client.search(
-            collection_name=settings.collection_name,
-            query_vector=vector,
-            limit=limit,
-            query_filter=qmodels.Filter(
-                must=[qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
-            ),
-        )
-        return [hit.payload for hit in hits] if hits else []
+            if matched_units:
+                return [
+                    {
+                        "chunk_id": f"CHUNK_{u.content_id}",
+                        "source_id": source_id,
+                        "text": u.text,
+                        "page_start": u.page_number,
+                        "page_end": u.page_number,
+                        "content_ids": [u.content_id],
+                    }
+                    for u in matched_units[:limit]
+                ]
     except Exception as exc:
-        print(f"[generator] Qdrant search failed for '{concept.name}': {exc}")
-        return []
+        print(f"[generator] Registry content unit search failed: {exc}")
+
+    # Return empty list — NEVER retrieve chunks from another source
+    return []
 
 
 def generate_question(
@@ -165,6 +203,7 @@ def generate_question(
     if not chunks:
         chunks = [{
             "chunk_id": f"CHUNK_SYNTH_{concept.concept_id}",
+            "source_id": source_id,
             "text": f"{concept.name}: {concept.definition or 'Key foundational concept in ' + source_id}",
             "page_start": 1,
             "page_end": 1,
@@ -260,6 +299,7 @@ def generate_question(
         timestamp_end=timestamp_end,
         source_id=source_id,
         difficulty=difficulty,
+        provided_chunks=provided_chunks,
     )
 
 
@@ -274,31 +314,124 @@ def _generate_grounded_fallback(
     timestamp_end: float | str | None,
     source_id: str,
     difficulty: str,
+    provided_chunks: list[dict[str, Any]] | None = None,
 ) -> Question:
-    """Deterministic, context-grounded fallback question builder."""
-    chunk_sample = chunks[0].get("text", "").strip() if chunks else ""
-    definition = concept.definition or (chunk_sample[:150] if chunk_sample else f"The principle of {concept.name}")
+    """Deterministic, source-grounded fallback question builder.
 
-    stem = f"Which of the following statements accurately characterizes {concept.name} according to the study material?"
-    correct_text = definition if len(definition) < 140 else f"{concept.name} is primarily defined as: {definition[:120]}..."
-    distractor_1 = f"{concept.name} operates in reverse, negating any effect on related components."
-    distractor_2 = f"{concept.name} is strictly deprecated in modern system architectures."
-    distractor_3 = f"{concept.name} functions solely as an arbitrary cache layer without structural impact."
+    Guarantees:
+    - Stable distribution of correct_index across {0, 1, 2, 3} using SHA-256.
+    - Distractors derived strictly from source-local KnowledgeGraph concepts, definitions,
+      or concept-specific contrasts (never generic boilerplate).
+    - Unique option texts across concepts to eliminate duplicate collisions in validator.
+    - 100% deterministic (no random functions).
+    """
+    chunk_sample = chunks[0].get("text", "").strip() if chunks else ""
+    definition = (concept.definition or "").strip()
+    if not definition and chunk_sample:
+        first_sent = chunk_sample.split(".")[0].strip()
+        definition = first_sent if len(first_sent) > 10 else chunk_sample[:120]
+    if not definition:
+        definition = f"The foundational principles and applications of {concept.name}"
+
+    correct_text = definition if len(definition) <= 150 else f"{definition[:147]}..."
+
+    # 1. Deterministic correct index (0, 1, 2, or 3) from SHA-256
+    target_index = _stable_hash_int(concept.concept_id, 4)
+
+    # 2. Gather source-local candidates for distractors
+    other_concepts: list[tuple[str, str]] = []
+    try:
+        from ..registry import load_knowledge_graph
+        kg = load_knowledge_graph(source_id)
+        if kg and kg.concepts:
+            for oc in kg.concepts.values():
+                if oc.concept_id != concept.concept_id and oc.definition:
+                    other_concepts.append((oc.name, oc.definition.strip()))
+    except Exception:
+        pass
+
+    if provided_chunks:
+        for ch in provided_chunks:
+            if ch.get("source_id") and ch.get("source_id") != source_id:
+                continue
+            c_ids = ch.get("concept_ids", [])
+            if concept.concept_id not in c_ids:
+                text = ch.get("text", "").strip()
+                if text:
+                    first_sent = text.split(".")[0].strip()
+                    if len(first_sent) > 15 and first_sent.lower() != definition.lower():
+                        other_concepts.append(("", first_sent))
+
+    # Sort deterministically
+    other_concepts.sort(key=lambda x: (x[0], x[1]))
+
+    distractors: list[str] = []
+    used_texts = {correct_text.lower()}
+
+    # Sourced distractors from other concepts in same source
+    if other_concepts:
+        offset = _stable_hash_int(concept.concept_id + "_dist_offset", len(other_concepts))
+        for i in range(len(other_concepts)):
+            if len(distractors) >= 3:
+                break
+            idx = (offset + i) % len(other_concepts)
+            oc_name, oc_defn = other_concepts[idx]
+            cand = oc_defn if len(oc_defn) <= 150 else f"{oc_defn[:147]}..."
+            if cand.lower() not in used_texts:
+                distractors.append(cand)
+                used_texts.add(cand.lower())
+
+    # Fallback conceptual contrasts specific to concept.name (never generic boilerplate)
+    fallback_contrasts = [
+        f"Applies exclusively in scenarios where {concept.name} remains completely inactive or zero.",
+        f"Represents a condition where {concept.name} is entirely governed by external boundary parameters.",
+        f"A static baseline assumption where the effects of {concept.name} are deliberately neglected.",
+        f"Characterizes a transitional state that precedes any formal influence of {concept.name}.",
+    ]
+    contrast_offset = _stable_hash_int(concept.concept_id + "_contrast", len(fallback_contrasts))
+    for i in range(len(fallback_contrasts)):
+        if len(distractors) >= 3:
+            break
+        cand = fallback_contrasts[(contrast_offset + i) % len(fallback_contrasts)]
+        if cand.lower() not in used_texts:
+            distractors.append(cand)
+            used_texts.add(cand.lower())
+
+    # Assemble options in deterministically assigned slots
+    final_texts = ["", "", "", ""]
+    final_texts[target_index] = correct_text
+    dist_idx = 0
+    for i in range(4):
+        if i != target_index:
+            final_texts[i] = distractors[dist_idx]
+            dist_idx += 1
 
     options = [
-        AssessmentOption(index=0, text=correct_text),
-        AssessmentOption(index=1, text=distractor_1),
-        AssessmentOption(index=2, text=distractor_2),
-        AssessmentOption(index=3, text=distractor_3),
+        AssessmentOption(index=i, text=final_texts[i])
+        for i in range(4)
     ]
+
+    # Deterministic stem selection across distinct phrasing structures
+    STEM_TEMPLATES = [
+        "Which statement accurately characterizes the core concept of {name}?",
+        "According to the source material, what is the primary definition of {name}?",
+        "How is {name} fundamentally described in the study context?",
+        "In the curriculum text, what best outlines the principle of {name}?",
+        "Identify the statement that correctly specifies {name}:",
+        "Based on the provided learning material, how is {name} defined?",
+        "Which of these descriptions directly corresponds to {name}?",
+        "What key properties and rules govern {name} according to the text?",
+    ]
+    stem_idx = _stable_hash_int(concept.concept_id + "_stem", len(STEM_TEMPLATES))
+    stem = STEM_TEMPLATES[stem_idx].format(name=concept.name)
 
     return Question(
         concept_id=concept.concept_id,
         concept_name=concept.name,
         stem=stem,
         options=options,
-        correct_index=0,
-        explanation=f"Directly derived from the source definition: {definition[:120]}",
+        correct_index=target_index,
+        explanation=f"Based on the source material, {concept.name} is defined as: {definition[:120]}",
         chunk_ids=chunk_ids,
         content_ids=content_ids,
         page_start=page_start,

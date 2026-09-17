@@ -22,7 +22,7 @@ from typing import Any
 from ...core.config import settings
 from ..schemas import KnowledgeGraph
 from .planner import classify_difficulty
-from .schemas import StudentLearningProfile, VideoTarget, VideoTargetMatrix
+from .schemas import AssessmentSession, StudentLearningProfile, VideoTarget, VideoTargetMatrix
 
 # Passing score threshold (percentage 0-100)
 PASS_THRESHOLD = 70.0
@@ -40,6 +40,7 @@ def build_video_target_matrix(
     kg: KnowledgeGraph,
     source_filename: str = "",
     pass_threshold: float = PASS_THRESHOLD,
+    session: AssessmentSession | None = None,
 ) -> VideoTargetMatrix:
     """Scan updated scores and build the Video Target Matrix for Step 3."""
     videos: list[VideoTarget] = []
@@ -65,6 +66,20 @@ def build_video_target_matrix(
         directive = f"Generate a {duration}-second AI video explaining {concept.name}"
         directives.append(directive)
 
+        # Extract provenance from session questions if available
+        concept_chunk_ids: list[str] = []
+        page_start: int | None = None
+        page_end: int | None = None
+        if session:
+            for q in session.questions:
+                if q.concept_id == concept_id:
+                    concept_chunk_ids.extend(q.chunk_ids)
+                    if q.page_start is not None:
+                        page_start = q.page_start if page_start is None else min(page_start, q.page_start)
+                    if q.page_end is not None:
+                        page_end = q.page_end if page_end is None else max(page_end, q.page_end)
+        concept_chunk_ids = list(dict.fromkeys(concept_chunk_ids))
+
         videos.append(
             VideoTarget(
                 concept_id=concept.concept_id,
@@ -75,8 +90,10 @@ def build_video_target_matrix(
                 status="NEEDS_VIDEO",
                 target_seconds=duration,
                 directive=directive,
-                chunk_ids=[],
+                chunk_ids=concept_chunk_ids,
                 source_content_ids=list(concept.source_content_ids),
+                page_start=page_start,
+                page_end=page_end,
             )
         )
 
@@ -99,6 +116,8 @@ def build_video_target_matrix(
     else:
         decision = "GENERATE_VIDEOS"
         summary = ", and ".join(directives) + "." if directives else "Generate AI remedial videos."
+        if has_kill_switch:
+            summary += " Note: One or more concepts hit the anti-loop kill switch and require human instructor intervention."
 
     return VideoTargetMatrix(
         student_id=profile.student_id,

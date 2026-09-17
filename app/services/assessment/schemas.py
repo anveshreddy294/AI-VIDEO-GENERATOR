@@ -90,6 +90,10 @@ class AssessmentSession(BaseModel):
     submitted_at: str | None = None
     concept_queue: list[str] = Field(default_factory=list, description="Concept IDs queued for question generation")
     current_index: int = 0
+    knowledge_graph_cache: dict[str, Any] | None = Field(
+        default=None,
+        description="Cached KnowledgeGraph serialized dictionary to ensure DAG and prerequisite links survive session lifecycle",
+    )
 
 
 class AnswerSubmission(BaseModel):

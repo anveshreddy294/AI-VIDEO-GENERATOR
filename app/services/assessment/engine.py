@@ -13,6 +13,7 @@ Implements:
 
 from datetime import datetime, timezone
 
+from ...core.config import settings
 from ..schemas import ConceptNode, KnowledgeGraph
 from .schemas import (
     AssessmentSession,
@@ -104,10 +105,13 @@ def grade_submission(
             mastery.iteration_count += 1
 
         # Determine status with Anti-Loop Kill Switch
-        if mastery.iteration_count > 3:
-            # Kill switch triggered: failed more than 3 times historically
+        kill_limit = getattr(settings, "kill_switch_limit", 3)
+        mastery_thresh = getattr(settings, "mastery_threshold", 2)
+
+        if mastery.iteration_count > kill_limit:
+            # Kill switch triggered: failed more than allowed limit historically
             mastery.status = "REQUIRES_HUMAN_FALLBACK"
-        elif mastery.correct_attempts >= 2 and mastery.consecutive_correct >= 1:
+        elif mastery.correct_attempts >= mastery_thresh and mastery.consecutive_correct >= 1:
             mastery.status = "MASTERED"
         elif any_correct or mastery.correct_attempts >= 1:
             mastery.status = "LEARNING"
