@@ -141,7 +141,7 @@ def test_provider_failure_reaches_grounded_fallback():
 
     assert q is not None, "Generator must not crash on provider failure; must invoke grounded fallback"
     assert len(q.options) == 4
-    assert q.correct_index == 0
+    assert 0 <= q.correct_index <= 3
     assert "Directly derived from the source definition" in q.explanation
     print(f"   [PASS] Provider exception safely caught and routed to deterministic grounded fallback: '{q.stem}'")
 

@@ -214,6 +214,13 @@ DASHBOARD_HTML = """
             display: block;
         }
 
+        .status-warning {
+            background: #d2992222;
+            border: 1px solid #d2992266;
+            color: #e3b341;
+            display: block;
+        }
+
         /* Quiz Area */
         .quiz-area {
             display: none;
@@ -403,6 +410,127 @@ DASHBOARD_HTML = """
         .link-card:hover { border-color: #388bfd; }
         .link-title { font-size: 14px; font-weight: 600; color: #f0f6fc; }
         .link-desc { font-size: 12px; color: #8b949e; margin-top: 4px; }
+
+        /* Observable Pipeline Timeline */
+        .timeline-card {
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 16px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+        .timeline-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .timeline-pulse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #58a6ff;
+            display: inline-block;
+            box-shadow: 0 0 8px #58a6ff;
+            animation: pulse-ring 1.5s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.3); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+
+        .progress-bar-bg {
+            background: #21262d;
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .progress-bar-fill {
+            background: linear-gradient(90deg, #1f6feb, #238636);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+
+        .timeline-stages-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .stage-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 13px;
+            color: #8b949e;
+            transition: all 0.2s ease;
+        }
+
+        .stage-item.status-running {
+            color: #f0f6fc;
+            font-weight: 600;
+        }
+
+        .stage-item.status-completed {
+            color: #c9d1d9;
+        }
+
+        .stage-item.status-warning {
+            color: #d29922;
+        }
+
+        .stage-item.status-failed {
+            color: #f85149;
+            font-weight: 600;
+        }
+
+        .stage-icon {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            margin-top: 1px;
+        }
+
+        .status-pending .stage-icon { background: #21262d; color: #484f58; }
+        .status-running .stage-icon { background: #1f6feb; color: #fff; animation: spin 1s linear infinite; }
+        .status-completed .stage-icon { background: #238636; color: #fff; }
+        .status-warning .stage-icon { background: #9e6a03; color: #fff; }
+        .status-failed .stage-icon { background: #da3633; color: #fff; }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .stage-details { flex: 1; }
+        .stage-title { font-weight: 600; margin-bottom: 2px; }
+        .stage-message { font-size: 12px; color: #8b949e; }
+        .stage-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-top: 4px;
+        }
+        .meta-chip {
+            background: #21262d;
+            color: #8b949e;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -475,6 +603,24 @@ DASHBOARD_HTML = """
                 </button>
             </div>
 
+            <!-- Observable Activity Telemetry Timeline Card -->
+            <div id="timelineCard" class="timeline-card" style="display:none;">
+                <div class="timeline-header">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span class="timeline-pulse-dot" id="timelinePulse"></span>
+                        <span style="font-weight:700;font-size:14px;color:#f0f6fc;">Pipeline Execution Telemetry</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:12px;">
+                        <span id="timelineTimer" style="font-size:12px;color:#8b949e;font-variant-numeric:tabular-nums;">0.0s</span>
+                        <span id="timelinePercent" style="font-size:12px;font-weight:600;color:#58a6ff;">0%</span>
+                    </div>
+                </div>
+                <div class="progress-bar-bg">
+                    <div id="timelineProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+                </div>
+                <div id="timelineStagesList" class="timeline-stages-list"></div>
+            </div>
+
             <!-- Status Banner -->
             <div id="statusBox" class="status-box"></div>
 
@@ -500,10 +646,17 @@ DASHBOARD_HTML = """
             <div id="resultsBox" class="results-box">
                 <div class="score-banner">
                     <div>
-                        <div style="font-size:13px;color:#8b949e;text-transform:uppercase;font-weight:600;">Overall Score</div>
-                        <div class="score-number" id="lblScore">0%</div>
+                        <div style="font-size:13px;color:#8b949e;text-transform:uppercase;font-weight:600;">Assessment Score</div>
+                        <div class="score-number" id="lblScore">0.0%</div>
+                        <div id="lblFraction" style="font-size:13px;color:#8b949e;margin-top:4px;">0 / 0 correct</div>
                     </div>
-                    <div id="lblGradeStatus"></div>
+                    <div style="display:flex;align-items:center;gap:20px;">
+                        <div style="text-align:right;">
+                            <div style="font-size:12px;color:#8b949e;text-transform:uppercase;font-weight:600;">Overall Profile Score</div>
+                            <div id="lblProfileScore" style="font-size:24px;font-weight:700;color:#58a6ff;">0.0%</div>
+                        </div>
+                        <div id="lblGradeStatus"></div>
+                    </div>
                 </div>
 
                 <div style="margin-bottom:14px;">
@@ -616,6 +769,144 @@ DASHBOARD_HTML = """
             }
         }
 
+        let activeEventSource = null;
+        let timelineTimerInterval = null;
+        let timelineStartTime = 0;
+
+        const STAGE_LABELS = {
+            'validating_source': 'Validating Source & Hash',
+            'extracting_content': 'Extracting Multimodal Content',
+            'normalizing_units': 'Building ContentUnits',
+            'analyzing_structure': 'Analyzing Document Structure',
+            'extracting_concepts': 'Extracting Key Concepts',
+            'building_knowledge_graph': 'Building Knowledge Graph',
+            'creating_chunks': 'Creating Semantic Chunks',
+            'syncing_qdrant': 'Syncing Vector Database',
+            'quality_validation': 'Quality Validation Gateway',
+            'planning_assessment': 'Planning Adaptive Assessment',
+            'generating_questions': 'Generating Grounded Questions',
+            'validating_questions': 'Validating Questions & Answer Key',
+            'assessment_ready': 'Assessment Ready'
+        };
+
+        function resetTimeline() {
+            if (activeEventSource) {
+                activeEventSource.close();
+                activeEventSource = null;
+            }
+            if (timelineTimerInterval) {
+                clearInterval(timelineTimerInterval);
+                timelineTimerInterval = null;
+            }
+            const card = document.getElementById('timelineCard');
+            card.style.display = 'block';
+            document.getElementById('timelineProgressBar').style.width = '0%';
+            document.getElementById('timelinePercent').textContent = '0%';
+            document.getElementById('timelineTimer').textContent = '0.0s';
+            document.getElementById('timelineStagesList').innerHTML = '';
+            document.getElementById('timelinePulse').className = 'timeline-pulse-dot';
+            document.getElementById('timelinePulse').style.background = '#58a6ff';
+
+            timelineStartTime = Date.now();
+            timelineTimerInterval = setInterval(() => {
+                const elapsed = ((Date.now() - timelineStartTime) / 1000).toFixed(1);
+                document.getElementById('timelineTimer').textContent = `${elapsed}s`;
+            }, 100);
+        }
+
+        function updateTimelineEvent(ev) {
+            document.getElementById('timelineProgressBar').style.width = `${ev.progress_percent}%`;
+            document.getElementById('timelinePercent').textContent = `${ev.progress_percent}%`;
+
+            const list = document.getElementById('timelineStagesList');
+            let stageElem = document.getElementById(`stage-${ev.stage}`);
+
+            if (!stageElem) {
+                stageElem = document.createElement('div');
+                stageElem.id = `stage-${ev.stage}`;
+                list.appendChild(stageElem);
+            }
+
+            stageElem.className = `stage-item status-${ev.status}`;
+
+            let iconHtml = '○';
+            if (ev.status === 'running') iconHtml = '⏳';
+            else if (ev.status === 'completed') iconHtml = '✓';
+            else if (ev.status === 'warning') iconHtml = '⚠️';
+            else if (ev.status === 'failed') iconHtml = '✕';
+
+            let metaChips = '';
+            if (ev.metadata) {
+                for (const [k, v] of Object.entries(ev.metadata)) {
+                    metaChips += `<span class="meta-chip">${k}: ${v}</span>`;
+                }
+            }
+
+            const label = STAGE_LABELS[ev.stage] || ev.stage;
+            stageElem.innerHTML = `
+                <div class="stage-icon">${iconHtml}</div>
+                <div class="stage-details">
+                    <div class="stage-title">${label}</div>
+                    <div class="stage-message">${ev.message}</div>
+                    ${metaChips ? `<div class="stage-meta">${metaChips}</div>` : ''}
+                </div>
+            `;
+
+            if (ev.status === 'failed') {
+                document.getElementById('timelinePulse').style.background = '#da3633';
+            } else if (ev.status === 'completed' && ev.stage === 'assessment_ready') {
+                document.getElementById('timelinePulse').style.background = '#238636';
+            } else if (ev.status === 'warning') {
+                document.getElementById('timelinePulse').style.background = '#d29922';
+            }
+        }
+
+        function trackJobSSE(jobId, onComplete, onError) {
+            const url = `/pipeline/jobs/${jobId}/events`;
+            activeEventSource = new EventSource(url);
+
+            activeEventSource.onmessage = (event) => {
+                if (!event.data || event.data.trim() === '' || event.data.startsWith(':')) return;
+                try {
+                    const ev = JSON.parse(event.data);
+                    updateTimelineEvent(ev);
+
+                    if (ev.status === 'completed' && ev.stage === 'assessment_ready') {
+                        if (activeEventSource) activeEventSource.close();
+                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                        onComplete(jobId);
+                    } else if (ev.status === 'failed') {
+                        if (activeEventSource) activeEventSource.close();
+                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                        onError(ev.message);
+                    }
+                } catch (err) {
+                    console.error('Error parsing SSE event:', err);
+                }
+            };
+
+            activeEventSource.onerror = async () => {
+                // Fallback polling if SSE drops
+                if (activeEventSource) activeEventSource.close();
+                try {
+                    const res = await fetch(`/pipeline/jobs/${jobId}`);
+                    const job = await res.json();
+                    if (job.events) {
+                        job.events.forEach(updateTimelineEvent);
+                    }
+                    if (job.status === 'completed') {
+                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                        onComplete(jobId);
+                    } else if (job.status === 'failed') {
+                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                        onError(job.error || 'Pipeline execution failed.');
+                    }
+                } catch (e) {
+                    console.error('Polling fallback failed:', e);
+                }
+            };
+        }
+
         function setStatus(msg, type) {
             const box = document.getElementById('statusBox');
             if (!msg) {
@@ -639,13 +930,14 @@ DASHBOARD_HTML = """
 
             const btn = document.getElementById('btnUpload');
             btn.disabled = true;
-            setStatus(`⏳ Uploading <strong>${file.name}</strong>, extracting knowledge graph, and generating quiz...`, 'loading');
+            resetTimeline();
+            setStatus('', 'loading');
 
             const formData = new FormData();
             formData.append('file', file);
 
             try {
-                const url = `/upload?auto_start_assessment=true&student_id=${encodeURIComponent(studentId)}&max_questions=${maxQ}`;
+                const url = `/pipeline/upload-and-assess?student_id=${encodeURIComponent(studentId)}&max_questions=${maxQ}`;
                 const res = await fetch(url, { method: 'POST', body: formData });
                 const data = await res.json();
 
@@ -653,18 +945,21 @@ DASHBOARD_HTML = """
                     throw new Error(data.detail || JSON.stringify(data));
                 }
 
-                setStatus(`✅ Material <strong>${data.filename}</strong> (${data.source_id}) processed! Concepts extracted: ${data.concepts_extracted}.`, 'success');
-                loadSources();
-
-                if (data.assessment && data.assessment.questions) {
-                    renderQuiz(data.assessment);
-                } else {
-                    setStatus(`Processed material (${data.source_id}), but no assessment was returned.`, 'error');
-                }
+                trackJobSSE(data.job_id, async (jid) => {
+                    btn.disabled = false;
+                    const jobRes = await fetch(`/pipeline/jobs/${jid}`);
+                    const jobData = await jobRes.json();
+                    if (jobData.result && jobData.result.assessment) {
+                        loadSources();
+                        renderQuiz(jobData.result.assessment);
+                    }
+                }, (errMsg) => {
+                    btn.disabled = false;
+                    setStatus(`❌ Pipeline error: ${errMsg}`, 'error');
+                });
             } catch (err) {
-                setStatus(`❌ Upload error: ${err.message}`, 'error');
-            } finally {
                 btn.disabled = false;
+                setStatus(`❌ Upload error: ${err.message}`, 'error');
             }
         }
 
@@ -679,10 +974,11 @@ DASHBOARD_HTML = """
 
             const btn = document.getElementById('btnAssessExisting');
             btn.disabled = true;
-            setStatus(`⏳ Planning assessment and generating grounded questions for <strong>${sourceId}</strong>...`, 'loading');
+            resetTimeline();
+            setStatus('', 'loading');
 
             try {
-                const res = await fetch('/assessment/start', {
+                const res = await fetch('/pipeline/assess-existing', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -697,12 +993,20 @@ DASHBOARD_HTML = """
                     throw new Error(data.detail || JSON.stringify(data));
                 }
 
-                setStatus(`✅ Generated ${data.questions.length} questions for ${sourceId}!`, 'success');
-                renderQuiz(data);
+                trackJobSSE(data.job_id, async (jid) => {
+                    btn.disabled = false;
+                    const jobRes = await fetch(`/pipeline/jobs/${jid}`);
+                    const jobData = await jobRes.json();
+                    if (jobData.result && jobData.result.assessment) {
+                        renderQuiz(jobData.result.assessment);
+                    }
+                }, (errMsg) => {
+                    btn.disabled = false;
+                    setStatus(`❌ Assessment error: ${errMsg}`, 'error');
+                });
             } catch (err) {
-                setStatus(`❌ Assessment error: ${err.message}`, 'error');
-            } finally {
                 btn.disabled = false;
+                setStatus(`❌ Assessment error: ${err.message}`, 'error');
             }
         }
 
@@ -710,13 +1014,32 @@ DASHBOARD_HTML = """
             currentSession = session;
             activeQuestions = session.questions || [];
 
+            const requested = session.requested_questions || activeQuestions.length;
+            const generated = session.generated_questions !== undefined ? session.generated_questions : activeQuestions.length;
+            const shortfall = session.shortfall || 0;
+
             document.getElementById('lblSession').textContent = `Session: ${session.session_id}`;
             document.getElementById('lblSource').textContent = `Source: ${session.source_id}`;
             document.getElementById('lblStudent').textContent = `Student: ${session.student_id}`;
-            document.getElementById('lblCount').textContent = `${activeQuestions.length} Questions`;
+
+            if (shortfall > 0) {
+                document.getElementById('lblCount').textContent = `${generated} of ${requested} grounded questions generated`;
+            } else {
+                document.getElementById('lblCount').textContent = `${activeQuestions.length} Questions`;
+            }
 
             const container = document.getElementById('questionsContainer');
             container.innerHTML = '';
+
+            if (shortfall > 0) {
+                const noticeCard = document.createElement('div');
+                noticeCard.style.cssText = 'background: rgba(210, 153, 34, 0.15); border: 1px solid #d29922; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #f0f6fc;';
+                noticeCard.innerHTML = `
+                    <div style="font-weight:600; color:#e3b341; margin-bottom:4px;">⚠️ ${generated} of ${requested} grounded questions generated</div>
+                    <div style="color:#c9d1d9; font-size:12px;">The authoritative study source contained insufficient distinct grounded evidence to generate all ${requested} requested questions without duplicating concepts or compromising strict evidentiary grounding.</div>
+                `;
+                container.appendChild(noticeCard);
+            }
 
             activeQuestions.forEach((q, qIdx) => {
                 const qCard = document.createElement('div');
@@ -813,25 +1136,61 @@ DASHBOARD_HTML = """
             const resultsBox = document.getElementById('resultsBox');
             resultsBox.style.display = 'block';
 
-            const score = data.overall_score || 0;
-            const scoreEl = document.getElementById('lblScore');
-            scoreEl.textContent = `${score.toFixed(1)}%`;
-            scoreEl.style.color = score >= 70 ? '#3fb950' : (score >= 50 ? '#d29922' : '#f85149');
+            // Contract Validation: Ensure required backend fields exist
+            if (typeof data.percentage !== 'number' || typeof data.score !== 'number' || typeof data.total !== 'number') {
+                setStatus('❌ Contract Error: Missing authoritative assessment score fields (percentage, score, total) in backend response.', 'error');
+                console.error('Invalid submit response schema:', data);
+                return;
+            }
 
+            const profileSummary = data.profile_summary;
+            if (!profileSummary || typeof profileSummary.overall_score !== 'number') {
+                setStatus('❌ Contract Error: Missing profile_summary.overall_score in backend response.', 'error');
+                console.error('Invalid profile_summary schema:', data);
+                return;
+            }
+
+            // 1. Assessment Score (THIS submission) - Authoritative backend percentage
+            const assessmentPercentage = data.percentage;
+            const scoreEl = document.getElementById('lblScore');
+            scoreEl.textContent = `${assessmentPercentage.toFixed(1)}%`;
+            scoreEl.style.color = assessmentPercentage >= 70 ? '#3fb950' : (assessmentPercentage >= 50 ? '#d29922' : '#f85149');
+
+            const fractionEl = document.getElementById('lblFraction');
+            if (fractionEl) {
+                fractionEl.textContent = `${data.score} / ${data.total} correct`;
+            }
+
+            // 2. Overall Profile Score (Historical aggregate)
+            const profileScoreEl = document.getElementById('lblProfileScore');
+            if (profileScoreEl) {
+                profileScoreEl.textContent = `${profileSummary.overall_score.toFixed(1)}%`;
+            }
+
+            // 3. Status Badge
             const statusEl = document.getElementById('lblGradeStatus');
-            statusEl.innerHTML = score >= 70
+            statusEl.innerHTML = assessmentPercentage >= 70
                 ? '<span class="badge badge-green" style="font-size:14px;padding:6px 12px;">PASSED</span>'
                 : '<span class="badge badge-amber" style="font-size:14px;padding:6px 12px;">REVISION RECOMMENDED</span>';
 
+            // 4. Mastery Breakdown from profile_summary
             const masteriesEl = document.getElementById('lblMasteries');
             masteriesEl.innerHTML = '';
-            (data.strong_concepts || []).forEach(c => {
-                masteriesEl.innerHTML += `<span class="badge badge-green">✔ ${c} (Strong)</span>`;
-            });
-            (data.weak_concepts || []).forEach(c => {
-                masteriesEl.innerHTML += `<span class="badge badge-amber">⚠ ${c} (Needs Review)</span>`;
-            });
+            const strong = profileSummary.strong_concepts || [];
+            const weak = profileSummary.weak_concepts || [];
 
+            if (strong.length === 0 && weak.length === 0) {
+                masteriesEl.innerHTML = '<span style="font-size:13px;color:#8b949e;">No concept mastery data recorded.</span>';
+            } else {
+                strong.forEach(c => {
+                    masteriesEl.innerHTML += `<span class="badge badge-green">✔ ${c} (Strong)</span>`;
+                });
+                weak.forEach(c => {
+                    masteriesEl.innerHTML += `<span class="badge badge-amber">⚠ ${c} (Needs Review)</span>`;
+                });
+            }
+
+            // 5. Prerequisite Gaps
             const prereqsBox = document.getElementById('boxPrereqs');
             const prereqsEl = document.getElementById('lblPrereqs');
             if (data.prerequisite_gaps && data.prerequisite_gaps.length > 0) {
@@ -841,6 +1200,7 @@ DASHBOARD_HTML = """
                 prereqsBox.style.display = 'none';
             }
 
+            // 6. Step 3 Video Target Matrix
             const matrix = data.video_target_matrix || {};
             document.getElementById('lblVideoDirective').textContent = matrix.summary || 'All tested concepts mastered! No video generation needed.';
 

@@ -1,0 +1,26 @@
+{
+  "concepts": {
+    "CONCEPT_SMART_ENERGY_MANAGEMENT": {
+      "concept_id": "CONCEPT_SMART_ENERGY_MANAGEMENT",
+      "name": "Smart Energy Management System",
+      "definition": "An AI-driven approach to monitoring, optimizing, and controlling energy resources to balance supply and demand efficiently.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_e1875671546c"
+      ]
+    },
+    "CONCEPT_POLAR_RESEARCH_ENERGY_SYSTEMS": {
+      "concept_id": "CONCEPT_POLAR_RESEARCH_ENERGY_SYSTEMS",
+      "name": "Polar Research Station Energy Systems",
+      "definition": "Specialized energy microgrids designed to operate reliably under extreme polar weather conditions, ensuring continuous station operation.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SMART_ENERGY_MANAGEMENT"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_e1875671546c"
+      ]
+    }
+  }
+}

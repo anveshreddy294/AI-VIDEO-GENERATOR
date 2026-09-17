@@ -1,0 +1,58 @@
+{
+  "concepts": {
+    "CONCEPT_DISTRIBUTED_SYSTEMS": {
+      "concept_id": "CONCEPT_DISTRIBUTED_SYSTEMS",
+      "name": "Distributed Systems",
+      "definition": "A collection of autonomous computing elements that appears as a single coherent system",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": []
+    },
+    "CONCEPT_LOAD_BALANCING": {
+      "concept_id": "CONCEPT_LOAD_BALANCING",
+      "name": "Load Balancing",
+      "definition": "Distributes incoming network traffic across multiple servers to ensure no single server bears too much demand",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": []
+    },
+    "CONCEPT_CACHING": {
+      "concept_id": "CONCEPT_CACHING",
+      "name": "Caching",
+      "definition": "Storing frequently accessed data in fast storage layers to reduce database load",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": []
+    },
+    "CONCEPT_DATABASE_DESIGN": {
+      "concept_id": "CONCEPT_DATABASE_DESIGN",
+      "name": "Database Design",
+      "definition": "The process of producing a detailed data model of a database including constraints and normalization",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": []
+    },
+    "CONCEPT_SHARDING": {
+      "concept_id": "CONCEPT_SHARDING",
+      "name": "Sharding",
+      "definition": "Horizontal partitioning of data across multiple database instances to improve scalability",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_DESIGN"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": []
+    },
+    "CONCEPT_REPLICATION": {
+      "concept_id": "CONCEPT_REPLICATION",
+      "name": "Replication",
+      "definition": "Copying data from one database server to others to improve availability and fault tolerance",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_DESIGN"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": []
+    }
+  }
+}

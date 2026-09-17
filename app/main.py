@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from .api.dashboard import router as dashboard_router
 from .api.upload import router as upload_router
 from .api.assessment import router as assessment_router
+from .api.pipeline import router as pipeline_router
 
 app = FastAPI(
     title="VisualAI — Student Knowledge Platform",
@@ -23,6 +24,7 @@ app = FastAPI(
 app.include_router(dashboard_router)
 app.include_router(upload_router)
 app.include_router(assessment_router)
+app.include_router(pipeline_router)
 
 
 @app.get("/health")

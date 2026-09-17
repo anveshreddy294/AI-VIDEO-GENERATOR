@@ -9,6 +9,8 @@ Endpoints:
 - GET  /assessment/video-target/{student_id}/{source_id} → Retrieve Step 3 Video Target Matrix
 """
 
+import inspect
+import math
 import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -23,8 +25,12 @@ from ..services.assessment.profile import get_or_create_profile, save_profile
 from ..services.assessment.schemas import (
     AssessmentSession,
     AssessmentStartRequest,
+    AssessmentStartResponse,
+    AssessmentSubmitResponse,
     ConceptSnapshot,
+    ProfileSummary,
     Question,
+    QuestionResult,
     SafeOption,
     SafeQuestion,
     StudentSubmission,
@@ -48,12 +54,39 @@ ASSESSMENT_TTL_HOURS = settings.assessment_ttl_hours
 MAX_RETRIES_PER_QUESTION = settings.max_question_retries
 
 
-@router.post("/start")
+def _call_generate_question(
+    concept: ConceptNode,
+    source_id: str,
+    provided_chunks: list[dict[str, Any]] | None,
+    max_retries: int,
+    variant_type: str,
+) -> Question | None:
+    """Invokes generate_question, passing variant_type if supported by function/mock."""
+    try:
+        return generate_question(
+            concept=concept,
+            source_id=source_id,
+            provided_chunks=provided_chunks,
+            max_retries=max_retries,
+            variant_type=variant_type,
+        )
+    except TypeError as e:
+        if "variant_type" in str(e):
+            return generate_question(
+                concept=concept,
+                source_id=source_id,
+                provided_chunks=provided_chunks,
+                max_retries=max_retries,
+            )
+        raise
+
+
+@router.post("/start", response_model=AssessmentStartResponse)
 def start_assessment(
     payload: AssessmentStartRequest | None = Body(default=None),
     student_id: str | None = Query(default=None),
     source_id: str | None = Query(default=None),
-):
+) -> AssessmentStartResponse:
     """Step 1 -> Step 2 Handoff: Ingest, Plan, Ground, Validate, and Dispatch.
 
     Execution Flow:
@@ -148,13 +181,28 @@ def start_assessment(
     # 3. Load or create Student Learning Profile
     profile = get_or_create_profile(req_student_id, req_source_id)
 
-    target_questions = (payload.max_questions if payload and payload.max_questions else None) or MAX_QUESTIONS
+    raw_target = (
+        payload.max_questions
+        if payload and payload.max_questions is not None
+        else settings.max_questions
+    )
+    target_questions = max(1, min(raw_target, settings.max_questions))
 
     # Identify kill-switch concepts to strictly exclude from planning & reserve pool
     kill_switch_ids: set[str] = {
         cid for cid, m in profile.concept_masteries.items()
         if m.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
     }
+
+    all_available_concepts: list[ConceptNode] = [
+        c for c in kg.concepts.values()
+        if c and c.concept_id and c.concept_id not in kill_switch_ids
+    ]
+    if not all_available_concepts:
+        raise HTTPException(
+            status_code=422,
+            detail="No concepts could be scheduled for assessment.",
+        )
 
     # 4. Dynamic Assessment Planning (Cold Start + Prerequisite Pairing)
     concept_queue = plan_assessment(
@@ -173,10 +221,8 @@ def start_assessment(
     # Build reserve pool from remaining KnowledgeGraph concepts
     primary_ids = {c.concept_id for c in primary_candidates}
     remaining_kg_concepts = [
-        c for c in kg.concepts.values()
-        if c and c.concept_id
-        and c.concept_id not in primary_ids
-        and c.concept_id not in kill_switch_ids
+        c for c in all_available_concepts
+        if c.concept_id not in primary_ids
     ]
     # Order reserve pool preserving prerequisite hierarchy
     reserve_candidates = _apply_prerequisite_pairing(remaining_kg_concepts, list(kg.concepts.values()))
@@ -185,12 +231,6 @@ def start_assessment(
         if c.concept_id not in primary_ids
         and c.concept_id not in kill_switch_ids
     ]
-
-    if not primary_candidates and not reserve_candidates:
-        raise HTTPException(
-            status_code=422,
-            detail="No concepts could be scheduled for assessment.",
-        )
 
     # 4b. Cache compact concept dependency snapshot for self-contained sessions (Phase 2B)
     concept_snapshot: dict[str, ConceptSnapshot] = {}
@@ -219,91 +259,135 @@ def start_assessment(
     expires_at = datetime.now(timezone.utc) + timedelta(hours=ASSESSMENT_TTL_HOURS)
     session.expires_at = expires_at.isoformat()
 
-    # 6. Sequential Grounded Generation + Validation + Provenance Tracking + Backfilling
+    # 6. Multi-Pass Grounded Generation + Validation + Provenance Tracking + Variant Backfill
     questions: list[Question] = []
     failed_concepts: list[str] = []
-    accepted_concept_ids: set[str] = set()
-    attempted_concept_ids: set[str] = set()
+    concept_question_counts: dict[str, int] = {c.concept_id: 0 for c in all_available_concepts}
+    concept_variants_used: dict[str, set[str]] = {c.concept_id: set() for c in all_available_concepts}
 
-    # Build candidate stream: primary candidates first, followed by reserve
-    candidate_stream: list[tuple[ConceptNode, bool]] = [
-        (c, False) for c in primary_candidates
-    ] + [
-        (c, True) for c in reserve_candidates
-    ]
+    VARIANTS = ["definition", "relationship", "application", "comparison", "misconception"]
+    concept_count = len(all_available_concepts)
+    max_questions_per_concept = (
+        min(len(VARIANTS), target_questions)
+        if concept_count <= 1
+        else max(2, math.ceil(target_questions / concept_count))
+    )
 
     context_text = " ".join(
         ch.get("text", "") for ch in (provided_chunks or [])
         if not ch.get("source_id") or ch.get("source_id") == req_source_id
     )
 
-    for concept, is_reserve in candidate_stream:
-        # Stop once we have reached target_questions
+    def _try_generate_and_accept(concept: ConceptNode, variant: str) -> bool:
         if len(questions) >= target_questions:
-            break
+            return False
+        if concept_question_counts.get(concept.concept_id, 0) >= max_questions_per_concept:
+            return False
+        if variant in concept_variants_used.get(concept.concept_id, set()):
+            return False
 
-        # Never retry the same concept indefinitely
-        if concept.concept_id in attempted_concept_ids:
-            continue
-        attempted_concept_ids.add(concept.concept_id)
-
-        # Do not generate questions for kill-switch concepts
-        if concept.concept_id in kill_switch_ids:
-            continue
-
-        # Do not generate questions for concepts whose valid question has already been accepted
-        if concept.concept_id in accepted_concept_ids:
-            continue
-
-        if is_reserve:
-            print(f"[assessment] Backfilling with reserve concept: {concept.name}")
-
-        question = generate_question(
+        q = _call_generate_question(
             concept=concept,
             source_id=req_source_id,
             provided_chunks=provided_chunks,
             max_retries=MAX_RETRIES_PER_QUESTION,
+            variant_type=variant,
         )
 
-        if question is None:
+        if q is None:
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} reason=generation returned None")
-            continue
+            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason=generation returned None")
+            return False
 
         # Structural validation + source/provenance check
-        is_valid, error = validate_question(question, allowed_source_id=req_source_id)
+        is_valid, error = validate_question(q, allowed_source_id=req_source_id)
         if not is_valid:
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} reason={error}")
-            continue
+            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={error}")
+            return False
 
         # Grounding validation
-        grounding_ok, grounding_err = validate_grounding(question, context_text)
+        grounding_ok, grounding_err = validate_grounding(q, context_text)
         if not grounding_ok:
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} reason={grounding_err}")
-            continue
+            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={grounding_err}")
+            return False
 
         # Non-duplication check against existing questions
-        if is_duplicate(question, questions):
+        if is_duplicate(q, questions):
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} reason=duplicate question detected")
-            continue
-
-        # Duplicate concept check: prevent duplicate concepts in the same assessment
-        if question.concept_id in accepted_concept_ids:
-            failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} reason=concept already accepted")
-            continue
+            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason=duplicate question detected")
+            return False
 
         # ACCEPT
-        accepted_concept_ids.add(question.concept_id)
-        questions.append(question)
-        print(f"[assessment] Accepted question {len(questions)}/{target_questions}")
+        concept_question_counts[concept.concept_id] = concept_question_counts.get(concept.concept_id, 0) + 1
+        concept_variants_used.setdefault(concept.concept_id, set()).add(variant)
+        questions.append(q)
+        print(f"[assessment] Accepted question {len(questions)}/{target_questions}: {concept.name} (variant={variant})")
+        return True
+
+    # Pass 1: Primary candidates (1 question per concept, variant="definition")
+    for c in primary_candidates:
+        if len(questions) >= target_questions:
+            break
+        _try_generate_and_accept(c, "definition")
+
+    # Pass 2: Reserve candidates (1 question per concept, variant="definition")
+    if len(questions) < target_questions:
+        for c in reserve_candidates:
+            if len(questions) >= target_questions:
+                break
+            print(f"[assessment] Backfilling with reserve concept: {c.name}")
+            _try_generate_and_accept(c, "definition")
+
+    # Pass 3: Multi-question backfill with distinct question variants
+    if len(questions) < target_questions:
+        print(f"[assessment] Initiating multi-question variant backfill: {len(questions)}/{target_questions} accepted")
+        remaining_variants = [v for v in VARIANTS if v != "definition"]
+        candidate_pool = [c for c in primary_candidates if c.concept_id not in kill_switch_ids] + [
+            c for c in reserve_candidates if c.concept_id not in kill_switch_ids
+        ]
+
+        max_backfill_attempts = target_questions * 3 + 5
+        attempts = 0
+
+        while len(questions) < target_questions and attempts < max_backfill_attempts:
+            attempts += 1
+            # Concepts eligible for another question
+            eligible = [
+                c for c in candidate_pool
+                if concept_question_counts.get(c.concept_id, 0) < max_questions_per_concept
+                and any(v not in concept_variants_used.get(c.concept_id, set()) for v in remaining_variants)
+            ]
+            if not eligible:
+                break
+
+            # Distribute fairly: lowest question count first
+            eligible.sort(key=lambda c: (concept_question_counts.get(c.concept_id, 0), c.concept_id))
+
+            progress_made = False
+            for c in eligible:
+                if len(questions) >= target_questions:
+                    break
+                unused_variant = next(
+                    (v for v in remaining_variants if v not in concept_variants_used.get(c.concept_id, set())),
+                    None,
+                )
+                if not unused_variant:
+                    continue
+
+                print(f"[assessment] Backfilling variant '{unused_variant}' for concept: {c.name}")
+                accepted = _try_generate_and_accept(c, unused_variant)
+                if accepted:
+                    progress_made = True
+                    break
+
+            if not progress_made:
+                break
 
     # If candidates are exhausted before reaching target_questions
     shortfall = max(0, target_questions - len(questions))
-    if len(questions) < target_questions:
+    if shortfall > 0:
         print(
             f"[assessment] Candidates exhausted: requested={target_questions} "
             f"generated={len(questions)} shortfall={shortfall} "
@@ -324,7 +408,7 @@ def start_assessment(
     session.status = "READY"
     save_session(session)
 
-    safe_questions: list[dict[str, Any]] = []
+    safe_questions: list[SafeQuestion] = []
     for q in questions:
         safe_q = SafeQuestion(
             question_id=q.question_id,
@@ -333,38 +417,39 @@ def start_assessment(
             stem=q.stem,
             options=[SafeOption(index=opt.index, text=opt.text) for opt in q.options],
             difficulty=q.difficulty,
+            variant_type=q.variant_type,
             page_start=q.page_start,
             page_end=q.page_end,
             chunk_ids=q.chunk_ids,
             timestamp_start=q.timestamp_start,
             timestamp_end=q.timestamp_end,
         )
-        safe_questions.append(safe_q.model_dump())
+        safe_questions.append(safe_q)
 
-    return {
-        "status": "READY",
-        "session_id": session.session_id,
-        "student_id": req_student_id,
-        "source_id": req_source_id,
-        "expires_at": session.expires_at,
-        "question_count": len(questions),
-        "questions": safe_questions,
-        "concepts_tested": [q.concept_name for q in questions],
-        "failed_concepts": failed_concepts,
-        "requested_questions": target_questions,
-        "generated_questions": len(questions),
-        "shortfall": shortfall,
-    }
+    return AssessmentStartResponse(
+        status="READY",
+        session_id=session.session_id,
+        student_id=req_student_id,
+        source_id=req_source_id,
+        expires_at=session.expires_at,
+        question_count=len(questions),
+        questions=safe_questions,
+        concepts_tested=[q.concept_name for q in questions],
+        failed_concepts=failed_concepts,
+        requested_questions=target_questions,
+        generated_questions=len(questions),
+        shortfall=shortfall,
+    )
 
 
-@router.post("/handoff")
-def handoff_from_step1(payload: AssessmentStartRequest):
+@router.post("/handoff", response_model=AssessmentStartResponse)
+def handoff_from_step1(payload: AssessmentStartRequest) -> AssessmentStartResponse:
     """Explicit pipeline handoff route: accepts Step 1 JSON and starts Step 2."""
     return start_assessment(payload=payload)
 
 
-@router.post("/submit")
-def submit_assessment(submission: StudentSubmission):
+@router.post("/submit", response_model=AssessmentSubmitResponse)
+def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse:
     """Step 5 & 6: Grade submission, apply Kill Switch, and build Video Target Matrix.
 
     Execution Flow:
@@ -446,7 +531,13 @@ def submit_assessment(submission: StudentSubmission):
     # Step 6: Build the Video Target Matrix (Step 2 -> Step 3 Handoff)
     record = get_source_record(session.source_id)
     source_filename = record.filename if record else ""
-    video_matrix = build_video_target_matrix(profile, kg, source_filename=source_filename, session=session)
+    video_matrix = build_video_target_matrix(
+        profile=profile,
+        kg=kg,
+        source_filename=source_filename,
+        session=session,
+        submission_result=result,
+    )
     save_video_matrix(video_matrix)
 
     # Concept-level score breakdown (e.g. Concept A: 100%, Concept B: 0%)
@@ -456,31 +547,35 @@ def submit_assessment(submission: StudentSubmission):
         if m.attempts > 0
     }
 
-    return {
-        "status": "SUBMITTED",
-        "session_id": result.session_id,
-        "score": result.score,
-        "total": result.total,
-        "percentage": round(result.percentage, 1),
-        "results": [
-            {
-                "question_id": r.question_id,
-                "concept_id": r.concept_id,
-                "correct": r.correct,
-            }
+    profile_summary = ProfileSummary(
+        overall_score=round(profile.overall_score, 1),
+        strong_concepts=profile.strong_concepts,
+        weak_concepts=profile.weak_concepts,
+        strong_concept_ids=profile.strong_concept_ids,
+        weak_concept_ids=profile.weak_concept_ids,
+    )
+
+    return AssessmentSubmitResponse(
+        status="SUBMITTED",
+        session_id=result.session_id,
+        score=result.score,
+        total=result.total,
+        percentage=round(result.percentage, 1),
+        results=[
+            QuestionResult(
+                question_id=r.question_id,
+                concept_id=r.concept_id,
+                correct=r.correct,
+                selected_index=r.selected_index,
+                correct_index=r.correct_index,
+            )
             for r in result.results
         ],
-        "prerequisite_gaps": result.prerequisite_gaps,
-        "profile_summary": {
-            "overall_score": round(profile.overall_score, 1),
-            "strong_concepts": profile.strong_concepts,
-            "weak_concepts": profile.weak_concepts,
-            "strong_concept_ids": profile.strong_concept_ids,
-            "weak_concept_ids": profile.weak_concept_ids,
-        },
-        "concept_scores": concept_scores,
-        "video_target_matrix": video_matrix.model_dump(),
-    }
+        prerequisite_gaps=result.prerequisite_gaps,
+        profile_summary=profile_summary,
+        concept_scores=concept_scores,
+        video_target_matrix=video_matrix,
+    )
 
 
 @router.get("/profile/{student_id}/{source_id}")

@@ -159,3 +159,62 @@ def search_layer_a(query: str, limit: int = 5) -> list[dict[str, Any]]:
         ),
     )
     return [hit.payload for hit in hits]
+
+
+def retrieve_exact_chunks(
+    source_id: str | None = None,
+    chunk_ids: list[str] | None = None,
+    concept_ids: list[str] | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Deterministically retrieve exact stored chunks from Qdrant by provenance IDs.
+
+    Bypasses semantic vector search when exact chunk_ids, source_id, or concept_ids
+    are already known from the assessment / knowledge graph provenance trail.
+    """
+    try:
+        client = get_client()
+        existing_collections = [c.name for c in client.get_collections().collections]
+        if settings.collection_name not in existing_collections:
+            return []
+
+        must_conditions: list[Any] = []
+        if source_id:
+            must_conditions.append(
+                qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id))
+            )
+        if chunk_ids:
+            clean_chunk_ids = [c for c in chunk_ids if c]
+            if len(clean_chunk_ids) == 1:
+                must_conditions.append(
+                    qmodels.FieldCondition(key="chunk_id", match=qmodels.MatchValue(value=clean_chunk_ids[0]))
+                )
+            elif len(clean_chunk_ids) > 1:
+                must_conditions.append(
+                    qmodels.FieldCondition(key="chunk_id", match=qmodels.MatchAny(any=clean_chunk_ids))
+                )
+        if concept_ids:
+            clean_concept_ids = [c for c in concept_ids if c]
+            if clean_concept_ids:
+                must_conditions.append(
+                    qmodels.FieldCondition(key="concept_ids", match=qmodels.MatchAny(any=clean_concept_ids))
+                )
+
+        scroll_filter = qmodels.Filter(must=must_conditions) if must_conditions else None
+
+        records, _ = client.scroll(
+            collection_name=settings.collection_name,
+            scroll_filter=scroll_filter,
+            limit=limit,
+            with_payload=True,
+            with_vectors=False,
+        )
+        return [record.payload for record in records if record and record.payload]
+    except Exception as exc:
+        logger.warning(
+            "Failed deterministic Qdrant chunk retrieval (source=%s, chunks=%s): %s",
+            source_id,
+            chunk_ids,
+            exc,
+        )
+        return []

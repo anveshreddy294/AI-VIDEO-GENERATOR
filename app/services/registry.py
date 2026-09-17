@@ -31,22 +31,52 @@ MAGIC_SIGNATURES = {
     "mkv": [b"\x1a\x45\xdf\xa3"],
 }
 
-REGISTRY_DIR = BASE_DIR / "storage" / "registry"
-REGISTRY_DIR.mkdir(parents=True, exist_ok=True)
-SOURCES_INDEX_FILE = REGISTRY_DIR / "sources_index.json"
+def get_registry_dir() -> Path:
+    """Active runtime registry directory for mutable storage."""
+    d = getattr(settings, "registry_dir", BASE_DIR / "storage" / "runtime" / "registry")
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_fixtures_registry_dir() -> Path:
+    """Deterministic fixtures registry directory for reproducible seed data."""
+    f_dir = getattr(settings, "fixtures_dir", BASE_DIR / "tests" / "fixtures") / "registry"
+    if f_dir.exists():
+        return f_dir
+    return BASE_DIR / "storage" / "registry"
+
+
+# Backward-compatibility alias
+REGISTRY_DIR = get_registry_dir()
+SOURCES_INDEX_FILE = get_registry_dir() / "sources_index.json"
 
 
 def _load_sources_index() -> dict[str, dict[str, Any]]:
-    if not SOURCES_INDEX_FILE.exists():
-        return {}
+    """Loads sources index by merging seed fixtures with runtime additions."""
+    fixtures_index: dict[str, dict[str, Any]] = {}
+    fixtures_file = get_fixtures_registry_dir() / "sources_index.json"
+    if fixtures_file.exists():
+        try:
+            fixtures_index = json.loads(fixtures_file.read_text(encoding="utf-8"))
+        except Exception as exc:
+            print(f"[registry] Notice: Could not read fixtures sources_index: {exc}")
+
+    runtime_file = get_registry_dir() / "sources_index.json"
+    if not runtime_file.exists():
+        return fixtures_index
+
     try:
-        return json.loads(SOURCES_INDEX_FILE.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+        runtime_index = json.loads(runtime_file.read_text(encoding="utf-8"))
+        return {**fixtures_index, **runtime_index}
+    except Exception as exc:
+        print(f"[registry] Notice: Could not read runtime sources_index: {exc}")
+        return fixtures_index
 
 
 def _save_sources_index(index: dict[str, dict[str, Any]]) -> None:
-    SOURCES_INDEX_FILE.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    """Save sources index exclusively to isolated runtime storage."""
+    runtime_file = get_registry_dir() / "sources_index.json"
+    runtime_file.write_text(json.dumps(index, indent=2), encoding="utf-8")
 
 
 def calculate_sha256(file_path: Path) -> str:
@@ -186,8 +216,8 @@ def update_source_status(
 
 
 def save_content_units(source_id: str, content_units: list[ContentUnit]) -> None:
-    """Persist normalized ContentUnits for a source to JSON."""
-    source_dir = REGISTRY_DIR / source_id
+    """Persist normalized ContentUnits for a source to JSON in runtime registry."""
+    source_dir = get_registry_dir() / source_id
     source_dir.mkdir(parents=True, exist_ok=True)
     cu_file = source_dir / "content_units.json"
     data = [cu.model_dump() for cu in content_units]
@@ -195,8 +225,16 @@ def save_content_units(source_id: str, content_units: list[ContentUnit]) -> None
 
 
 def load_content_units(source_id: str) -> list[ContentUnit]:
-    """Load normalized ContentUnits for a source."""
-    cu_file = REGISTRY_DIR / source_id / "content_units.json"
+    """Load normalized ContentUnits for a source with runtime, fixture, and legacy fallback."""
+    # 1. Check runtime registry
+    cu_file = get_registry_dir() / source_id / "content_units.json"
+    # 2. Check fixtures registry
+    if not cu_file.exists():
+        cu_file = get_fixtures_registry_dir() / source_id / "content_units.json"
+    # 3. Check legacy storage path
+    if not cu_file.exists():
+        cu_file = BASE_DIR / "storage" / "registry" / source_id / "content_units.json"
+
     if not cu_file.exists():
         return []
     data = json.loads(cu_file.read_text(encoding="utf-8"))
@@ -204,16 +242,24 @@ def load_content_units(source_id: str) -> list[ContentUnit]:
 
 
 def save_knowledge_graph(source_id: str, kg: KnowledgeGraph) -> None:
-    """Persist Knowledge Graph for a source to JSON."""
-    source_dir = REGISTRY_DIR / source_id
+    """Persist Knowledge Graph for a source to JSON in runtime registry."""
+    source_dir = get_registry_dir() / source_id
     source_dir.mkdir(parents=True, exist_ok=True)
     kg_file = source_dir / "knowledge_graph.json"
     kg_file.write_text(json.dumps(kg.model_dump(), indent=2), encoding="utf-8")
 
 
 def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
-    """Load Knowledge Graph for a source from disk. Returns None if not found."""
-    kg_file = REGISTRY_DIR / source_id / "knowledge_graph.json"
+    """Load Knowledge Graph for a source with runtime, fixture, and legacy fallback."""
+    # 1. Check runtime registry
+    kg_file = get_registry_dir() / source_id / "knowledge_graph.json"
+    # 2. Check fixtures registry
+    if not kg_file.exists():
+        kg_file = get_fixtures_registry_dir() / source_id / "knowledge_graph.json"
+    # 3. Check legacy storage path
+    if not kg_file.exists():
+        kg_file = BASE_DIR / "storage" / "registry" / source_id / "knowledge_graph.json"
+
     if not kg_file.exists():
         return None
     try:
