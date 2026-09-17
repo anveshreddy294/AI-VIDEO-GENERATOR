@@ -11,6 +11,7 @@ Tests all 6 steps:
 """
 
 import sys
+import uuid
 from pathlib import Path
 
 # Add project root to sys.path
@@ -43,6 +44,10 @@ def test_step2_flow():
     print("=================================================================")
     print("       TESTING STEP 2 MASTER EXECUTION FLOW (END-TO-END)         ")
     print("=================================================================")
+
+    # Use run-unique student ID to prevent kill-switch state bleed from prior runs
+    _run_uid = uuid.uuid4().hex[:8]
+    _api_student_id = f"STU_API_{_run_uid}"
 
     # -------------------------------------------------------------
     # 1. Simulate Step 1 JSON Output Handoff
@@ -297,8 +302,9 @@ def test_step2_flow():
     client = TestClient(app)
 
     # Test POST /assessment/start with Step 1 JSON payload
+    # Use a run-unique student ID to ensure a fresh profile with no kill-switch state
     start_payload = {
-        "student_id": "STU_INTEGRATION_01",
+        "student_id": _api_student_id,
         "source_id": "SRC_TEST_PHYSICS_101",
         "step1_output": step1_json,
     }
@@ -313,7 +319,7 @@ def test_step2_flow():
 
     # Test Session Integrity Mismatch check
     mismatch_payload = {
-        "student_id": "STU_INTEGRATION_01",
+        "student_id": _api_student_id,
         "source_id": "SRC_MISMATCH_ID",
         "step1_output": step1_json,  # Contains SRC_TEST_PHYSICS_101
     }
@@ -338,7 +344,7 @@ def test_step2_flow():
     print("   POST /assessment/submit successful -> Graded & generated Video Target Matrix.")
 
     # Test GET /assessment/video-target/{student_id}/{source_id}
-    resp_vt = client.get("/assessment/video-target/STU_INTEGRATION_01/SRC_TEST_PHYSICS_101")
+    resp_vt = client.get(f"/assessment/video-target/{_api_student_id}/SRC_TEST_PHYSICS_101")
     assert resp_vt.status_code == 200
     vt_data = resp_vt.json()
     assert vt_data["source_id"] == "SRC_TEST_PHYSICS_101"
