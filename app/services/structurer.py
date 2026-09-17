@@ -175,11 +175,113 @@ def _fallback_outputs(
     source_id = units[0].source_id if units else "SRC_UNKNOWN"
     asset_id = units[0].asset_id if units else "AST_UNKNOWN"
 
-    kg = KnowledgeGraph(concepts={})
+    concepts_dict: dict[str, ConceptNode] = {}
+    prereqs_set: set[str] = set()
+    seen_names: set[str] = set()
+    topic_name = "Study Material"
+
+    for u in units:
+        text = (u.text or "").strip()
+        if not text:
+            continue
+
+        lines = [line.strip() for line in text.split("\n") if line.strip()]
+        for line in lines:
+            # Candidate topic title
+            if topic_name == "Study Material" and 5 <= len(line) <= 80:
+                clean_title = re.sub(
+                    r"^(Problem Statement \d+|Title of Problem Statement|Chapter \d+:?|Topic:?)\s*",
+                    "",
+                    line,
+                    flags=re.IGNORECASE,
+                ).strip()
+                if len(clean_title) >= 5:
+                    topic_name = clean_title
+
+            # Acronym or named pattern: e.g. "Free Space Optical Communication (FSOC)"
+            matches = re.findall(r"([A-Z][A-Za-z0-9\s\-]{2,35}\s*\([A-Z0-9]{2,8}\))", line)
+            for m in matches:
+                name = m.strip()
+                if name not in seen_names and len(seen_names) < 8:
+                    seen_names.add(name)
+                    cid_token = re.sub(r"[^A-Z0-9_]", "_", name.upper()).strip("_")
+                    cid = f"CONCEPT_{cid_token[:24]}"
+                    defn = line if len(line) > len(name) + 15 else text[:250]
+                    concepts_dict[cid] = ConceptNode(
+                        concept_id=cid,
+                        name=name,
+                        definition=defn.strip(),
+                        prerequisite_concept_ids=list(concepts_dict.keys())[-1:] if concepts_dict else [],
+                        related_concept_ids=[],
+                        source_content_ids=[u.content_id],
+                    )
+
+            # Definition sentences: "X is defined as ...", "X refers to ...", "X states that ..."
+            def_match = re.search(
+                r"([A-Z][A-Za-z0-9\s\-]{2,30})\s+(?:is defined as|refers to|states that|represents|offers)\s+([^.\n]+)",
+                line,
+                flags=re.IGNORECASE,
+            )
+            if def_match and len(seen_names) < 8:
+                term = def_match.group(1).strip()
+                if term not in seen_names and len(term.split()) <= 4:
+                    seen_names.add(term)
+                    cid_token = re.sub(r"[^A-Z0-9_]", "_", term.upper()).strip("_")
+                    cid = f"CONCEPT_{cid_token[:24]}"
+                    concepts_dict[cid] = ConceptNode(
+                        concept_id=cid,
+                        name=term,
+                        definition=f"{term} {def_match.group(0).split(term, 1)[-1].strip()}.",
+                        prerequisite_concept_ids=list(concepts_dict.keys())[-1:] if concepts_dict else [],
+                        related_concept_ids=[],
+                        source_content_ids=[u.content_id],
+                    )
+
+            # Clean headings
+            if 4 <= len(line) <= 50 and not line.endswith(".") and not line.startswith("http") and not line.startswith("•"):
+                clean_hd = re.sub(
+                    r"^(Section \d+(\.\d+)*:?|Chapter \d+:?|Description:?|Background:?)\s*",
+                    "",
+                    line,
+                    flags=re.IGNORECASE,
+                ).strip()
+                if 4 <= len(clean_hd) <= 40 and clean_hd not in seen_names and len(seen_names) < 8:
+                    if clean_hd.lower() not in ("parameter", "parameters", "notes", "summary", "overview", "introduction"):
+                        seen_names.add(clean_hd)
+                        cid_token = re.sub(r"[^A-Z0-9_]", "_", clean_hd.upper()).strip("_")
+                        cid = f"CONCEPT_{cid_token[:24]}"
+                        concepts_dict[cid] = ConceptNode(
+                            concept_id=cid,
+                            name=clean_hd,
+                            definition=text[:300].strip(),
+                            prerequisite_concept_ids=list(concepts_dict.keys())[-1:] if concepts_dict else [],
+                            related_concept_ids=[],
+                            source_content_ids=[u.content_id],
+                        )
+
+    # Fallback to general concepts if nothing was matched
+    if not concepts_dict and units:
+        for idx, u in enumerate(units[:4]):
+            cid = f"CONCEPT_{idx+1:03d}"
+            snippet = (u.text or "")[:120].strip()
+            name = snippet.split("\n")[0][:40] or f"Concept {idx+1}"
+            concepts_dict[cid] = ConceptNode(
+                concept_id=cid,
+                name=name,
+                definition=(u.text or "")[:250].strip() or f"Foundational knowledge for {name}.",
+                prerequisite_concept_ids=list(concepts_dict.keys())[-1:] if concepts_dict else [],
+                related_concept_ids=[],
+                source_content_ids=[u.content_id],
+            )
+
+    for node in concepts_dict.values():
+        prereqs_set.update(node.prerequisite_concept_ids)
+
+    kg = KnowledgeGraph(concepts=concepts_dict)
     blueprint = TopicBlueprint(
-        topic_name="Extracted Material",
-        key_concepts=["Study Material"],
-        prerequisites=[],
+        topic_name=topic_name,
+        key_concepts=[c.name for c in concepts_dict.values()] or ["Study Material"],
+        prerequisites=list(prereqs_set),
         difficulty_level="intermediate",
         source_id=source_id,
         asset_id=asset_id,

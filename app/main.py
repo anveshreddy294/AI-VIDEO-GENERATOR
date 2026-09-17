@@ -30,6 +30,27 @@ def health() -> dict:
     return {"status": "ok", "service": "VisualAI", "version": "0.2.0", "steps": ["ingestion", "assessment"]}
 
 
+@app.get("/sources")
+def get_sources():
+    """List all registered sources with readiness and concept counts."""
+    from .services.registry import _load_sources_index, load_knowledge_graph
+
+    index = _load_sources_index()
+    results = []
+    for sid, rec in index.items():
+        kg = load_knowledge_graph(sid)
+        results.append({
+            "source_id": sid,
+            "filename": rec.get("filename", "unknown"),
+            "status": rec.get("status", "UNKNOWN"),
+            "modality": rec.get("source_type"),
+            "concepts_count": len(kg.concepts) if kg and kg.concepts else 0,
+            "created_at": rec.get("created_at"),
+        })
+    results.sort(key=lambda x: (x["status"] == "READY", x.get("created_at") or ""), reverse=True)
+    return {"sources": results}
+
+
 @app.get("/debug/qdrant")
 def debug_qdrant():
     """Diagnostic endpoint to check Qdrant collection state."""

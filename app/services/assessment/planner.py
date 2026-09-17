@@ -12,6 +12,7 @@ Implements:
 import random
 from typing import Literal
 
+from ...core.config import settings
 from ..schemas import ConceptNode, KnowledgeGraph
 from .schemas import ConceptMastery, StudentLearningProfile
 
@@ -37,7 +38,7 @@ def classify_difficulty(
 def plan_assessment(
     kg: KnowledgeGraph,
     profile: StudentLearningProfile | None = None,
-    max_questions: int = 10,
+    max_questions: int | None = None,
     key_concepts: list[str] | None = None,
 ) -> list[ConceptNode]:
     """Select concepts to test, ordered by priority.
@@ -45,12 +46,13 @@ def plan_assessment(
     Args:
         kg: KnowledgeGraph containing concept nodes and prerequisite links.
         profile: Existing StudentLearningProfile if student has taken assessments before.
-        max_questions: Target number of questions to generate.
+        max_questions: Target number of questions to generate (defaults to settings.max_questions).
         key_concepts: Optional list of key concept names or IDs from Step 1 JSON.
 
     Returns:
         Ordered queue of ConceptNode objects ready for question generation.
     """
+    limit = max_questions if max_questions is not None else settings.max_questions
     concepts = list(kg.concepts.values())
     if not concepts:
         return []
@@ -68,15 +70,22 @@ def plan_assessment(
         concepts = matching + non_matching
 
     if profile and profile.concept_masteries:
-        return _plan_with_profile(concepts, profile, max_questions)
+        return _plan_with_profile(concepts, profile, limit)
     else:
-        return _cold_start_plan(concepts, max_questions)
+        return _cold_start_plan(concepts, limit, has_key_concepts=bool(key_concepts))
 
 
 def _cold_start_plan(
-    concepts: list[ConceptNode], max_questions: int
+    concepts: list[ConceptNode],
+    max_questions: int,
+    has_key_concepts: bool = False,
 ) -> list[ConceptNode]:
     """Cold start: no profile exists. Select a balanced mix of foundational and advanced concepts."""
+    if has_key_concepts:
+        # Explicit key concepts priority from source blueprint
+        selected = _apply_prerequisite_pairing(concepts[:max_questions], concepts)
+        return selected[:max_questions]
+
     foundational = [c for c in concepts if classify_difficulty(c) == "foundational"]
     intermediate = [c for c in concepts if classify_difficulty(c) == "intermediate"]
     advanced = [c for c in concepts if classify_difficulty(c) == "advanced"]
@@ -93,6 +102,12 @@ def _cold_start_plan(
     selected.extend(_safe_sample(foundational, n_foundational))
     selected.extend(_safe_sample(intermediate, n_intermediate))
     selected.extend(_safe_sample(advanced, n_advanced))
+
+    # If pool tiers were empty or small, fill remaining from unselected concepts
+    if len(selected) < max_questions:
+        selected_ids = {c.concept_id for c in selected}
+        remaining = [c for c in concepts if c.concept_id not in selected_ids]
+        selected.extend(_safe_sample(remaining, max_questions - len(selected)))
 
     # Apply Prerequisite Pairing Rule
     selected = _apply_prerequisite_pairing(selected, concepts)
@@ -173,13 +188,18 @@ def _apply_prerequisite_pairing(
     concept_map = {c.concept_id: c for c in all_concepts}
     ordered_result: list[ConceptNode] = []
     seen_ids: set[str] = set()
+    visiting: set[str] = set()
 
     def _add_with_prereqs(concept: ConceptNode) -> None:
-        # First recursively/iteratively add prerequisites that exist in the map
+        if concept.concept_id in seen_ids or concept.concept_id in visiting:
+            return
+        visiting.add(concept.concept_id)
+        # First recursively add prerequisites that exist in the map
         for prereq_id in concept.prerequisite_concept_ids:
-            if prereq_id in concept_map and prereq_id not in seen_ids:
+            if prereq_id in concept_map and prereq_id not in seen_ids and prereq_id not in visiting:
                 prereq_node = concept_map[prereq_id]
                 _add_with_prereqs(prereq_node)
+        visiting.remove(concept.concept_id)
         # Then add the concept itself
         if concept.concept_id not in seen_ids:
             seen_ids.add(concept.concept_id)

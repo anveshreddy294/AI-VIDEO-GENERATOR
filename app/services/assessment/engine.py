@@ -13,6 +13,7 @@ Implements:
 
 from datetime import datetime, timezone
 
+from ...core.config import settings
 from ..schemas import ConceptNode, KnowledgeGraph
 from .schemas import (
     AssessmentSession,
@@ -21,13 +22,34 @@ from .schemas import (
     StudentLearningProfile,
     StudentSubmission,
     SubmissionResult,
+    reconstruct_kg_from_snapshot,
 )
+
+
+def rebuild_profile_metrics(profile: StudentLearningProfile) -> None:
+    """Rebuild aggregate concept name and concept ID lists on the profile."""
+    profile.strong_concepts = [
+        m.concept_name for m in profile.concept_masteries.values()
+        if m.status == "MASTERED" and m.concept_name
+    ]
+    profile.weak_concepts = [
+        m.concept_name for m in profile.concept_masteries.values()
+        if m.status in ("LEARNING", "REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK") and m.concept_name
+    ]
+    profile.strong_concept_ids = [
+        cid for cid, m in profile.concept_masteries.items()
+        if m.status == "MASTERED"
+    ]
+    profile.weak_concept_ids = [
+        cid for cid, m in profile.concept_masteries.items()
+        if m.status in ("LEARNING", "REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
+    ]
 
 
 def grade_submission(
     submission: StudentSubmission,
     session: AssessmentSession,
-    kg: KnowledgeGraph,
+    kg: KnowledgeGraph | None,
     profile: StudentLearningProfile,
 ) -> SubmissionResult:
     """Grade a student's submission against the backend hidden answer key.
@@ -39,6 +61,12 @@ def grade_submission(
     - Anti-Loop Kill Switch (>3 failed attempts -> REQUIRES_HUMAN_FALLBACK)
     - Prerequisite gap detection
     """
+    # 0. Ensure KnowledgeGraph is available; reconstruct from session snapshot if absent
+    if (kg is None or not kg.concepts) and hasattr(session, "concept_snapshot") and session.concept_snapshot:
+        kg = reconstruct_kg_from_snapshot(session, expected_source_id=session.source_id)
+    if kg is None:
+        kg = KnowledgeGraph(concepts={})
+
     # 1. Validate session expiration
     if session.expires_at:
         expires = datetime.fromisoformat(session.expires_at)
@@ -104,10 +132,13 @@ def grade_submission(
             mastery.iteration_count += 1
 
         # Determine status with Anti-Loop Kill Switch
-        if mastery.iteration_count > 3:
-            # Kill switch triggered: failed more than 3 times historically
+        if mastery.iteration_count > settings.kill_switch_limit:
+            # Kill switch triggered: failed more than kill_switch_limit times historically
             mastery.status = "REQUIRES_HUMAN_FALLBACK"
-        elif mastery.correct_attempts >= 2 and mastery.consecutive_correct >= 1:
+        elif (
+            mastery.correct_attempts >= settings.mastery_threshold
+            and mastery.consecutive_correct >= 1
+        ):
             mastery.status = "MASTERED"
         elif any_correct or mastery.correct_attempts >= 1:
             mastery.status = "LEARNING"
@@ -140,14 +171,7 @@ def grade_submission(
         / profile.total_sessions
     )
 
-    profile.strong_concepts = [
-        m.concept_name for m in profile.concept_masteries.values()
-        if m.status == "MASTERED" and m.concept_name
-    ]
-    profile.weak_concepts = [
-        m.concept_name for m in profile.concept_masteries.values()
-        if m.status in ("LEARNING", "REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK") and m.concept_name
-    ]
+    rebuild_profile_metrics(profile)
     profile.prerequisite_gaps = prerequisite_gaps
     profile.updated_at = now
 

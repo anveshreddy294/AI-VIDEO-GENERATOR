@@ -43,7 +43,12 @@ router = APIRouter(prefix="/upload", tags=["Step 1 — Ingestion"])
         "Use the returned `source_id` to generate quizzes in Step 2."
     ),
 )
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(
+    file: UploadFile = File(...),
+    auto_start_assessment: bool = False,
+    student_id: str = "student_default",
+    max_questions: int = 5,
+):
     filename = file.filename or "unnamed"
 
     # Save to temp location for hash calculation and validation
@@ -103,14 +108,14 @@ async def upload_file(file: UploadFile = File(...)):
         # Step 9 & 10: Semantic Chunking & Provenance Mapping
         update_source_status(source_id, "INDEXING")
         rich_chunks = create_rich_chunks(enriched_units, knowledge_graph)
+
+        # Step 11: Rich Qdrant Payload Upsert (Layer A)
+        synced_count = upsert_safely(rich_chunks)
+
+        # Update blueprint chunk_count with real count
         blueprint.chunk_count = len(rich_chunks)
 
-        # Step 15: Qdrant Payload Upsert
-        synced_count = 0
-        if rich_chunks:
-            synced_count = upsert_safely(rich_chunks)
-
-        # Step 17: Quality Validation Gateway
+        # Quality Validation Gateway Check
         val_report = validate_ingestion_quality(
             record=source_record,
             file_path=persistent_file,
@@ -123,7 +128,28 @@ async def upload_file(file: UploadFile = File(...)):
         # Step 12 & 18: Update status -> READY and prepare final response
         update_source_status(source_id, "READY")
 
-        return {
+        # Automated Step 1 -> Step 2 handoff if requested
+        assessment_resp = None
+        if auto_start_assessment:
+            try:
+                from .assessment import start_assessment
+                from ..services.assessment.schemas import AssessmentStartRequest
+
+                assessment_session = start_assessment(
+                    student_id=student_id,
+                    source_id=source_id,
+                    payload=AssessmentStartRequest(
+                        student_id=student_id,
+                        source_id=source_id,
+                        max_questions=max_questions,
+                    ),
+                )
+                assessment_resp = assessment_session if isinstance(assessment_session, dict) else assessment_session.model_dump()
+            except Exception as exc:
+                print(f"[upload] auto_start_assessment failed: {exc}")
+                assessment_resp = {"error": f"Assessment could not be auto-started: {exc}"}
+
+        resp = {
             "status": "READY",
             "source_id": source_id,
             "asset_id": asset_id,
@@ -138,6 +164,10 @@ async def upload_file(file: UploadFile = File(...)):
             "validation": val_report,
             "topic_blueprint": blueprint.model_dump(),
         }
+        if assessment_resp is not None:
+            resp["assessment"] = assessment_resp
+
+        return resp
 
     except ValidationFailed as val_exc:
         if source_record:

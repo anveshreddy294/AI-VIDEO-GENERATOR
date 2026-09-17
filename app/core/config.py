@@ -58,6 +58,9 @@ class Settings:
         self.max_question_retries: int = int(os.getenv("MAX_QUESTION_RETRIES", "2"))
         self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
         self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
+        self.llm_provider: str = os.getenv("LLM_PROVIDER", "gemini")
+        self.ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
+        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:

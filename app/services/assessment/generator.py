@@ -16,13 +16,13 @@ import re
 import time
 from typing import Any
 
-import google.generativeai as genai
 from qdrant_client.http import models as qmodels
 
 from ...core.config import settings
 from ...db.vector_store import _embed, ensure_collection, get_client
 from ..schemas import ConceptNode
 from .planner import classify_difficulty
+from .providers import LLMProvider, get_default_provider
 from .schemas import AssessmentOption, Question
 
 _QUESTION_PROMPT = """You are an expert educational assessment author.
@@ -53,12 +53,6 @@ Respond with STRICT JSON only (no markdown, no explanation outside JSON):
   "correct_index": <0, 1, 2, or 3>,
   "explanation": "<grounded explanation>"
 }}"""
-
-
-def _client() -> genai.GenerativeModel:
-    settings.require_gemini()
-    genai.configure(api_key=settings.gemini_api_key)
-    return genai.GenerativeModel(settings.generation_model)
 
 
 def search_concept_chunks(
@@ -125,18 +119,6 @@ def search_concept_chunks(
             limit=limit,
             query_filter=qmodels.Filter(must=must_conditions),
         )
-        if hits:
-            return [hit.payload for hit in hits]
-
-        # Fallback to layer A only
-        hits = client.search(
-            collection_name=settings.collection_name,
-            query_vector=vector,
-            limit=limit,
-            query_filter=qmodels.Filter(
-                must=[qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
-            ),
-        )
         return [hit.payload for hit in hits] if hits else []
     except Exception as exc:
         print(f"[generator] Qdrant search failed for '{concept.name}': {exc}")
@@ -148,7 +130,8 @@ def generate_question(
     source_id: str,
     difficulty: str | None = None,
     provided_chunks: list[dict[str, Any]] | None = None,
-    max_retries: int = 2,
+    max_retries: int | None = None,
+    llm_provider: LLMProvider | None = None,
 ) -> Question | None:
     """Generate a single grounded question for a concept with full provenance tracking.
 
@@ -157,17 +140,20 @@ def generate_question(
     if not difficulty:
         difficulty = classify_difficulty(concept)
 
+    retries = max_retries if max_retries is not None else settings.max_question_retries
+    provider = llm_provider or get_default_provider()
+
     chunks = search_concept_chunks(
         concept, source_id, limit=5, provided_chunks=provided_chunks
     )
 
-    # If no chunks found, construct minimal context from concept definition
+    # If no chunks found, construct minimal context from concept definition without fabricated page numbers
     if not chunks:
         chunks = [{
             "chunk_id": f"CHUNK_SYNTH_{concept.concept_id}",
             "text": f"{concept.name}: {concept.definition or 'Key foundational concept in ' + source_id}",
-            "page_start": 1,
-            "page_end": 1,
+            "page_start": None,
+            "page_end": None,
             "content_ids": list(concept.source_content_ids),
         }]
 
@@ -203,15 +189,10 @@ def generate_question(
         source_chunks=chunk_text,
     )
 
-    # Attempt Gemini generation
-    for attempt in range(max_retries + 1):
+    # Attempt LLM generation via provider
+    for attempt in range(retries + 1):
         try:
-            if not settings.gemini_api_key or settings.gemini_api_key == "mock_key":
-                break  # Go straight to fast grounded fallback
-
-            model = _client()
-            response = model.generate_content(prompt)
-            raw = response.text or ""
+            raw = provider.generate_content(prompt)
             data = _parse_json(raw)
 
             options = [
@@ -245,7 +226,9 @@ def generate_question(
             if "exceeded your current quota" in err or "quota_value" in err:
                 print(f"[generator] Quota reached, instantly switching to grounded fallback generator.")
                 break
-            if attempt < max_retries and ("429" in err or "rate" in err):
+            if "not set" in err or "unconfigured" in err or "not found" in err:
+                break
+            if attempt < retries and ("429" in err or "rate" in err):
                 time.sleep(1.0)
 
     # Resilient grounded fallback generation (fast & deterministic)
@@ -275,21 +258,40 @@ def _generate_grounded_fallback(
     source_id: str,
     difficulty: str,
 ) -> Question:
-    """Deterministic, context-grounded fallback question builder."""
+    """Deterministic, context-grounded fallback question builder with varied answer indices and concept-specific distractors."""
+    import hashlib
+
     chunk_sample = chunks[0].get("text", "").strip() if chunks else ""
     definition = concept.definition or (chunk_sample[:150] if chunk_sample else f"The principle of {concept.name}")
 
     stem = f"Which of the following statements accurately characterizes {concept.name} according to the study material?"
     correct_text = definition if len(definition) < 140 else f"{concept.name} is primarily defined as: {definition[:120]}..."
-    distractor_1 = f"{concept.name} operates in reverse, negating any effect on related components."
-    distractor_2 = f"{concept.name} is strictly deprecated in modern system architectures."
-    distractor_3 = f"{concept.name} functions solely as an arbitrary cache layer without structural impact."
+
+    # Concept-specific distractors derived from the concept's prerequisites and domain
+    prereq_str = f" its prerequisite ({', '.join(concept.prerequisite_concept_ids)})" if concept.prerequisite_concept_ids else " foundational principles"
+    distractor_1 = f"{concept.name} operates in direct contradiction to{prereq_str}, reversing the system's observable state."
+    distractor_2 = f"{concept.name} is classified as an auxiliary secondary property that has no measurable interaction with {concept.name}."
+    distractor_3 = f"{concept.name} serves merely as a transient buffer and does not represent an independent conceptual model."
+
+    distractors = [distractor_1, distractor_2, distractor_3]
+
+    # Varied, deterministic correct answer placement (0, 1, 2, or 3) based on concept_id hash
+    # Prevents predictable answer patterns where option 0 is always correct
+    h_val = int(hashlib.md5(concept.concept_id.encode("utf-8")).hexdigest(), 16)
+    correct_index = h_val % 4
+
+    option_texts = []
+    d_idx = 0
+    for i in range(4):
+        if i == correct_index:
+            option_texts.append(correct_text)
+        else:
+            option_texts.append(distractors[d_idx])
+            d_idx += 1
 
     options = [
-        AssessmentOption(index=0, text=correct_text),
-        AssessmentOption(index=1, text=distractor_1),
-        AssessmentOption(index=2, text=distractor_2),
-        AssessmentOption(index=3, text=distractor_3),
+        AssessmentOption(index=i, text=text)
+        for i, text in enumerate(option_texts)
     ]
 
     return Question(
@@ -297,8 +299,8 @@ def _generate_grounded_fallback(
         concept_name=concept.name,
         stem=stem,
         options=options,
-        correct_index=0,
-        explanation=f"Directly derived from the source definition: {definition[:120]}",
+        correct_index=correct_index,
+        explanation=f"Directly derived from the source definition of {concept.name}: {definition[:120]}",
         chunk_ids=chunk_ids,
         content_ids=content_ids,
         page_start=page_start,

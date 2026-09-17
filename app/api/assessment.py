@@ -15,19 +15,23 @@ from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from ..core.config import settings
 from ..services.assessment.engine import grade_submission
 from ..services.assessment.generator import generate_question
-from ..services.assessment.planner import plan_assessment
+from ..services.assessment.planner import _apply_prerequisite_pairing, classify_difficulty, plan_assessment
 from ..services.assessment.profile import get_or_create_profile, save_profile
 from ..services.assessment.schemas import (
     AssessmentSession,
     AssessmentStartRequest,
+    ConceptSnapshot,
+    Question,
     SafeOption,
     SafeQuestion,
     StudentSubmission,
+    reconstruct_kg_from_snapshot,
 )
 from ..services.assessment.session_store import load_session, save_session
-from ..services.assessment.validator import is_duplicate, validate_question
+from ..services.assessment.validator import is_duplicate, validate_grounding, validate_question
 from ..services.assessment.video_target import (
     build_video_target_matrix,
     load_video_matrix,
@@ -38,10 +42,10 @@ from ..services.schemas import ConceptNode, KnowledgeGraph
 
 router = APIRouter(prefix="/assessment", tags=["Step 2 — Assessment & Profiling"])
 
-# Execution parameters
-MAX_QUESTIONS = 10
-ASSESSMENT_TTL_HOURS = 24
-MAX_RETRIES_PER_QUESTION = 2
+# Execution parameters bound directly to central settings
+MAX_QUESTIONS = settings.max_questions
+ASSESSMENT_TTL_HOURS = settings.assessment_ttl_hours
+MAX_RETRIES_PER_QUESTION = settings.max_question_retries
 
 
 @router.post("/start")
@@ -68,8 +72,20 @@ def start_assessment(
        - Strips correct answers and dispatches sanitized quiz to frontend
     """
     # 1. Resolve student_id and source_id
-    req_student_id = (payload.student_id if payload else None) or student_id or "student_default"
-    req_source_id = (payload.source_id if payload else None) or source_id
+    # Cleanly ignore placeholder values like "string" from Swagger UI templates
+    body_student_id = (
+        payload.student_id.strip()
+        if payload and payload.student_id and payload.student_id.strip() not in ("", "string")
+        else None
+    )
+    body_source_id = (
+        payload.source_id.strip()
+        if payload and payload.source_id and payload.source_id.strip() not in ("", "string")
+        else None
+    )
+
+    req_source_id = source_id or body_source_id
+    req_student_id = student_id or body_student_id or "student_default"
 
     if not req_source_id:
         raise HTTPException(
@@ -87,7 +103,12 @@ def start_assessment(
 
     # Verify session integrity if Step 1 payload includes source_id / student_id
     payload_source_id = step1_data.get("source_id")
-    if payload_source_id and payload_source_id != req_source_id:
+    if (
+        payload_source_id
+        and payload_source_id not in ("", "string")
+        and req_source_id
+        and payload_source_id != req_source_id
+    ):
         raise HTTPException(
             status_code=400,
             detail=f"Session integrity mismatch: request source_id '{req_source_id}' "
@@ -127,18 +148,64 @@ def start_assessment(
     # 3. Load or create Student Learning Profile
     profile = get_or_create_profile(req_student_id, req_source_id)
 
+    target_questions = (payload.max_questions if payload and payload.max_questions else None) or MAX_QUESTIONS
+
+    # Identify kill-switch concepts to strictly exclude from planning & reserve pool
+    kill_switch_ids: set[str] = {
+        cid for cid, m in profile.concept_masteries.items()
+        if m.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
+    }
+
     # 4. Dynamic Assessment Planning (Cold Start + Prerequisite Pairing)
     concept_queue = plan_assessment(
         kg=kg,
         profile=profile,
-        max_questions=MAX_QUESTIONS,
+        max_questions=target_questions,
         key_concepts=key_concepts,
     )
 
-    if not concept_queue:
+    # Filter any invalid or kill-switch concepts out of primary queue
+    primary_candidates: list[ConceptNode] = [
+        c for c in concept_queue
+        if c and c.concept_id and c.concept_id not in kill_switch_ids
+    ]
+
+    # Build reserve pool from remaining KnowledgeGraph concepts
+    primary_ids = {c.concept_id for c in primary_candidates}
+    remaining_kg_concepts = [
+        c for c in kg.concepts.values()
+        if c and c.concept_id
+        and c.concept_id not in primary_ids
+        and c.concept_id not in kill_switch_ids
+    ]
+    # Order reserve pool preserving prerequisite hierarchy
+    reserve_candidates = _apply_prerequisite_pairing(remaining_kg_concepts, list(kg.concepts.values()))
+    reserve_candidates = [
+        c for c in reserve_candidates
+        if c.concept_id not in primary_ids
+        and c.concept_id not in kill_switch_ids
+    ]
+
+    if not primary_candidates and not reserve_candidates:
         raise HTTPException(
             status_code=422,
             detail="No concepts could be scheduled for assessment.",
+        )
+
+    # 4b. Cache compact concept dependency snapshot for self-contained sessions (Phase 2B)
+    concept_snapshot: dict[str, ConceptSnapshot] = {}
+    for cid, c in kg.concepts.items():
+        if not c or not c.concept_id:
+            continue
+        diff = classify_difficulty(c)
+        concept_snapshot[c.concept_id] = ConceptSnapshot(
+            concept_id=c.concept_id,
+            concept_name=c.name or cid,
+            definition=c.definition or "",
+            prerequisite_concept_ids=list(c.prerequisite_concept_ids or []),
+            source_content_ids=list(c.source_content_ids or []),
+            difficulty=diff,
+            source_id=req_source_id,
         )
 
     # 5. Create active session
@@ -146,16 +213,51 @@ def start_assessment(
         student_id=req_student_id,
         source_id=req_source_id,
         status="GENERATING",
-        concept_queue=[c.concept_id for c in concept_queue],
+        concept_queue=[c.concept_id for c in primary_candidates],
+        concept_snapshot=concept_snapshot,
     )
     expires_at = datetime.now(timezone.utc) + timedelta(hours=ASSESSMENT_TTL_HOURS)
     session.expires_at = expires_at.isoformat()
 
-    # 6. Sequential Grounded Generation + Validation + Provenance Tracking
-    questions = []
+    # 6. Sequential Grounded Generation + Validation + Provenance Tracking + Backfilling
+    questions: list[Question] = []
     failed_concepts: list[str] = []
+    accepted_concept_ids: set[str] = set()
+    attempted_concept_ids: set[str] = set()
 
-    for concept in concept_queue:
+    # Build candidate stream: primary candidates first, followed by reserve
+    candidate_stream: list[tuple[ConceptNode, bool]] = [
+        (c, False) for c in primary_candidates
+    ] + [
+        (c, True) for c in reserve_candidates
+    ]
+
+    context_text = " ".join(
+        ch.get("text", "") for ch in (provided_chunks or [])
+        if not ch.get("source_id") or ch.get("source_id") == req_source_id
+    )
+
+    for concept, is_reserve in candidate_stream:
+        # Stop once we have reached target_questions
+        if len(questions) >= target_questions:
+            break
+
+        # Never retry the same concept indefinitely
+        if concept.concept_id in attempted_concept_ids:
+            continue
+        attempted_concept_ids.add(concept.concept_id)
+
+        # Do not generate questions for kill-switch concepts
+        if concept.concept_id in kill_switch_ids:
+            continue
+
+        # Do not generate questions for concepts whose valid question has already been accepted
+        if concept.concept_id in accepted_concept_ids:
+            continue
+
+        if is_reserve:
+            print(f"[assessment] Backfilling with reserve concept: {concept.name}")
+
         question = generate_question(
             concept=concept,
             source_id=req_source_id,
@@ -165,22 +267,48 @@ def start_assessment(
 
         if question is None:
             failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Candidate rejected: {concept.name} reason=generation returned None")
             continue
 
-        # Structural validation
-        is_valid, error = validate_question(question)
+        # Structural validation + source/provenance check
+        is_valid, error = validate_question(question, allowed_source_id=req_source_id)
         if not is_valid:
-            print(f"[assessment] Question for '{concept.name}' failed validation: {error}")
             failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Candidate rejected: {concept.name} reason={error}")
             continue
 
-        # Non-duplication check
+        # Grounding validation
+        grounding_ok, grounding_err = validate_grounding(question, context_text)
+        if not grounding_ok:
+            failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Candidate rejected: {concept.name} reason={grounding_err}")
+            continue
+
+        # Non-duplication check against existing questions
         if is_duplicate(question, questions):
-            print(f"[assessment] Question for '{concept.name}' is duplicate, skipping")
             failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Candidate rejected: {concept.name} reason=duplicate question detected")
             continue
 
+        # Duplicate concept check: prevent duplicate concepts in the same assessment
+        if question.concept_id in accepted_concept_ids:
+            failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Candidate rejected: {concept.name} reason=concept already accepted")
+            continue
+
+        # ACCEPT
+        accepted_concept_ids.add(question.concept_id)
         questions.append(question)
+        print(f"[assessment] Accepted question {len(questions)}/{target_questions}")
+
+    # If candidates are exhausted before reaching target_questions
+    shortfall = max(0, target_questions - len(questions))
+    if len(questions) < target_questions:
+        print(
+            f"[assessment] Candidates exhausted: requested={target_questions} "
+            f"generated={len(questions)} shortfall={shortfall} "
+            f"student='{req_student_id}' source='{req_source_id}'"
+        )
 
     if not questions:
         session.status = "FAILED"
@@ -192,6 +320,7 @@ def start_assessment(
 
     # 7. Safe Quiz Dispatch (Answers hidden, provenance retained for tracing)
     session.questions = questions
+    session.concept_queue = [q.concept_id for q in questions]
     session.status = "READY"
     save_session(session)
 
@@ -222,6 +351,9 @@ def start_assessment(
         "questions": safe_questions,
         "concepts_tested": [q.concept_name for q in questions],
         "failed_concepts": failed_concepts,
+        "requested_questions": target_questions,
+        "generated_questions": len(questions),
+        "shortfall": shortfall,
     }
 
 
@@ -256,12 +388,39 @@ def submit_assessment(submission: StudentSubmission):
             detail=f"Session is in '{session.status}' state, not ready for submission.",
         )
 
-    # Load KnowledgeGraph
+    # Validate submission answers integrity
+    session_q_ids = {q.question_id for q in session.questions}
+    submitted_q_ids = set()
+    for ans in submission.answers:
+        if ans.question_id not in session_q_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid question_id '{ans.question_id}' does not belong to session '{session.session_id}'.",
+            )
+        if ans.question_id in submitted_q_ids:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Duplicate question_id '{ans.question_id}' in submission.",
+            )
+        submitted_q_ids.add(ans.question_id)
+
+    # Load KnowledgeGraph (attempt normal registry load first)
     kg = load_knowledge_graph(session.source_id)
     if not kg:
-        # Fallback: synthesize minimal KG from session questions
+        # Fallback 1 (Phase 2B): reconstruct minimal KnowledgeGraph from session concept_snapshot
+        try:
+            kg = reconstruct_kg_from_snapshot(session, expected_source_id=session.source_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not kg:
+        # Fallback 2 (legacy backward compatibility): minimal KG from session questions
         kg = KnowledgeGraph(concepts={
-            q.concept_id: ConceptNode(concept_id=q.concept_id, name=q.concept_name)
+            q.concept_id: ConceptNode(
+                concept_id=q.concept_id,
+                name=q.concept_name,
+                prerequisite_concept_ids=[],
+            )
             for q in session.questions
         })
 
@@ -287,7 +446,7 @@ def submit_assessment(submission: StudentSubmission):
     # Step 6: Build the Video Target Matrix (Step 2 -> Step 3 Handoff)
     record = get_source_record(session.source_id)
     source_filename = record.filename if record else ""
-    video_matrix = build_video_target_matrix(profile, kg, source_filename=source_filename)
+    video_matrix = build_video_target_matrix(profile, kg, source_filename=source_filename, session=session)
     save_video_matrix(video_matrix)
 
     # Concept-level score breakdown (e.g. Concept A: 100%, Concept B: 0%)
@@ -316,6 +475,8 @@ def submit_assessment(submission: StudentSubmission):
             "overall_score": round(profile.overall_score, 1),
             "strong_concepts": profile.strong_concepts,
             "weak_concepts": profile.weak_concepts,
+            "strong_concept_ids": profile.strong_concept_ids,
+            "weak_concept_ids": profile.weak_concept_ids,
         },
         "concept_scores": concept_scores,
         "video_target_matrix": video_matrix.model_dump(),
@@ -342,6 +503,8 @@ def get_profile(student_id: str, source_id: str):
         "total_sessions": profile.total_sessions,
         "strong_concepts": profile.strong_concepts,
         "weak_concepts": profile.weak_concepts,
+        "strong_concept_ids": profile.strong_concept_ids,
+        "weak_concept_ids": profile.weak_concept_ids,
         "prerequisite_gaps": profile.prerequisite_gaps,
         "concept_masteries": {
             cid: {

@@ -1,21 +1,4 @@
 {
-  "SRC_1138d072e1a6": {
-    "source_id": "SRC_1138d072e1a6",
-    "asset_id": "AST_b39cdc457a4f",
-    "upload_id": "UPL_df6687f93c72",
-    "filename": "physics_sample.txt",
-    "source_type": "txt",
-    "mime_type": "text/plain",
-    "file_hash": "02a7e04a7e014ff29512c43fed680ffd1ec5a19c6ccd096314ffd55df679a621",
-    "file_size": 410,
-    "uploaded_by": "student_default",
-    "version": 1,
-    "parent_source_id": null,
-    "status": "UPLOADED",
-    "error_message": null,
-    "created_at": "2026-09-16T13:02:42.198270+00:00",
-    "updated_at": "2026-09-16T13:02:42.198270+00:00"
-  },
   "SRC_feec0cfbc285": {
     "source_id": "SRC_feec0cfbc285",
     "asset_id": "AST_c2f2ea672346",
@@ -101,40 +84,6 @@
     "created_at": "2026-09-16T16:43:05.405772+00:00",
     "updated_at": "2026-09-16T16:43:10.364347+00:00"
   },
-  "SRC_2fa227940df8": {
-    "source_id": "SRC_2fa227940df8",
-    "asset_id": "AST_229056fd6fce",
-    "upload_id": "UPL_40e6626185f7",
-    "filename": "physics_sample.txt",
-    "source_type": "txt",
-    "mime_type": "text/plain",
-    "file_hash": "c97af9589d90bcfe9cd492f0e4f6233121c2c1bc0d95845f3272718540e3a06f",
-    "file_size": 403,
-    "uploaded_by": "student_default",
-    "version": 1,
-    "parent_source_id": null,
-    "status": "UPLOADED",
-    "error_message": null,
-    "created_at": "2026-09-17T04:33:54.618976+00:00",
-    "updated_at": "2026-09-17T04:33:54.619334+00:00"
-  },
-  "SRC_8c46c50f1328": {
-    "source_id": "SRC_8c46c50f1328",
-    "asset_id": "AST_08d399660bdd",
-    "upload_id": "UPL_ecfef0a91a22",
-    "filename": "physics_sample.txt",
-    "source_type": "txt",
-    "mime_type": "text/plain",
-    "file_hash": "c97af9589d90bcfe9cd492f0e4f6233121c2c1bc0d95845f3272718540e3a06f",
-    "file_size": 403,
-    "uploaded_by": "student_default",
-    "version": 1,
-    "parent_source_id": null,
-    "status": "UPLOADED",
-    "error_message": null,
-    "created_at": "2026-09-17T04:39:21.021169+00:00",
-    "updated_at": "2026-09-17T04:39:21.021513+00:00"
-  },
   "SRC_1535f6ad1029": {
     "source_id": "SRC_1535f6ad1029",
     "asset_id": "AST_e5909c26ab6c",
@@ -151,5 +100,39 @@
     "error_message": null,
     "created_at": "2026-09-17T04:44:00.755970+00:00",
     "updated_at": "2026-09-17T04:44:04.378968+00:00"
+  },
+  "SRC_63d54087dc2e": {
+    "source_id": "SRC_63d54087dc2e",
+    "asset_id": "AST_c9e1b20e3a93",
+    "upload_id": "UPL_239d8275fb21",
+    "filename": "26169.pdf",
+    "source_type": "pdf",
+    "mime_type": "application/pdf",
+    "file_hash": "e0b06482ee8ea9b1fbc1fa04f2ae5df161b7427617ac16f15ff23cd125f65d41",
+    "file_size": 138925,
+    "uploaded_by": "student_default",
+    "version": 2,
+    "parent_source_id": "SRC_1535f6ad1029",
+    "status": "READY",
+    "error_message": null,
+    "created_at": "2026-09-17T09:53:10.351528+00:00",
+    "updated_at": "2026-09-17T10:05:09.588931+00:00"
+  },
+  "SRC_4ed5e4a243ba": {
+    "source_id": "SRC_4ed5e4a243ba",
+    "asset_id": "AST_e94858248907",
+    "upload_id": "UPL_daefe0a7f813",
+    "filename": "ews.jpeg",
+    "source_type": "image",
+    "mime_type": "image/jpeg",
+    "file_hash": "50697cab702deb01c031adbdfd8e9e77ed8f58fb23b56599932e0b95ab888b47",
+    "file_size": 188787,
+    "uploaded_by": "student_default",
+    "version": 2,
+    "parent_source_id": "SRC_f8840f827625",
+    "status": "FAILED",
+    "error_message": "429 You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.5-flash\nPlease retry in 30.689590221s. [links {\n  description: \"Learn more about Gemini API quotas\"\n  url: \"https://ai.google.dev/gemini-api/docs/rate-limits\"\n}\n, violations {\n  quota_metric: \"generativelanguage.googleapis.com/generate_content_free_tier_requests\"\n  quota_id: \"GenerateRequestsPerDayPerProjectPerModel-FreeTier\"\n  quota_dimensions {\n    key: \"model\"\n    value: \"gemini-3.5-flash\"\n  }\n  quota_dimensions {\n    key: \"location\"\n    value: \"global\"\n  }\n  quota_value: 20\n}\n, retry_delay {\n  seconds: 30\n}\n]",
+    "created_at": "2026-09-17T10:16:27.970962+00:00",
+    "updated_at": "2026-09-17T10:16:29.376129+00:00"
   }
 }

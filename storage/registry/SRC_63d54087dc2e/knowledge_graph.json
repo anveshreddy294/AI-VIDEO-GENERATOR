@@ -1,0 +1,86 @@
+{
+  "concepts": {
+    "CONCEPT_PROBLEM_STATEMENT_4": {
+      "concept_id": "CONCEPT_PROBLEM_STATEMENT_4",
+      "name": "Problem Statement 4",
+      "definition": "Problem Statement 4 \n \nTitle of Problem Statement \nDevelopment of an AI-Based Virtual Camera Tracking System for Coarse Alignment of Mobile Free Space \nOptical Communication (FSOC) Terminals",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d8ec3544007b"
+      ]
+    },
+    "CONCEPT_TITLE_OF_PROBLEM_STATEME": {
+      "concept_id": "CONCEPT_TITLE_OF_PROBLEM_STATEME",
+      "name": "Title of Problem Statement",
+      "definition": "Problem Statement 4 \n \nTitle of Problem Statement \nDevelopment of an AI-Based Virtual Camera Tracking System for Coarse Alignment of Mobile Free Space \nOptical Communication (FSOC) Terminals",
+      "prerequisite_concept_ids": [
+        "CONCEPT_PROBLEM_STATEMENT_4"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d8ec3544007b"
+      ]
+    },
+    "CONCEPT_OPTICAL_COMMUNICATION__F": {
+      "concept_id": "CONCEPT_OPTICAL_COMMUNICATION__F",
+      "name": "Optical Communication (FSOC) Terminals",
+      "definition": "Problem Statement 4 \n \nTitle of Problem Statement \nDevelopment of an AI-Based Virtual Camera Tracking System for Coarse Alignment of Mobile Free Space \nOptical Communication (FSOC) Terminals",
+      "prerequisite_concept_ids": [
+        "CONCEPT_OPTICAL_COMMUNICATION__F"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d8ec3544007b"
+      ]
+    },
+    "CONCEPT_FREE_SPACE_OPTICAL_COMMU": {
+      "concept_id": "CONCEPT_FREE_SPACE_OPTICAL_COMMU",
+      "name": "Free Space Optical Communication (FSOC)",
+      "definition": "Free Space Optical Communication (FSOC) offers unprecedented advantages for next-generation mobile",
+      "prerequisite_concept_ids": [
+        "CONCEPT_OPTICAL_COMMUNICATION__F"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_77ceae05d22d"
+      ]
+    },
+    "CONCEPT_FIELD_OF_VIEW__FOV": {
+      "concept_id": "CONCEPT_FIELD_OF_VIEW__FOV",
+      "name": "Field-of-View (FOV)",
+      "definition": "Description (Background, Detailed Description and Expected Solution): \nBackground: \nFree Space Optical Communication (FSOC) offers unprecedented advantages for next-generation mobile \nnetworks, including gigabit-to-terabit data rates, license-free sp",
+      "prerequisite_concept_ids": [
+        "CONCEPT_FREE_SPACE_OPTICAL_COMMU"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_77ceae05d22d"
+      ]
+    },
+    "CONCEPT_ALIGNMENT_STAGE_MUST": {
+      "concept_id": "CONCEPT_ALIGNMENT_STAGE_MUST",
+      "name": "alignment stage must:",
+      "definition": "Description (Background, Detailed Description and Expected Solution): \nBackground: \nFree Space Optical Communication (FSOC) offers unprecedented advantages for next-generation mobile \nnetworks, including gigabit-to-terabit data rates, license-free spectrum operation, high immunity to \nelectromagneti",
+      "prerequisite_concept_ids": [
+        "CONCEPT_FIELD_OF_VIEW__FOV"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_77ceae05d22d"
+      ]
+    },
+    "CONCEPT_PARAMETERS_AND_SPECIFICA": {
+      "concept_id": "CONCEPT_PARAMETERS_AND_SPECIFICA",
+      "name": "Parameters and Specifications:",
+      "definition": "\u2022 Observe the surrounding environment, \n\u2022 Acquire and detect the remote terminal or beacon, \n\u2022 Estimate the position, and \n\u2022 Continuously adjust the pointing direction to maintain visibility. \nThe participants shall develop this coarse alignment process in software, allowing to develop and validate",
+      "prerequisite_concept_ids": [
+        "CONCEPT_ALIGNMENT_STAGE_MUST"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5bf65ed44d60"
+      ]
+    }
+  }
+}

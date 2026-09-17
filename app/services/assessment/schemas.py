@@ -12,7 +12,9 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BaseModel, BeforeValidator, Field, model_validator
+
+from ..schemas import ConceptNode, KnowledgeGraph
 
 
 def _normalize_mastery_status(v: Any) -> str:
@@ -76,6 +78,17 @@ class SafeQuestion(BaseModel):
     timestamp_end: float | str | None = None
 
 
+class ConceptSnapshot(BaseModel):
+    """Compact concept dependency snapshot cached inside an AssessmentSession."""
+    concept_id: str
+    concept_name: str = ""
+    definition: str = ""
+    prerequisite_concept_ids: list[str] = Field(default_factory=list)
+    source_content_ids: list[str] = Field(default_factory=list)
+    difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
+    source_id: str | None = None
+
+
 class AssessmentSession(BaseModel):
     """A quiz session for a student on a specific source."""
     session_id: str = Field(default_factory=lambda: f"SESS_{uuid4().hex[:12]}")
@@ -90,6 +103,43 @@ class AssessmentSession(BaseModel):
     submitted_at: str | None = None
     concept_queue: list[str] = Field(default_factory=list, description="Concept IDs queued for question generation")
     current_index: int = 0
+    concept_snapshot: dict[str, ConceptSnapshot] = Field(
+        default_factory=dict,
+        description="Compact KnowledgeGraph concept dependency snapshot for offline grading & prerequisite analysis",
+    )
+
+
+def reconstruct_kg_from_snapshot(
+    session: AssessmentSession,
+    expected_source_id: str | None = None,
+) -> KnowledgeGraph | None:
+    """Reconstruct a minimal KnowledgeGraph from the session's concept snapshot.
+    Enforces source_id integrity and preserves prerequisite links without global state mutation.
+    """
+    if expected_source_id and session.source_id != expected_source_id:
+        raise ValueError(
+            f"Session source_id mismatch: session is for '{session.source_id}', expected '{expected_source_id}'"
+        )
+    if not session.concept_snapshot:
+        return None
+
+    target_source = expected_source_id or session.source_id
+    concepts: dict[str, ConceptNode] = {}
+    for cid, snap in session.concept_snapshot.items():
+        # Source integrity check on per-concept snapshot if source_id is set
+        if snap.source_id and target_source and snap.source_id != target_source:
+            raise ValueError(
+                f"Cross-source integrity violation: concept snapshot '{cid}' belongs to source "
+                f"'{snap.source_id}', but session source_id is '{target_source}'."
+            )
+        concepts[cid] = ConceptNode(
+            concept_id=snap.concept_id,
+            name=snap.concept_name or cid,
+            definition=snap.definition or None,
+            prerequisite_concept_ids=list(snap.prerequisite_concept_ids or []),
+            source_content_ids=list(snap.source_content_ids or []),
+        )
+    return KnowledgeGraph(concepts=concepts)
 
 
 class AnswerSubmission(BaseModel):
@@ -176,6 +226,14 @@ class VideoTargetMatrix(BaseModel):
     decision: Literal["GENERATE_VIDEOS", "ALL_MASTERED", "HUMAN_INTERVENTION"] = "GENERATE_VIDEOS"
     summary: str = Field(default="", description="Direct summary instruction for Step 3, e.g. 'Generate a 30-second AI video explaining Concept B, and a 45-second AI video explaining Concept C.'")
     videos: list[VideoTarget] = Field(default_factory=list)
+    human_intervention_concepts: list[str] = Field(
+        default_factory=list,
+        description="Concept names that hit the anti-loop kill switch requiring human intervention",
+    )
+    human_intervention_concept_ids: list[str] = Field(
+        default_factory=list,
+        description="Concept IDs requiring human instructor intervention",
+    )
 
 
 class StudentLearningProfile(BaseModel):
@@ -186,6 +244,8 @@ class StudentLearningProfile(BaseModel):
     total_sessions: int = 0
     strong_concepts: list[str] = Field(default_factory=list, description="Concept names mastered")
     weak_concepts: list[str] = Field(default_factory=list, description="Concept names needing work")
+    strong_concept_ids: list[str] = Field(default_factory=list, description="Concept IDs mastered")
+    weak_concept_ids: list[str] = Field(default_factory=list, description="Concept IDs needing work or on kill switch")
     prerequisite_gaps: list[str] = Field(default_factory=list, description="Prerequisite gap descriptions")
     concept_masteries: dict[str, ConceptMastery] = Field(default_factory=dict)
     created_at: str = Field(
@@ -195,6 +255,17 @@ class StudentLearningProfile(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
+    @model_validator(mode="after")
+    def _populate_concept_ids_from_masteries(self) -> "StudentLearningProfile":
+        """Safe backward compatibility for legacy profile records."""
+        if self.concept_masteries and not self.strong_concept_ids and not self.weak_concept_ids:
+            for cid, m in self.concept_masteries.items():
+                if m.status == "MASTERED":
+                    self.strong_concept_ids.append(cid)
+                elif m.status in ("LEARNING", "REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK"):
+                    self.weak_concept_ids.append(cid)
+        return self
+
 
 class AssessmentStartRequest(BaseModel):
     """Payload for initiating Step 2 assessment directly from Step 1 output."""
@@ -203,6 +274,10 @@ class AssessmentStartRequest(BaseModel):
     step1_output: dict[str, Any] | None = Field(
         default=None,
         description="Raw or structured JSON output from Step 1 upload/ingestion",
+    )
+    max_questions: int | None = Field(
+        default=None,
+        description="Optional override for target question count",
     )
     # Direct fields if sent flat in request body
     topic_blueprint: dict[str, Any] | None = None
