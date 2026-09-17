@@ -1,28 +1,71 @@
-"""Step 2 — Assessment Planning & Concept Pairing.
+"""Step 2 — Dynamic Assessment Planning & Concept Pairing.
 
-Selects which concepts to test based on:
-1. Cold Start: balanced sampling (30% foundational, 40% intermediate, 30% advanced)
-2. Existing Profile: prioritize weak concepts, revisit unmastered ones
-3. Prerequisite Pairing: advanced concept auto-queues its parent
+Goal: Decide which parts of the Step 1 JSON / KnowledgeGraph need to be tested.
+Implements:
+1. Reading Key Concepts from Step 1 JSON / Knowledge Graph
+2. Cold Start Rule: Balanced mix of foundational, intermediate, and advanced concepts
+3. Prerequisite Pairing Rule: For every advanced/dependent concept selected,
+   automatically queue the foundational concept beneath it (e.g. Linear Regression before Machine Learning)
+4. Existing Profile: Prioritize weak concepts, revisit unmastered ones, and handle kill-switch tagged items
 """
 
 import random
+from typing import Literal
+
 from ..schemas import ConceptNode, KnowledgeGraph
 from .schemas import ConceptMastery, StudentLearningProfile
+
+
+def classify_difficulty(
+    concept: ConceptNode,
+) -> Literal["foundational", "intermediate", "advanced"]:
+    """Classify a concept's difficulty by prerequisite depth.
+
+    Single source of truth across Planner, Generator, and Video Target Matrix.
+    - 0 prerequisites: foundational (core building block)
+    - 1-2 prerequisites: intermediate
+    - >2 prerequisites: advanced
+    """
+    n = len(concept.prerequisite_concept_ids)
+    if n == 0:
+        return "foundational"
+    if n <= 2:
+        return "intermediate"
+    return "advanced"
 
 
 def plan_assessment(
     kg: KnowledgeGraph,
     profile: StudentLearningProfile | None = None,
     max_questions: int = 10,
+    key_concepts: list[str] | None = None,
 ) -> list[ConceptNode]:
     """Select concepts to test, ordered by priority.
 
-    Returns a queue of ConceptNode objects to generate questions for.
+    Args:
+        kg: KnowledgeGraph containing concept nodes and prerequisite links.
+        profile: Existing StudentLearningProfile if student has taken assessments before.
+        max_questions: Target number of questions to generate.
+        key_concepts: Optional list of key concept names or IDs from Step 1 JSON.
+
+    Returns:
+        Ordered queue of ConceptNode objects ready for question generation.
     """
     concepts = list(kg.concepts.values())
     if not concepts:
         return []
+
+    # If key_concepts are specified in Step 1 JSON, prioritize matching nodes
+    if key_concepts:
+        key_lower = {k.strip().lower() for k in key_concepts if isinstance(k, str)}
+        matching = [
+            c for c in concepts
+            if c.concept_id.lower() in key_lower
+            or c.name.lower() in key_lower
+        ]
+        non_matching = [c for c in concepts if c not in matching]
+        # Place key concepts first, followed by others as fallback
+        concepts = matching + non_matching
 
     if profile and profile.concept_masteries:
         return _plan_with_profile(concepts, profile, max_questions)
@@ -30,37 +73,29 @@ def plan_assessment(
         return _cold_start_plan(concepts, max_questions)
 
 
-def _cold_start_plan(concepts: list[ConceptNode], max_questions: int) -> list[ConceptNode]:
-    """Cold start: no profile exists. Sample across difficulty spectrum."""
-    # Classify concepts by their prerequisite count as a proxy for difficulty
-    foundational = [c for c in concepts if not c.prerequisite_concept_ids]
-    intermediate = [
-        c for c in concepts
-        if c.prerequisite_concept_ids and len(c.prerequisite_concept_ids) <= 2
-    ]
-    advanced = [
-        c for c in concepts
-        if len(c.prerequisite_concept_ids) > 2
-    ]
+def _cold_start_plan(
+    concepts: list[ConceptNode], max_questions: int
+) -> list[ConceptNode]:
+    """Cold start: no profile exists. Select a balanced mix of foundational and advanced concepts."""
+    foundational = [c for c in concepts if classify_difficulty(c) == "foundational"]
+    intermediate = [c for c in concepts if classify_difficulty(c) == "intermediate"]
+    advanced = [c for c in concepts if classify_difficulty(c) == "advanced"]
 
-    # If we can't cleanly split, use all as intermediate
     if not foundational and not advanced:
         intermediate = concepts
 
-    # 30% foundational, 40% intermediate, 30% advanced
+    # Cold Start Rule: balanced mix (approx 30% foundational, 40% intermediate, 30% advanced)
     n_foundational = max(1, int(max_questions * 0.30))
     n_intermediate = max(1, int(max_questions * 0.40))
     n_advanced = max(1, max_questions - n_foundational - n_intermediate)
 
     selected: list[ConceptNode] = []
-
     selected.extend(_safe_sample(foundational, n_foundational))
     selected.extend(_safe_sample(intermediate, n_intermediate))
     selected.extend(_safe_sample(advanced, n_advanced))
 
-    # Apply prerequisite pairing
+    # Apply Prerequisite Pairing Rule
     selected = _apply_prerequisite_pairing(selected, concepts)
-
     return selected[:max_questions]
 
 
@@ -74,16 +109,20 @@ def _plan_with_profile(
     selected: list[ConceptNode] = []
     selected_ids: set[str] = set()
 
-    # Priority 1: REQUIRES_FALLBACK concepts (need human/static intervention)
+    # Priority 1: REQUIRES_HUMAN_FALLBACK concepts (flagged by kill switch)
     for cid, mastery in profile.concept_masteries.items():
-        if mastery.status == "REQUIRES_FALLBACK" and cid in concept_map:
+        if (
+            mastery.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
+            and cid in concept_map
+        ):
             if cid not in selected_ids:
                 selected.append(concept_map[cid])
                 selected_ids.add(cid)
 
-    # Priority 2: LEARNING concepts (attempted but not mastered)
+    # Priority 2: LEARNING concepts (failed or unmastered)
     learning = [
-        (cid, m) for cid, m in profile.concept_masteries.items()
+        (cid, m)
+        for cid, m in profile.concept_masteries.items()
         if m.status == "LEARNING" and cid in concept_map and cid not in selected_ids
     ]
     random.shuffle(learning)
@@ -94,9 +133,12 @@ def _plan_with_profile(
 
     # Priority 3: NOT_ATTEMPTED concepts
     unattempted = [
-        c for c in concepts
+        c
+        for c in concepts
         if c.concept_id not in selected_ids
-        and profile.concept_masteries.get(c.concept_id, ConceptMastery(concept_id=c.concept_id)).status == "NOT_ATTEMPTED"
+        and profile.concept_masteries.get(
+            c.concept_id, ConceptMastery(concept_id=c.concept_id)
+        ).status == "NOT_ATTEMPTED"
     ]
     random.shuffle(unattempted)
     for c in unattempted:
@@ -112,9 +154,8 @@ def _plan_with_profile(
             selected.append(c)
             selected_ids.add(c.concept_id)
 
-    # Apply prerequisite pairing
+    # Apply Prerequisite Pairing Rule
     selected = _apply_prerequisite_pairing(selected, concepts)
-
     return selected[:max_questions]
 
 
@@ -122,27 +163,32 @@ def _apply_prerequisite_pairing(
     selected: list[ConceptNode],
     all_concepts: list[ConceptNode],
 ) -> list[ConceptNode]:
-    """Ensure that for every advanced concept, its direct parent is also included."""
+    """Prerequisite Pairing Rule:
+
+    For every advanced or dependent concept selected, automatically queue the
+    foundational concept beneath it (e.g. if testing Machine Learning,
+    automatically test Linear Regression first).
+    Ensures foundational concepts precede dependent concepts without duplicates.
+    """
     concept_map = {c.concept_id: c for c in all_concepts}
-    selected_ids = {c.concept_id for c in selected}
-    extras: list[ConceptNode] = []
+    ordered_result: list[ConceptNode] = []
+    seen_ids: set[str] = set()
 
-    for concept in selected:
-        # If this concept has prerequisites, ensure at least one parent is included
+    def _add_with_prereqs(concept: ConceptNode) -> None:
+        # First recursively/iteratively add prerequisites that exist in the map
         for prereq_id in concept.prerequisite_concept_ids:
-            if prereq_id not in selected_ids and prereq_id in concept_map:
-                extras.append(concept_map[prereq_id])
-                selected_ids.add(prereq_id)
+            if prereq_id in concept_map and prereq_id not in seen_ids:
+                prereq_node = concept_map[prereq_id]
+                _add_with_prereqs(prereq_node)
+        # Then add the concept itself
+        if concept.concept_id not in seen_ids:
+            seen_ids.add(concept.concept_id)
+            ordered_result.append(concept)
 
-    # Insert prerequisites right before their dependent concept
-    result: list[ConceptNode] = []
-    for concept in selected:
-        for prereq_id in concept.prerequisite_concept_ids:
-            if prereq_id in {e.concept_id for e in extras}:
-                result.append(concept_map[prereq_id])
-        result.append(concept)
+    for item in selected:
+        _add_with_prereqs(item)
 
-    return result
+    return ordered_result
 
 
 def _safe_sample(pool: list, n: int) -> list:

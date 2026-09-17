@@ -9,5 +9,6 @@ storage/qdrant_local/*
 storage/qdrant_storage/*
 storage/assessment_sessions/*
 storage/learning_profiles/*
+storage/video_targets/*
 !.gitkeep
 .DS_Store

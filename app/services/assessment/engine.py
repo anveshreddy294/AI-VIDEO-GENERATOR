@@ -1,7 +1,14 @@
-"""Step 6 — Mastery Engine & Anti-Looping.
+"""Step 5 — Scoring & Mastery Calculation Engine.
 
-Grades submissions, tracks concept mastery with anti-looping protection,
-detects prerequisite gaps, and enforces the kill switch.
+Goal: Grade student submissions, pinpoint exact knowledge gaps, and update the
+Student Learning Profile with scores (e.g. Concept A: 100%, Concept B: 0%).
+Implements:
+1. Session expiration and answer key comparison
+2. Anti-Loop Kill Switch: If a student has failed the same concept more than 3 times
+   historically (iteration_count > 3), tag that concept as REQUIRES_HUMAN_FALLBACK
+   so the system halts automated looping on it.
+3. Prerequisite Gap Detection: Identifies cases where a student failed a child concept
+   and simultaneously failed its foundational prerequisite.
 """
 
 from datetime import datetime, timezone
@@ -23,37 +30,35 @@ def grade_submission(
     kg: KnowledgeGraph,
     profile: StudentLearningProfile,
 ) -> SubmissionResult:
-    """Grade a student's submission against the backend answer key.
+    """Grade a student's submission against the backend hidden answer key.
 
-    Implements:
-    - Timestamp validation (expires_at check)
-    - Answer grading
-    - False mastery protection (correct_attempts >= 2 for MASTERED)
+    Enforces:
+    - Session expiration check
+    - Hidden answer grading
+    - False mastery protection (requires 2+ correct attempts for MASTERED)
+    - Anti-Loop Kill Switch (>3 failed attempts -> REQUIRES_HUMAN_FALLBACK)
     - Prerequisite gap detection
-    - Kill switch (iteration_count > 3 → REQUIRES_FALLBACK)
     """
-    # 1. Validate session hasn't expired
+    # 1. Validate session expiration
     if session.expires_at:
         expires = datetime.fromisoformat(session.expires_at)
         if datetime.now(timezone.utc) > expires:
-            raise ValueError("Assessment has expired. Please start a new assessment.")
+            raise ValueError("Assessment session has expired. Please start a new assessment.")
 
-    # Build answer lookup
-    answer_map = {q.question_id: q for q in session.questions}
+    # 2. Build answer lookup
     submission_map = {a.question_id: a for a in submission.answers}
-
     results: list[QuestionResult] = []
-    concept_scores: dict[str, list[bool]] = {}  # concept_id → [correct?, ...]
+    concept_scores: dict[str, list[bool]] = {}  # concept_id -> [correct?, ...]
 
     for question in session.questions:
         sub = submission_map.get(question.question_id)
         if sub is None:
-            # Question not answered — treat as wrong
+            # Question was left unanswered -> treat as incorrect
             selected = -1
             correct = False
         else:
             selected = sub.selected_index
-            correct = selected == question.correct_index
+            correct = (selected == question.correct_index)
 
         result = QuestionResult(
             question_id=question.question_id,
@@ -65,24 +70,28 @@ def grade_submission(
         results.append(result)
         concept_scores.setdefault(question.concept_id, []).append(correct)
 
-    # 2. Calculate overall score
+    # 3. Overall calculation
     score = sum(1 for r in results if r.correct)
     total = len(results)
-    percentage = (score / total * 100) if total > 0 else 0.0
+    percentage = (score / total * 100.0) if total > 0 else 0.0
 
-    # 3. Update concept masteries with anti-looping protection
+    # 4. Update Student Learning Profile with Anti-Loop Kill Switch
     now = datetime.now(timezone.utc).isoformat()
     for concept_id, correct_list in concept_scores.items():
         if concept_id not in profile.concept_masteries:
             concept = kg.concepts.get(concept_id)
             profile.concept_masteries[concept_id] = ConceptMastery(
                 concept_id=concept_id,
-                concept_name=concept.name if concept else "",
+                concept_name=concept.name if concept else concept_id,
             )
 
         mastery = profile.concept_masteries[concept_id]
         mastery.attempts += 1
         mastery.last_attempt_at = now
+
+        # Update per-concept score on this attempt (0.0 to 100.0)
+        curr_score = (sum(correct_list) / len(correct_list) * 100.0) if correct_list else 0.0
+        mastery.last_score = curr_score
 
         all_correct = all(correct_list)
         any_correct = any(correct_list)
@@ -94,17 +103,18 @@ def grade_submission(
             mastery.consecutive_correct = 0
             mastery.iteration_count += 1
 
-        # Determine status with anti-looping protection
-        if mastery.correct_attempts >= 2 and mastery.consecutive_correct >= 1:
+        # Determine status with Anti-Loop Kill Switch
+        if mastery.iteration_count > 3:
+            # Kill switch triggered: failed more than 3 times historically
+            mastery.status = "REQUIRES_HUMAN_FALLBACK"
+        elif mastery.correct_attempts >= 2 and mastery.consecutive_correct >= 1:
             mastery.status = "MASTERED"
-        elif mastery.iteration_count > 3:
-            mastery.status = "REQUIRES_FALLBACK"
         elif any_correct or mastery.correct_attempts >= 1:
             mastery.status = "LEARNING"
         else:
-            mastery.status = "LEARNING"  # attempted but all wrong
+            mastery.status = "LEARNING"
 
-    # 4. Prerequisite gap detection
+    # 5. Prerequisite gap detection
     prerequisite_gaps: list[str] = []
     for concept_id, correct_list in concept_scores.items():
         concept = kg.concepts.get(concept_id)
@@ -112,36 +122,31 @@ def grade_submission(
             continue
 
         child_failed = not all(correct_list)
-
         if child_failed:
             for prereq_id in concept.prerequisite_concept_ids:
                 prereq_correct = concept_scores.get(prereq_id)
                 if prereq_correct is not None and not all(prereq_correct):
-                    gap_desc = (
-                        f"Prerequisite gap: Failed '{concept.name}' (child) AND "
-                        f"'{kg.concepts[prereq_id].name if prereq_id in kg.concepts else prereq_id}' (parent)"
-                    )
+                    parent_name = kg.concepts[prereq_id].name if prereq_id in kg.concepts else prereq_id
+                    gap_desc = f"Prerequisite gap: Failed '{concept.name}' (child) AND '{parent_name}' (parent)"
                     prerequisite_gaps.append(gap_desc)
-
-                    # Mark parent as weak too
                     if prereq_id in profile.concept_masteries:
-                        profile.concept_masteries[prereq_id].status = "LEARNING"
+                        if profile.concept_masteries[prereq_id].status != "REQUIRES_HUMAN_FALLBACK":
+                            profile.concept_masteries[prereq_id].status = "LEARNING"
 
-    # 5. Update profile aggregates
+    # 6. Profile aggregate metrics
     profile.total_sessions += 1
     profile.overall_score = (
         (profile.overall_score * (profile.total_sessions - 1) + percentage)
         / profile.total_sessions
     )
 
-    # Recompute strong/weak concepts
     profile.strong_concepts = [
         m.concept_name for m in profile.concept_masteries.values()
         if m.status == "MASTERED" and m.concept_name
     ]
     profile.weak_concepts = [
         m.concept_name for m in profile.concept_masteries.values()
-        if m.status in ("LEARNING", "REQUIRES_FALLBACK") and m.concept_name
+        if m.status in ("LEARNING", "REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK") and m.concept_name
     ]
     profile.prerequisite_gaps = prerequisite_gaps
     profile.updated_at = now
@@ -155,4 +160,5 @@ def grade_submission(
         percentage=percentage,
         results=results,
         prerequisite_gaps=prerequisite_gaps,
+        graded_at=now,
     )
