@@ -1,13 +1,31 @@
+# ==============================================================================
+# VisualAI — Complete Dependencies Specification
+# Steps 1 & 2: Multimodal Ingestion + Knowledge Graph + Assessment Engine
+# ==============================================================================
+
+# Core Web Framework & Server
 fastapi==0.141.1
 uvicorn[standard]==0.30.6
-python-dotenv==1.2.3
-pymupdf==1.28.2
-google-generativeai==0.8.3
-langchain-text-splitters==1.1.2
-qdrant-client==1.12.1
-tiktoken==0.14.0
-python-multipart==0.0.32
 pydantic==2.13.5
-faster-whisper==1.1.0
-opencv-python==5.0.0.93
+python-multipart==0.0.32
+python-dotenv==1.2.3
+
+# Networking & HTTP Clients (Assessment Providers & Testing)
 httpx==0.28.1
+requests==2.34.2
+
+# LLM Providers & AI Models
+google-generativeai==0.8.3
+
+# Vector Database & Retrieval
+qdrant-client==1.12.1
+langchain-text-splitters==1.1.2
+tiktoken==0.14.0
+
+# Multimodal Ingestion: Document Processing (PDF)
+pymupdf==1.28.2
+
+# Multimodal Ingestion: Vision, Video & Audio Processing
+numpy==2.5.3
+opencv-python==5.0.0.93
+faster-whisper==1.1.0

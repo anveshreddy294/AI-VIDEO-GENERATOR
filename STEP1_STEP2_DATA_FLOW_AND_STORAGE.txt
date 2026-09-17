@@ -1,0 +1,416 @@
+================================================================================
+                    VISUALAI PLATFORM — PIPELINE ARCHITECTURE
+                  STEP 1 & STEP 2: DATA FLOW AND STORAGE SPECIFICATION
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. High-Level System Overview
+2. Step 1: Multimodal Ingestion Pipeline (Data Flow & Storage)
+   2.1 Stage 1: Reception & Registration
+   2.2 Stage 2: Modality Dispatching & Normalization
+   2.3 Stage 3: Structure Detection, Concept Extraction & Knowledge Graph
+   2.4 Stage 4: Semantic Chunking & Vector Store Sync
+   2.5 Stage 5: Quality Validation Gateway Check
+3. Step 1 -> Step 2 Handoff Interface
+4. Step 2: Adaptive Assessment, Profiling & Video Target Matrix (Data Flow & Storage)
+   4.1 Stage 1: Session Initialization & KG Snapshotting
+   4.2 Stage 2: Dynamic Assessment Planning & Reserve Pool
+   4.3 Stage 3: Source-Isolated Grounded Question Generation
+   4.4 Stage 4: Validation Gateways & Reserve Backfilling
+   4.5 Stage 5: Sanitized Quiz Dispatch & Session Persistence
+   4.6 Stage 6: Submission Grading, False-Mastery & Kill Switch Engine
+   4.7 Stage 7: Video Target Matrix Handoff Generation
+5. Comprehensive Directory & File Storage Map
+6. Step 2 -> Step 3 Handoff Contract
+================================================================================
+
+
+1. HIGH-LEVEL SYSTEM OVERVIEW
+-----------------------------
+VisualAI transforms raw multimodal study materials into targeted, personalized
+learning interventions. The platform operates as a deterministic pipeline:
+
+  [ Raw Study Material (PDF / Text / Image / Video) ]
+                         │
+                         ▼
+  [ STEP 1: INGESTION & KNOWLEDGE EXTRACTION ]
+    • Normalizes content into ContentUnits
+    • Extracts concepts & prerequisite hierarchy (KnowledgeGraph)
+    • Embeds semantic chunks into Qdrant vector database
+                         │
+                         ▼  (source_id + KnowledgeGraph blueprint)
+  [ STEP 2: ADAPTIVE ASSESSMENT & PROFILING ]
+    • Plans dynamic quiz based on student's current mastery
+    • Generates strictly grounded questions with provenance (page/chunk)
+    • Grades student submissions & detects prerequisite knowledge gaps
+    • Enforces Anti-Loop Kill Switch for persistent struggles
+    • Derives Video Target Matrix (Target durations: 30s / 45s / 60s)
+                         │
+                         ▼  (VideoTargetMatrix JSON)
+  [ STEP 3: TARGETED AI VIDEO GENERATION ]
+    • Visual scriptwriting, scene composition, voiceover & rendering
+
+
+================================================================================
+2. STEP 1: MULTIMODAL INGESTION PIPELINE (DATA FLOW & STORAGE)
+================================================================================
+
+Endpoint: POST /upload (with optional ?auto_start_assessment=true)
+File: app/api/upload.py
+
+2.1 STAGE 1: RECEPTION & REGISTRATION
+--------------------------------------
+1. The user uploads a file through POST /upload or the Web Dashboard.
+2. File is written temporarily to disk:
+   Path: storage/uploads/<uuid>_<filename>
+3. File Validation & Registration (app/services/registry.py::register_source):
+   - Validates file extension and magic byte signatures (PDF, PNG, JPG, MP4, etc.).
+   - Computes SHA-256 file checksum to detect duplicates.
+   - Assigns unique deterministic identifiers:
+     * source_id: e.g. "SRC_63d54087dc2e"
+     * asset_id:  e.g. "AST_c9e1b20e3a93"
+     * upload_id: e.g. "UPL_239d8275fb21"
+   - If SHA-256 exists in registry:
+     Increments "version" (e.g. version 2) and records parent_source_id.
+   - Original file is copied to permanent storage:
+     Path: storage/registry/<source_id>/original_<filename>
+   - Source record is written to master registry index:
+     Path: storage/registry/sources_index.json
+   - Status updated: UPLOADED -> PROCESSING -> EXTRACTING
+
+2.2 STAGE 2: MODALITY DISPATCHING & NORMALIZATION
+-------------------------------------------------
+File: app/services/dispatcher.py::dispatch
+1. Router inspects MIME type / extension and dispatches to specific modality extractor:
+   - PDF (extractors/pdf.py): Uses PyMuPDF (fitz) to extract text blocks, line numbers,
+     bounding boxes, and page numbers.
+   - Text (extractors/text.py): Normalizes whitespace and splits by semantic paragraphs.
+   - Image (extractors/image.py): Uses Gemini Vision API to describe diagrams, flowcharts,
+     or textual figures.
+   - Video (extractors/video.py): Uses OpenCV to sample keyframes at scene shifts, runs
+     Gemini Vision descriptions, and merges audio transcript timestamps.
+2. Normalization:
+   Every extraction produces a uniform list of ContentUnit objects:
+   - content_id: e.g. "CU_d8ec3544007b"
+   - source_id: "SRC_63d54087dc2e"
+   - text: Raw extracted text or visual description
+   - page_number: (for PDFs)
+   - timestamp_start / timestamp_end: (for Videos)
+   - sequence_index: Ordering in document
+3. ContentUnits are saved to disk:
+   Path: storage/registry/<source_id>/content_units.json
+
+2.3 STAGE 3: STRUCTURE DETECTION, CONCEPT EXTRACTION & KNOWLEDGE GRAPH
+----------------------------------------------------------------------
+File: app/services/structurer.py::process_structure_and_concepts
+Status: NORMALIZING
+1. ContentUnits are analyzed using Gemini (or intelligent grounded heuristic fallback):
+   - Detects structural hierarchy (Chapters and Sections).
+   - Extracts discrete concepts taught in the text.
+   - Identifies prerequisite concept relationships.
+2. Construct KnowledgeGraph schema:
+   Concepts dictionary:
+   {
+     "CONCEPT_COARSE_ALIGNMENT": {
+       "concept_id": "CONCEPT_COARSE_ALIGNMENT",
+       "name": "Coarse Alignment",
+       "definition": "Initial stage where transmitter locates remote terminal within camera FOV.",
+       "prerequisite_concept_ids": ["CONCEPT_FSOC"],
+       "related_concept_ids": [],
+       "source_content_ids": ["CU_d8ec3544007b", "CU_77ceae05d22d"]
+     }
+   }
+3. Fallback Heuristic Resiliency:
+   If Gemini API hits rate limits (HTTP 429 quota exhaustion), the structurer switches
+   instantly to grounded rule-based extraction, parsing headings, capitalized acronyms,
+   and definitions directly from ContentUnits so concepts are NEVER empty.
+4. Derives TopicBlueprint:
+   - topic_name: e.g. "Free Space Optical Communication"
+   - key_concepts: List of concept names
+   - prerequisites: Flattened prerequisite IDs
+   - difficulty_level: "beginner" | "intermediate" | "advanced"
+5. Stored to disk:
+   Path: storage/registry/<source_id>/knowledge_graph.json
+
+2.4 STAGE 4: SEMANTIC CHUNKING & VECTOR STORE SYNC
+--------------------------------------------------
+File: app/services/chunker.py & app/db/vector_store.py
+Status: INDEXING
+1. Concept-Aware Semantic Chunking:
+   - Groups adjacent ContentUnits by concept boundaries and token limits (~500 tokens).
+   - Produces RichChunk objects:
+     * chunk_id: e.g. "CHUNK_f6366421aaae"
+     * source_id: "SRC_63d54087dc2e"
+     * text: Aggregated chunk content
+     * layer: "A" (foundational document text)
+     * concept_ids: Concepts mapped to this text chunk
+     * content_ids: ContentUnits forming this chunk
+     * page_start / page_end: Precise page provenance
+2. Vector Store Ingestion (Layer A):
+   - Chunks are vectorized using dense vector embeddings (384-dim or 768-dim).
+   - Stored in Qdrant Vector Collection: "visualai_layer_a".
+   - Storage location: storage/qdrant_local/ (or remote Qdrant).
+   - Stored Payload fields:
+     source_id, chunk_id, layer, concept_ids, page_start, page_end, text.
+
+2.5 STAGE 5: QUALITY VALIDATION GATEWAY CHECK
+---------------------------------------------
+File: app/services/validator.py::validate_ingestion_quality
+Status: READY
+1. Quality checks verify:
+   - File exists on disk and has non-zero size.
+   - At least 1 ContentUnit extracted.
+   - Chunks created and successfully upserted into Qdrant.
+   - KnowledgeGraph concept definitions are valid.
+2. Updates storage/registry/sources_index.json status to "READY".
+3. Returns Step 1 JSON response to caller with source_id, blueprint, and validation report.
+
+
+================================================================================
+3. STEP 1 -> STEP 2 HANDOFF INTERFACE
+================================================================================
+
+There are three ways Step 1 hands off to Step 2:
+
+1. Automatic Pipeline Handoff (Single Step):
+   Call: POST /upload?auto_start_assessment=true&student_id=student_1&max_questions=5
+   Step 1 runs, immediately triggers Step 2 internally, and returns both the
+   ingestion blueprint AND the assessment session with questions in a single response!
+
+2. Explicit API Handoff:
+   User takes source_id from Step 1 response and calls:
+   POST /assessment/start
+   {
+     "student_id": "student_1",
+     "source_id": "SRC_63d54087dc2e",
+     "max_questions": 5
+   }
+
+3. Interactive Web Dashboard:
+   Access http://127.0.0.1:8000/
+   Select the uploaded file or choose an existing ready source from the dropdown,
+   click "Generate Quiz", and questions appear directly on the browser screen.
+
+
+================================================================================
+4. STEP 2: ADAPTIVE ASSESSMENT, PROFILING & VIDEO TARGET MATRIX
+================================================================================
+
+Endpoints:
+  • POST /assessment/start
+  • POST /assessment/submit
+  • GET  /assessment/profile/{student_id}
+  • GET  /assessment/video-target/{student_id}/{source_id}
+
+4.1 STAGE 1: SESSION INITIALIZATION & KG SNAPSHOTTING
+-----------------------------------------------------
+File: app/api/assessment.py::start_assessment
+1. Resolves student_id and source_id:
+   - Sanitizes and ignores Swagger UI default placeholders like "string".
+   - Prioritizes query parameters when supplied.
+2. Registry Lock Check:
+   - Confirms source_id exists in storage/registry/sources_index.json.
+   - Enforces status == "READY" (rejects with HTTP 423 if still indexing).
+3. Loads KnowledgeGraph:
+   - Reads storage/registry/<source_id>/knowledge_graph.json.
+4. Loads or Creates StudentLearningProfile:
+   - Reads storage/learning_profiles/<student_id>.json.
+   - If new student, initializes a fresh profile.
+5. Concept Snapshotting (Self-Contained Session):
+   - Serializes a lightweight graph snapshot (ConceptSnapshot) containing concept IDs,
+     names, definitions, difficulties, and prerequisite IDs into the session.
+   - Guarantee: Even if disk KG is deleted or moved, the session can evaluate prerequisite
+     gaps and difficulty-based video target durations without disk dependencies.
+
+4.2 STAGE 2: DYNAMIC ASSESSMENT PLANNING & RESERVE POOL
+-------------------------------------------------------
+File: app/services/assessment/planner.py::plan_assessment
+1. Anti-Loop Kill Switch Filter:
+   - Identifies concepts flagged as "REQUIRES_HUMAN_FALLBACK" in the student's profile.
+   - Strictly excludes these concepts from planning (prevents infinite quiz loops).
+2. Cold Start Plan vs. Adaptive Re-Test:
+   - If first time taking quiz: Selects balanced mix across difficulty tiers:
+     * Foundational concepts: ~30%
+     * Intermediate concepts: ~40%
+     * Advanced concepts: ~30%
+   - If returning student: Prioritizes concepts marked "NEEDS_REINFORCEMENT" or "IN_PROGRESS".
+3. Prerequisite Pairing Rule:
+   - Ensures that foundational prerequisites are queued before advanced dependent concepts.
+   - Protected by visiting-set cycle detection to prevent recursion depth crashes.
+4. Reserve Pool Assembly:
+   - Pre-queues remaining unselected concepts into a reserve pool.
+   - If any primary concept fails question generation or validation, reserve candidates
+     are automatically backfilled until max_questions is reached.
+
+4.3 STAGE 3: SOURCE-ISOLATED GROUNDED QUESTION GENERATION
+---------------------------------------------------------
+File: app/services/assessment/generator.py::generate_question
+1. Strict Source Isolation:
+   - Queries Qdrant collection "visualai_layer_a" strictly filtering by source_id.
+   - Chunks from other documents or global space are never leaked.
+2. Grounded LLM Prompting:
+   - Dispatches chunk text + concept to LLM with negative constraints:
+     * Must be answerable ONLY using the provided source text.
+     * Prohibits external general knowledge assumptions.
+     * Demands exactly 4 options with 1 unambiguous correct answer.
+3. LLM Provider Abstraction:
+   - Configured via app/services/assessment/providers.py:
+     * GeminiProvider (default cloud model)
+     * OllamaProvider (local open-weight LLM)
+     * MockProvider (fast testing provider)
+4. Deterministic Grounded Fallback:
+   - If LLM quota (429) or network failure occurs, generator falls back to deterministic
+     template generation grounded in the concept definition and source text.
+   - Varied correct answer indices: Correct choice is assigned to [0, 1, 2, 3] based
+     on deterministic hash (md5(concept_id) % 4).
+   - Distractors are concept-specific and contextualized using prerequisite relationships.
+
+4.4 STAGE 4: VALIDATION GATEWAYS & RESERVE BACKFILLING
+------------------------------------------------------
+File: app/services/assessment/validator.py
+1. Structural Validation:
+   - Pydantic schema validation: exactly 4 non-empty choices, correct_index in [0..3].
+2. Grounding Gateway (is_grounded):
+   - Computes keyword/semantic token overlap between question stem and source text chunks.
+   - Rejects hallucinated questions with low overlap.
+3. Duplicate Detection Gateway (is_duplicate):
+   - Computes Jaccard stem similarity and option overlap using regex word boundary (\w+) tokens.
+   - Rejects questions repeating earlier prompts in the same session.
+4. Automated Backfilling:
+   - If a candidate is rejected by any gateway, the engine immediately attempts the next
+     reserve concept from the Knowledge Graph until target questions are satisfied.
+
+4.5 STAGE 5: SANITIZED QUIZ DISPATCH & SESSION PERSISTENCE
+----------------------------------------------------------
+File: app/services/assessment/session_store.py
+1. AssessmentSession Object is constructed:
+   - session_id: e.g. "SESS_54c7e25fee5d"
+   - student_id: "student_1"
+   - source_id: "SRC_63d54087dc2e"
+   - questions: Complete Question objects (including correct answer and provenance)
+   - concept_snapshot: Prerequisite snapshot
+   - expires_at: Timestamp (now + settings.assessment_ttl_hours, default 24h)
+2. Saved to Disk:
+   Path: storage/assessment_sessions/<session_id>.json
+3. Safe Quiz Sanitization (SafeQuestion):
+   - Strips "correct_index" and "explanation" from questions before dispatching to frontend.
+   - Preserves "page_start", "page_end", and "chunk_ids" for student reference.
+   - Prevents answer keys from ever leaking over the network.
+
+4.6 STAGE 6: SUBMISSION GRADING, FALSE-MASTERY & KILL SWITCH ENGINE
+-------------------------------------------------------------------
+Endpoint: POST /assessment/submit
+File: app/api/assessment.py::submit_assessment & app/services/assessment/engine.py
+1. Session Integrity Validation:
+   - Checks session expiration (returns HTTP 410 Gone if expired).
+   - Validates that submitted question_ids belong to the session.
+   - Rejects duplicate question submissions with HTTP 400.
+2. Scoring:
+   - Compares student's selected_index against ground-truth correct_index.
+   - Computes concept scores and overall quiz score percentage (e.g. 75.0%).
+3. Prerequisite Gap Detection:
+   - Identifies conceptual dependency failures:
+     * Failed child concept AND failed parent prerequisite.
+     * Failed child concept while parent prerequisite was unmastered.
+4. False-Mastery Safeguard:
+   - Requires consecutive correct threshold (settings.mastery_threshold, default 2)
+     before transitioning a concept to "MASTERED".
+   - Single lucky guesses are labeled "IN_PROGRESS".
+5. Anti-Loop Kill Switch:
+   - Tracks consecutive failure iterations per concept.
+   - If iteration_count > settings.kill_switch_limit (default 3):
+     Concept status is marked "REQUIRES_HUMAN_FALLBACK".
+   - These concepts are permanently excluded from automated video loops and flagged
+     for human instructor intervention.
+6. Updates StudentLearningProfile:
+   - Persists strong_concepts, weak_concepts, concept_ids, and scores.
+   - Saved to Disk:
+     Path: storage/learning_profiles/<student_id>.json
+
+4.7 STAGE 7: VIDEO TARGET MATRIX HANDOFF GENERATION
+---------------------------------------------------
+File: app/services/assessment/video_target.py::build_video_target_matrix
+1. Evaluates all assessed concepts:
+   - Mastered concepts (score >= 70%) are filtered out (no video needed).
+   - Kill-switch concepts (REQUIRES_HUMAN_FALLBACK) are filtered out of the video queue
+     and explicitly surfaced in human_intervention_concepts.
+2. Target Duration Scaling (Bound to Concept Difficulty):
+   - beginner:     30 seconds
+   - intermediate: 45 seconds
+   - advanced:     60 seconds
+3. Derives VideoTarget items:
+   - concept_id: Graph ID (e.g. "CONCEPT_COARSE_ALIGNMENT")
+   - concept_name: "Coarse Alignment"
+   - definition: Factual description from source material
+   - difficulty: "intermediate"
+   - target_seconds: 45
+   - directive: "Generate a 45-second AI video explaining Coarse Alignment"
+   - chunk_ids: Source chunk IDs for visual illustration
+   - page_start / page_end: Exact source pages
+4. Sets Decision State:
+   - "ALL_MASTERED": All concepts passed; video queue is empty.
+   - "GENERATE_VIDEOS": Needs remediation; video queue contains targets.
+   - "HUMAN_INTERVENTION": All failures hit kill switch; instructor alert required.
+   - Mixed State: "GENERATE_VIDEOS" + notice in summary for human intervention concepts.
+5. Saved to Disk:
+   Path: storage/video_targets/<student_id>_<source_id>.json
+
+
+================================================================================
+5. COMPREHENSIVE DIRECTORY & FILE STORAGE MAP
+================================================================================
+
+All persistent state is stored cleanly inside the storage/ directory:
+
+storage/
+├── uploads/                               # Ephemeral raw upload staging
+│   └── <uuid>_<filename>                  # Temporary files before registration
+│
+├── registry/                              # Step 1 Ingestion Registry
+│   ├── sources_index.json                 # Master catalog of all uploaded sources
+│   │                                      # (Tracks status, SHA-256, version, timestamps)
+│   └── <source_id>/                       # Scoped folder per study material
+│       ├── original_<filename>            # Preserved original input document
+│       ├── content_units.json             # Normalized text blocks & bounding boxes
+│       └── knowledge_graph.json           # Concepts, definitions & prerequisite tree
+│
+├── qdrant_local/                          # Local Qdrant Vector Database
+│   └── collections/
+│       └── visualai_layer_a/              # Dense vectors + metadata payloads
+│
+├── assessment_sessions/                   # Step 2 Active & Historic Sessions
+│   └── <session_id>.json                  # Complete session: questions, answer keys,
+│                                          # provenance, and compact concept snapshot
+│
+├── learning_profiles/                     # Student Knowledge Profiles
+│   └── <student_id>.json                  # Cumulative profile: scores, strong/weak
+│                                          # concept IDs, and mastery iteration counts
+│
+└── video_targets/                         # Step 2 -> Step 3 Handoff Matrices
+    └── <student_id>_<source_id>.json      # Final VideoTargetMatrix JSON consumed by Step 3
+
+
+================================================================================
+6. STEP 2 -> STEP 3 HANDOFF CONTRACT
+================================================================================
+
+Step 3 consumes the VideoTargetMatrix either via REST API or direct filesystem read:
+
+API Endpoint:
+  GET /assessment/video-target/{student_id}/{source_id}
+
+File Path:
+  storage/video_targets/{student_id}_{source_id}.json
+
+CONTRACT GUARANTEES:
+1. Step 2 decides WHAT to teach; Step 3 decides HOW to teach it visually.
+2. Step 3 must NEVER re-assess students or modify scores.
+3. Step 3 must NEVER generate videos for concepts in "human_intervention_concepts".
+4. Step 3 must strictly adhere to "target_seconds":
+   - Beginner:     30s
+   - Intermediate: 45s
+   - Advanced:     60s
+5. Step 3 prompt planner should retrieve diagram references from "chunk_ids" and
+   "page_start" / "page_end" to anchor visual illustrations in the original material.
+================================================================================
