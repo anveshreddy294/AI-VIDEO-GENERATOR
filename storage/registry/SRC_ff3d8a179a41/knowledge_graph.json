@@ -1,0 +1,39 @@
+{
+  "concepts": {
+    "CONCEPT_INFOGRAPHIC_LAYOUT": {
+      "concept_id": "CONCEPT_INFOGRAPHIC_LAYOUT",
+      "name": "Infographic Layout",
+      "definition": "The structural and visual organization of complex information on a poster or digital canvas, utilizing elements like headers, multi-column divisions, and color schemes to guide the viewer's eye.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_df30ee227f0b"
+      ]
+    },
+    "CONCEPT_PROBLEM_SOLUTION_FRAMEWORK": {
+      "concept_id": "CONCEPT_PROBLEM_SOLUTION_FRAMEWORK",
+      "name": "Problem-Solution Framework",
+      "definition": "A communication methodology that structures content by first identifying a core challenge (the problem) and then presenting the details of how to address it (the solution).",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INFOGRAPHIC_LAYOUT"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_df30ee227f0b"
+      ]
+    },
+    "CONCEPT_SYSTEM_ARCHITECTURE_VISUALIZATION": {
+      "concept_id": "CONCEPT_SYSTEM_ARCHITECTURE_VISUALIZATION",
+      "name": "System Architecture Visualization",
+      "definition": "The graphical representation of components, relationships, and data flows within a complex system to make its architecture understandable to technical and non-technical audiences.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INFOGRAPHIC_LAYOUT",
+        "CONCEPT_PROBLEM_SOLUTION_FRAMEWORK"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_df30ee227f0b"
+      ]
+    }
+  }
+}
