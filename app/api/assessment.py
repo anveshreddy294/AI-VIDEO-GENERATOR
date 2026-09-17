@@ -27,7 +27,7 @@ from ..services.assessment.schemas import (
     StudentSubmission,
 )
 from ..services.assessment.session_store import load_session, save_session
-from ..services.assessment.validator import is_duplicate, validate_question
+from ..services.assessment.validator import is_duplicate, validate_grounding, validate_question
 from ..services.assessment.video_target import (
     build_video_target_matrix,
     load_video_matrix,
@@ -152,10 +152,40 @@ def start_assessment(
     session.expires_at = expires_at.isoformat()
 
     # 6. Sequential Grounded Generation + Validation + Provenance Tracking
+    #    with Backfilling: if a primary candidate fails, reserve candidates from the
+    #    remaining KnowledgeGraph are tried through the EXACT SAME validation pipeline.
+
+    # Determine kill-switch IDs so reserve pool never includes them (Phase 1 preserved)
+    kill_switch_ids: set[str] = {
+        cid for cid, m in profile.concept_masteries.items()
+        if m.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
+    }
+
+    # Build ordered reserve pool: KG concepts not in primary queue and not kill-switched
+    primary_ids = {c.concept_id for c in concept_queue}
+    reserve_pool = [
+        c for c in kg.concepts.values()
+        if c.concept_id not in primary_ids
+        and c.concept_id not in kill_switch_ids
+    ]
+
+    # Candidates = primary queue first, then reserve (each attempted at most once)
+    all_candidates = list(concept_queue) + reserve_pool
+    attempted_ids: set[str] = set()
+
     questions = []
     failed_concepts: list[str] = []
 
-    for concept in concept_queue:
+    for concept in all_candidates:
+        # Stop once we have enough valid questions
+        if len(questions) >= MAX_QUESTIONS:
+            break
+
+        # Never attempt the same concept twice
+        if concept.concept_id in attempted_ids:
+            continue
+        attempted_ids.add(concept.concept_id)
+
         question = generate_question(
             concept=concept,
             source_id=req_source_id,
@@ -165,19 +195,31 @@ def start_assessment(
 
         if question is None:
             failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Backfill: generation returned None for '{concept.name}'")
             continue
 
-        # Structural validation
-        is_valid, error = validate_question(question)
+        # Structural + provenance validation (Phase 1 — never bypassed)
+        is_valid, error = validate_question(question, allowed_source_id=req_source_id)
         if not is_valid:
-            print(f"[assessment] Question for '{concept.name}' failed validation: {error}")
             failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Backfill: question for '{concept.name}' failed validation: {error}")
             continue
 
-        # Non-duplication check
-        if is_duplicate(question, questions):
-            print(f"[assessment] Question for '{concept.name}' is duplicate, skipping")
+        # Grounding validation (Phase 1 — never bypassed)
+        context_text = " ".join(
+            ch.get("text", "") for ch in (provided_chunks or [])
+            if not ch.get("source_id") or ch.get("source_id") == req_source_id
+        )
+        grounding_ok, grounding_err = validate_grounding(question, context_text)
+        if not grounding_ok:
             failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Backfill: question for '{concept.name}' failed grounding: {grounding_err}")
+            continue
+
+        # Duplicate detection against already-accepted questions (Phase 1 — never bypassed)
+        if is_duplicate(question, questions):
+            failed_concepts.append(concept.concept_id)
+            print(f"[assessment] Backfill: question for '{concept.name}' is duplicate, trying reserve")
             continue
 
         questions.append(question)
@@ -212,17 +254,32 @@ def start_assessment(
         )
         safe_questions.append(safe_q.model_dump())
 
+    # Shortfall reporting: requested = min(MAX_QUESTIONS, total eligible candidates attempted)
+    requested = min(MAX_QUESTIONS, len(all_candidates))
+    generated = len(questions)
+    shortfall = max(0, requested - generated)
+    if shortfall:
+        print(
+            f"[assessment] Shortfall: requested={requested} generated={generated} "
+            f"shortfall={shortfall} student='{req_student_id}' source='{req_source_id}'"
+        )
+
     return {
         "status": "READY",
         "session_id": session.session_id,
         "student_id": req_student_id,
         "source_id": req_source_id,
         "expires_at": session.expires_at,
-        "question_count": len(questions),
+        "question_count": generated,
         "questions": safe_questions,
         "concepts_tested": [q.concept_name for q in questions],
         "failed_concepts": failed_concepts,
+        # Backfill transparency fields
+        "requested_questions": requested,
+        "generated_questions": generated,
+        "shortfall": shortfall,
     }
+
 
 
 @router.post("/handoff")

@@ -151,5 +151,22 @@
     "error_message": null,
     "created_at": "2026-09-17T04:44:00.755970+00:00",
     "updated_at": "2026-09-17T04:44:04.378968+00:00"
+  },
+  "SRC_beaacb8a881d": {
+    "source_id": "SRC_beaacb8a881d",
+    "asset_id": "AST_35e14ba0d4a7",
+    "upload_id": "UPL_4f409618a3d1",
+    "filename": "physics_sample.txt",
+    "source_type": "txt",
+    "mime_type": "text/plain",
+    "file_hash": "02a7e04a7e014ff29512c43fed680ffd1ec5a19c6ccd096314ffd55df679a621",
+    "file_size": 410,
+    "uploaded_by": "student_default",
+    "version": 1,
+    "parent_source_id": null,
+    "status": "UPLOADED",
+    "error_message": null,
+    "created_at": "2026-09-17T05:46:44.957502+00:00",
+    "updated_at": "2026-09-17T05:46:44.958501+00:00"
   }
 }
