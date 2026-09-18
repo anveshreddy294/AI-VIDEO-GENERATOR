@@ -1,4 +1,4 @@
-"""Tests for Step 2 Hardening Phase 3: LLM Provider Abstraction.
+﻿"""Tests for Step 2 Hardening Phase 3: LLM Provider Abstraction.
 
 Tests:
 A. test_mock_provider_generates_question

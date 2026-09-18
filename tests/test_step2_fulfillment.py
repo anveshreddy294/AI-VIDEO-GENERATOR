@@ -1,4 +1,4 @@
-"""Comprehensive tests for Assessment Question-Count Fulfillment and Variant Backfill.
+﻿"""Comprehensive tests for Assessment Question-Count Fulfillment and Variant Backfill.
 
 Test Coverage:
 1. 5 concepts, target 5 -> 5
@@ -18,7 +18,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 

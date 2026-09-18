@@ -1,4 +1,4 @@
-"""Comprehensive verification test suite for Interactive Video RAG & Timestamp Q&A Agent.
+﻿"""Comprehensive verification test suite for Interactive Video RAG & Timestamp Q&A Agent.
 
 Verifies:
 1. Timestamp-to-Scene Resolution: Accurate scene number and time window calculation.
@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 # Add project root to sys.path
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from fastapi.testclient import TestClient

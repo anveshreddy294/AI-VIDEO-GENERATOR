@@ -1,4 +1,4 @@
-"""Tests for Step 2 Hardening Phase 2C: Configuration & Stable Concept IDs.
+﻿"""Tests for Step 2 Hardening Phase 2C: Configuration & Stable Concept IDs.
 
 Tests:
 1. test_settings_kill_switch_limit_is_respected

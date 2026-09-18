@@ -1,4 +1,4 @@
-"""Comprehensive verification test suite for Step 3 Video Generation Engine.
+﻿"""Comprehensive verification test suite for Step 3 Video Generation Engine.
 
 Verifies:
 1. Script Generation: Timed, grounded, multi-scene scripts matching 30s/45s/60s duration constraints.
@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 # Add project root to sys.path
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from fastapi.testclient import TestClient

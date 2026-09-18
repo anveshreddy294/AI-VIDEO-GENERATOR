@@ -1,4 +1,4 @@
-"""Comprehensive test suite for Step 4 Remediation Verification & Re-Testing Loop.
+﻿"""Comprehensive test suite for Step 4 Remediation Verification & Re-Testing Loop.
 
 Verifies:
 1. Generate remediation check session: Questions are grounded, answer keys hidden (SafeQuestion).
@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Add project root to sys.path
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from fastapi.testclient import TestClient

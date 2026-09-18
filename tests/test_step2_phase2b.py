@@ -1,4 +1,4 @@
-"""Phase 2B Step 2 Hardening: Self-Contained AssessmentSession Tests.
+﻿"""Phase 2B Step 2 Hardening: Self-Contained AssessmentSession Tests.
 
 Verifies:
 A. test_session_contains_concept_dependency_snapshot
@@ -14,7 +14,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 

@@ -1,4 +1,4 @@
-"""Test suite for Step 2 Assessment Result Contract and Dashboard Scoring.
+﻿"""Test suite for Step 2 Assessment Result Contract and Dashboard Scoring.
 
 Verifies:
 A. 3 questions: 3 correct -> 100.0%
@@ -15,7 +15,7 @@ from pathlib import Path
 from uuid import uuid4
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 

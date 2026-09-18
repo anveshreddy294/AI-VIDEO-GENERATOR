@@ -1,4 +1,4 @@
-"""Phase 4: Final Production Hardening & Contract Verification Test Suite for Step 2.
+﻿"""Phase 4: Final Production Hardening & Contract Verification Test Suite for Step 2.
 
 Audit checks:
 1.  test_cross_source_isolation
@@ -28,7 +28,7 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 

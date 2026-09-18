@@ -1,7 +1,7 @@
 # VisualAI — Cross-platform Makefile
 # Works on macOS, Linux, and Windows (with make installed via Git Bash / WSL)
 
-.PHONY: setup run stop clean docker-up docker-down audit help
+.PHONY: setup run stop clean docker-up docker-down audit test help
 
 help:  ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -23,6 +23,15 @@ stop:  ## Stop any running uvicorn processes
 clean:  ## Remove venv, caches, and temp files
 	rm -rf .venv __pycache__ app/__pycache__ app/*/__pycache__ 2>/dev/null || rmdir /s /q .venv 2>nul
 	@echo "[OK] Cleaned."
+
+test:  ## Run the full test suite from the tests/ folder
+	.venv/bin/python -m pytest tests/ -v 2>/dev/null || \
+	.venv\Scripts\python -m pytest tests/ -v
+	@echo "[OK] All tests complete."
+
+test-core:  ## Run the 4 core pipeline tests (fast, no full suite)
+	.venv/bin/python -m unittest tests.test_step4_remediation_loop tests.test_video_rag_agent tests.test_instructor_portal tests.test_step2_to_step3_remediation -v 2>/dev/null || \
+	.venv\Scripts\python -m unittest tests.test_step4_remediation_loop tests.test_video_rag_agent tests.test_instructor_portal tests.test_step2_to_step3_remediation -v
 
 docker-up:  ## Start with Docker Compose
 	docker compose up -d --build

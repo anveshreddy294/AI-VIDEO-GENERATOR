@@ -1,4 +1,4 @@
-"""End-to-end verification script for Step 2 Master Execution Flow.
+﻿"""End-to-end verification script for Step 2 Master Execution Flow.
 
 Tests all 6 steps:
 1. Ingesting Step 1 JSON payload & session integrity checks
@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 

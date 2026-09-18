@@ -1,4 +1,4 @@
-"""Comprehensive verification suite for VisualAI Observable Pipeline Progress.
+﻿"""Comprehensive verification suite for VisualAI Observable Pipeline Progress.
 
 Tests:
 1. Successful workflow simulation -> all deterministic stages emitted in order, reaches 100% completed.
@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from fastapi.testclient import TestClient

@@ -1,4 +1,4 @@
-"""Verification test suite for Step 2 -> Step 3 Remediation Contract Hardening.
+﻿"""Verification test suite for Step 2 -> Step 3 Remediation Contract Hardening.
 
 Verifies:
 1. One incorrect question -> exactly one corresponding remediation target.
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 # Add project root to sys.path
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from app.core.config import settings

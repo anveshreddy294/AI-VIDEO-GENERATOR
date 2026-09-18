@@ -1,4 +1,4 @@
-"""Comprehensive verification test suite for Instructor Analytics & Human Intervention Portal.
+﻿"""Comprehensive verification test suite for Instructor Analytics & Human Intervention Portal.
 
 Verifies:
 1. Human Intervention Alert Discovery: Scans profiles and detects kill-switch fallbacks.
@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 # Add project root to sys.path
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
 from fastapi.testclient import TestClient
@@ -262,7 +262,7 @@ class TestInstructorPortal(unittest.TestCase):
         bad_res = client.post("/instructor/api/reset-mastery", json=bad_status_payload, headers=auth_headers)
         self.assertEqual(bad_res.status_code, 422, "Invalid new_status must be rejected with 422 Unprocessable Entity")
 
-        # 3. GET /instructor (HTML UI — no auth required for the web page itself)
+        # 3. GET /instructor (HTML UI â€” no auth required for the web page itself)
         html_res = client.get("/instructor")
         self.assertEqual(html_res.status_code, 200)
         self.assertIn("VisualAI Instructor Portal", html_res.text)

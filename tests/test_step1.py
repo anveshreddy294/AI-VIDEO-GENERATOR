@@ -1,10 +1,10 @@
-"""Automated test script for Step 1 Ingestion Pipeline."""
+﻿"""Automated test script for Step 1 Ingestion Pipeline."""
 
 import sys
 from pathlib import Path
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.services.registry import register_source, update_source_status, save_content_units, save_knowledge_graph
 from app.services.dispatcher import dispatch
@@ -17,7 +17,7 @@ def run_test():
     print("--- Testing Step 1 Pipeline ---")
     
     # 1. Create a dummy test file
-    test_dir = Path(__file__).resolve().parent / "storage" / "runtime" / "test_scratch"
+    test_dir = Path(__file__).resolve().parent.parent / "storage" / "runtime" / "test_scratch"
     test_dir.mkdir(parents=True, exist_ok=True)
     sample_file = test_dir / "physics_sample.txt"
     sample_file.write_text(

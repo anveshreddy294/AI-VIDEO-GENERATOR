@@ -1,4 +1,4 @@
-"""Phase 2A Step 2 Hardening: Robust Question Backfilling Tests.
+﻿"""Phase 2A Step 2 Hardening: Robust Question Backfilling Tests.
 
 Verifies:
 A. test_question_backfill_after_validation_failure
@@ -13,7 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 # Add project root to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi.testclient import TestClient
 
