@@ -32,6 +32,29 @@ def _clean_json_markdown(text: str) -> str:
     return text
 
 
+def _sanitize_text(text: Optional[str]) -> str:
+    """Remove raw bracketed image/OCR tags and vision API error placeholders."""
+    if not text:
+        return ""
+    cleaned = re.sub(r"\[IMAGE:[^\]]*\]", "", str(text), flags=re.IGNORECASE)
+    cleaned = re.sub(r"\[No description[^\]]*\]", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\[warn[^\]]*\]", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def _clean_source_text(raw_text: str) -> str:
+    """Strip OCR placeholders, image tags, and vision failure notices."""
+    if not raw_text:
+        return ""
+    lines = []
+    for line in raw_text.splitlines():
+        line_clean = _sanitize_text(line)
+        if line_clean and "no description returned" not in line_clean.lower():
+            lines.append(line_clean)
+    return "\n".join(lines)
+
+
 def _extract_source_context(source_id: str, target: VideoTarget) -> tuple[str, Optional[str]]:
     """Retrieve grounded text snippets and identify any diagram ContentUnit ID."""
     all_units: List[ContentUnit] = get_content_units(source_id)
@@ -47,8 +70,9 @@ def _extract_source_context(source_id: str, target: VideoTarget) -> tuple[str, O
             or (target.concept_name.lower() in unit.text.lower())
         )
         if is_relevant:
-            if unit.text and unit.text.strip():
-                grounded_texts.append(unit.text.strip())
+            cleaned = _clean_source_text(unit.text)
+            if cleaned:
+                grounded_texts.append(cleaned)
             # Check if this unit is a diagram or visual
             if unit.modality in ["image", "video"] or getattr(unit, "image_path", None):
                 if not diagram_cu_id:
@@ -57,11 +81,42 @@ def _extract_source_context(source_id: str, target: VideoTarget) -> tuple[str, O
     # Fallback to general units if no specific matches found
     if not grounded_texts and all_units:
         for u in all_units[:3]:
-            if u.text:
-                grounded_texts.append(u.text.strip())
+            cleaned = _clean_source_text(u.text)
+            if cleaned:
+                grounded_texts.append(cleaned)
 
     combined_text = "\n\n".join(grounded_texts[:5])
     return combined_text, diagram_cu_id
+
+
+def _get_domain_defaults(concept: str) -> tuple[str, str, str]:
+    """Provide clean, authoritative definitions and mastery rules if source lacks text."""
+    c_lower = concept.lower()
+    if "acceleration" in c_lower:
+        defn = "Acceleration is the rate of change of an object's velocity over time."
+        detail = "It occurs whenever an object speeds up, slows down, or changes its direction of travel."
+        rule = "a = Δv / Δt  (Rate of velocity change)"
+    elif "force" in c_lower:
+        defn = "Force is an interaction that alters the state of motion of an object."
+        detail = "Newton's Second Law establishes that net force directly equals mass times acceleration."
+        rule = "F = m · a  (Force = Mass × Acceleration)"
+    elif "inertia" in c_lower:
+        defn = "Inertia is the natural resistance of any physical object to changes in its state of motion."
+        detail = "An object at rest stays at rest, and an object in motion stays in uniform motion unless acted on."
+        rule = "Inertia is directly proportional to mass"
+    elif "momentum" in c_lower:
+        defn = "Momentum represents the quantity of motion possessed by a moving body."
+        detail = "In any closed or isolated system, total linear momentum is strictly conserved across interactions."
+        rule = "p = m · v  (Conservation of Momentum)"
+    elif "energy" in c_lower or "work" in c_lower:
+        defn = "Energy is the quantitative property transferred to an object to perform work or heat it."
+        detail = "Mechanical energy transitions continuously between kinetic energy of motion and stored potential energy."
+        rule = "E_total = K + U  (Conservation of Energy)"
+    else:
+        defn = f"{concept} represents a fundamental conceptual pillar governing relationships in this domain."
+        detail = f"Mastering how {concept} behaves under varying conditions is critical for accurate problem-solving."
+        rule = f"Core Mastery Principle: Check governing conditions for {concept}"
+    return defn, detail, rule
 
 
 def _generate_deterministic_script(
@@ -76,10 +131,19 @@ def _generate_deterministic_script(
     concept = target.concept_name
     difficulty = target.difficulty
 
-    # Extract sentences from source text
-    sentences = [s.strip() for s in re.split(r"[.!?]\s+", source_text) if len(s.strip()) > 15]
-    def_sentence = sentences[0] if sentences else f"{concept} is a fundamental principle in this domain."
-    detail_sentence = sentences[1] if len(sentences) > 1 else "Understanding its underlying mechanics is critical."
+    # Extract clean sentences from source text
+    clean_text = _clean_source_text(source_text)
+    raw_sentences = [s.strip() for s in re.split(r"[.!?]\s+", clean_text) if len(s.strip()) > 15]
+    valid_sentences = [
+        s for s in raw_sentences
+        if not s.startswith("[") and "no description" not in s.lower() and "image:" not in s.lower()
+    ]
+
+    default_def, default_detail, default_rule = _get_domain_defaults(concept)
+
+    def_sentence = valid_sentences[0] if valid_sentences else default_def
+    detail_sentence = valid_sentences[1] if len(valid_sentences) > 1 else default_detail
+    highlight_rule = default_rule
 
     scenes: List[VideoScene] = []
 
@@ -92,16 +156,16 @@ def _generate_deterministic_script(
                 title=f"Understanding {concept}",
                 narration=f"Let's master {concept}. This core idea forms the foundation of what you are studying.",
                 onscreen_bullets=[f"Core Concept: {concept}", "Foundational Review"],
-                highlight_text=concept,
+                highlight_text=highlight_rule,
                 duration_seconds=6.0,
             ),
             VideoScene(
                 scene_number=2,
                 scene_type="concept_breakdown",
                 title="The Core Principle",
-                narration=f"Notice that {def_sentence}. {detail_sentence}",
+                narration=f"Notice that {def_sentence} {detail_sentence}",
                 onscreen_bullets=["Key Definition", "Core Relationship", "Common Application"],
-                highlight_text=def_sentence[:80] + "..." if len(def_sentence) > 80 else def_sentence,
+                highlight_text=highlight_rule,
                 diagram_cu_id=diagram_cu_id,
                 duration_seconds=18.0,
             ),
@@ -111,7 +175,7 @@ def _generate_deterministic_script(
                 title="Key Takeaway",
                 narration=f"Remember: always identify the core relationship in {concept} before solving.",
                 onscreen_bullets=["Always check core conditions", "Apply directly in quizzes"],
-                highlight_text="Key Mastery Rule",
+                highlight_text=highlight_rule,
                 duration_seconds=6.0,
             ),
         ]
@@ -124,16 +188,16 @@ def _generate_deterministic_script(
                 title=f"Mastering {concept}",
                 narration=f"Welcome back. In this targeted session, we're dissecting {concept} step-by-step.",
                 onscreen_bullets=[f"Target: {concept}", "Intermediate Remediation"],
-                highlight_text=concept,
+                highlight_text=highlight_rule,
                 duration_seconds=7.0,
             ),
             VideoScene(
                 scene_number=2,
                 scene_type="concept_breakdown",
                 title="The Underlying Mechanism",
-                narration=f"According to the source material, {def_sentence}. This explains why the variables behave consistently.",
+                narration=f"According to the study material, {def_sentence} This explains why the variables behave consistently.",
                 onscreen_bullets=["Primary Mechanism", "Authoritative Rule", "Governing Equation"],
-                highlight_text=def_sentence[:80] + "..." if len(def_sentence) > 80 else def_sentence,
+                highlight_text=highlight_rule,
                 diagram_cu_id=diagram_cu_id,
                 duration_seconds=20.0,
             ),
@@ -141,9 +205,9 @@ def _generate_deterministic_script(
                 scene_number=3,
                 scene_type="formula_derivation" if "law" in concept.lower() or "formula" in source_text.lower() else "concept_breakdown",
                 title="How to Apply It",
-                narration=f"When encountering questions on this, check the boundary conditions carefully: {detail_sentence}.",
+                narration=f"When encountering questions on this, check the boundary conditions carefully: {detail_sentence}",
                 onscreen_bullets=["Step 1: Check Assumptions", "Step 2: Apply the Relationship"],
-                highlight_text="Avoid Common Pitfalls",
+                highlight_text=highlight_rule,
                 duration_seconds=11.0,
             ),
             VideoScene(
@@ -152,7 +216,7 @@ def _generate_deterministic_script(
                 title="Summary & Next Steps",
                 narration=f"That's {concept} in a nutshell. Keep these principles in mind for your next assessment.",
                 onscreen_bullets=["Clear definition locked in", "Ready for re-testing"],
-                highlight_text="Mastered",
+                highlight_text=highlight_rule,
                 duration_seconds=7.0,
             ),
         ]
@@ -285,14 +349,46 @@ Ensure the sum of all 'duration_seconds' exactly equals {target_seconds}.0 secon
             scenes_data = data.get("scenes", [])
             parsed_scenes: List[VideoScene] = []
 
+            SCENE_TYPE_MAP = {
+                "breakdown": "concept_breakdown",
+                "concept": "concept_breakdown",
+                "intro": "title_hook",
+                "hook": "title_hook",
+                "title": "title_hook",
+                "summary": "summary_takeaway",
+                "takeaway": "summary_takeaway",
+                "conclusion": "summary_takeaway",
+                "formula": "formula_derivation",
+                "derivation": "formula_derivation",
+                "diagram": "diagram_focus",
+                "visual": "diagram_focus",
+            }
+            VALID_SCENE_TYPES = {
+                "title_hook", "concept_breakdown", "diagram_focus", "formula_derivation", "summary_takeaway"
+            }
+            _, _, default_rule = _get_domain_defaults(target.concept_name)
+
             for s in scenes_data:
+                raw_st = str(s.get("scene_type", "concept_breakdown")).strip().lower()
+                stype = SCENE_TYPE_MAP.get(raw_st, raw_st)
+                if stype not in VALID_SCENE_TYPES:
+                    stype = "concept_breakdown"
+
+                hl_raw = s.get("highlight_text")
+                hl_clean = _sanitize_text(hl_raw) if hl_raw else None
+                if not hl_clean and stype == "formula_derivation":
+                    hl_clean = default_rule
+
+                bullets = [_sanitize_text(str(b)) for b in s.get("onscreen_bullets", [])]
+                bullets = [b for b in bullets if b][:5]
+
                 scene = VideoScene(
                     scene_number=int(s.get("scene_number", len(parsed_scenes) + 1)),
-                    scene_type=s.get("scene_type", "concept_breakdown"),
-                    title=str(s.get("title", target.concept_name))[:100],
-                    narration=str(s.get("narration", "")),
-                    onscreen_bullets=[str(b) for b in s.get("onscreen_bullets", [])][:5],
-                    highlight_text=s.get("highlight_text"),
+                    scene_type=stype,
+                    title=_sanitize_text(str(s.get("title", target.concept_name)))[:100] or target.concept_name,
+                    narration=_sanitize_text(str(s.get("narration", ""))),
+                    onscreen_bullets=bullets,
+                    highlight_text=hl_clean,
                     diagram_cu_id=diagram_cu_id,
                     duration_seconds=float(s.get("duration_seconds", target_seconds / max(1, len(scenes_data)))),
                 )

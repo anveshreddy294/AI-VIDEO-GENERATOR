@@ -67,19 +67,32 @@ def _draw_rounded_rectangle(
 
 
 def _resolve_diagram_path(source_id: str, diagram_cu_id: Optional[str]) -> Optional[Path]:
-    """Find the local disk path of an embedded diagram if referenced."""
-    if not diagram_cu_id:
-        return None
+    """Find the local disk path of an embedded diagram or uploaded image."""
+    if diagram_cu_id:
+        units = get_content_units(source_id)
+        for u in units:
+            if u.content_id == diagram_cu_id:
+                img_path = getattr(u, "image_path", None)
+                if img_path and Path(img_path).exists():
+                    return Path(img_path)
+                break
 
-    units = get_content_units(source_id)
-    for u in units:
-        if u.content_id == diagram_cu_id:
-            img_path = getattr(u, "image_path", None)
-            if img_path:
-                p = Path(img_path)
-                if p.exists():
-                    return p
-            break
+    # Look for uploaded source files (e.g. original.png, diagram.jpg)
+    from ...core.config import BASE_DIR
+    search_dirs = [
+        settings.upload_dir / source_id,
+        settings.runtime_dir / "uploads" / source_id,
+        BASE_DIR / "storage" / "uploads" / source_id,
+        BASE_DIR / "storage" / "runtime" / "registry" / source_id,
+        BASE_DIR / "storage" / "registry" / source_id,
+    ]
+    for s_dir in search_dirs:
+        if s_dir.exists():
+            for ext in ("*.png", "*.jpg", "*.jpeg"):
+                matches = list(s_dir.glob(ext))
+                if matches:
+                    return matches[0]
+
     return None
 
 
@@ -153,6 +166,16 @@ def render_scene_frame(
 
     # 6. Emphasized Highlight Card / Formula Callout
     if scene.highlight_text:
+        # Sanitize highlight text from any accidental leaked tags
+        clean_highlight = (
+            scene.highlight_text
+            .replace("[IMAGE:", "")
+            .replace("[No description returned by vision API]", "")
+            .strip()
+        )
+        if not clean_highlight or clean_highlight.startswith("[") or "no description" in clean_highlight.lower():
+            clean_highlight = f"Mastery Rule: Always verify governing conditions for {concept_name}."
+
         callout_top = max(bullet_y + 25, card_bottom - 210)
         callout_bottom = card_bottom - 35
         _draw_rounded_rectangle(
@@ -166,7 +189,25 @@ def render_scene_frame(
         # Accent left line
         draw.line([(120, callout_top + 10), (120, callout_bottom - 10)], fill=COLOR_ACCENT_CYAN, width=4)
         draw.text((140, callout_top + 15), "KEY MASTERY RULE:", font=font_small, fill=COLOR_ACCENT_AMBER)
-        draw.text((140, callout_top + 45), scene.highlight_text, font=font_highlight, fill=COLOR_TEXT_PRIMARY)
+
+        # Word-wrap highlight text to fit comfortably
+        words = clean_highlight.split()
+        lines = []
+        cur_line = []
+        max_chars = 45 if has_diagram else 80
+        for w in words:
+            if len(" ".join(cur_line + [w])) <= max_chars:
+                cur_line.append(w)
+            else:
+                lines.append(" ".join(cur_line))
+                cur_line = [w]
+        if cur_line:
+            lines.append(" ".join(cur_line))
+
+        curr_y = callout_top + 45
+        for h_line in lines[:2]:
+            draw.text((140, curr_y), h_line, font=font_highlight, fill=COLOR_TEXT_PRIMARY)
+            curr_y += 38
 
     # 7. Diagram Column (Right Column if present)
     if has_diagram:
