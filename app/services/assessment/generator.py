@@ -385,3 +385,6 @@ def _parse_json(raw: str) -> dict:
     """Extract JSON from LLM output, tolerating markdown fences."""
     without_fences = re.sub(r"```(?:json)?", "", raw).strip()
     return json.loads(without_fences)
+
+
+generate_question_for_concept = generate_question

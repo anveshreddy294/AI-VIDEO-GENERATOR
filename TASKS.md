@@ -53,26 +53,87 @@
 
 ## 3. Pending Tasks
 
-### Step 3: Targeted AI Video Generation Engine (Upcoming Phase)
-- [ ] **Video Script Generation Service**:
-  - Ingest `VideoTarget` items from the `VideoTargetMatrix`.
-  - Retrieve original text and diagram descriptions from grounded `chunk_ids` and `source_content_ids`.
-  - Prompt LLM to produce structured scene-by-scene script JSON (scene number, visual action, voiceover narration, on-screen text, duration in seconds).
-- [ ] **Voiceover Audio Synthesizer**:
-  - Integrate Text-to-Speech (TTS) engine (e.g. Edge-TTS, ElevenLabs, or Coqui/Bark).
-  - Generate timed audio tracks matching the target durations (30s / 45s / 60s).
-- [ ] **Visual Animation & Scene Composition**:
-  - Evaluate and integrate video rendering framework (e.g. MoviePy, Manim for mathematical/technical concepts, or Remotion/Canvas).
-  - Animate diagrams and display callout bullet points corresponding to source material.
-- [ ] **Audio/Video Stitching & Export Pipeline**:
-  - Render final MP4 files to `storage/videos/<student_id>_<concept_id>.mp4`.
-  - Expose API endpoints to stream or download generated video lessons: `GET /videos/{video_id}`.
-- [ ] **Dashboard Video Player**:
-  - Add video playback modal directly into the Web dashboard so students can watch remediation lessons immediately after quiz completion.
+### Step 3: Targeted AI Video Generation Engine
+- [x] **Video Script Generation Service**:
+  - [x] Ingest `VideoTarget` items from `VideoTargetMatrix`.
+  - [x] Retrieve original text and diagram descriptions from grounded `chunk_ids` and `source_content_ids`.
+  - [x] Prompt LLM to produce structured scene-by-scene script JSON matching 30s/45s/60s duration targets.
+- [x] **Voiceover Audio Synthesizer**:
+  - [x] Offline/online TTS audio synthesis via Edge-TTS / pyttsx3 fallback.
+  - [x] Timed audio tracks with duration measurement and concatenation.
+- [x] **Visual Animation & Scene Composition**:
+  - [x] 1080p slide & diagram frame rendering with dark-mode typography.
+- [x] **Audio/Video Stitching & Export Pipeline**:
+  - [x] FFmpeg multiplexing of voiceover audio and visual frames.
+  - [x] WebVTT subtitle track generation for synchronized captioning.
+  - [x] Expose `/video/generate`, `/video/status/{job_id}`, and `/video/{video_id}/stream`.
+- [x] **Dashboard Video Player**:
+  - [x] Embedded HTML5 video player modal directly in the Web dashboard.
 
-### Step 4: Dynamic RAG & Interactive Learning Agent
-- [ ] Implement interactive conversational RAG allowing students to ask clarifying questions about specific video timestamps.
-- [ ] Cross-reference Qdrant Layer A chunks during student chat interactions.
+### Step 4: Remediation Verification & Re-Testing Loop
+- [x] **Remediation Engine (`app/services/remediation/engine.py`)**:
+  - [x] Grounded verification question generation (`create_remediation_session`) using `application` and `misconception` pedagogical variants.
+  - [x] Hidden answer key protection (`SafeQuestion`).
+  - [x] Grading & State Transition (`evaluate_remediation_submission`): `LEARNING` -> `MASTERED`.
+  - [x] Anti-loop kill switch (`REQUIRES_HUMAN_FALLBACK`) after 3 failed attempts.
+  - [x] Automatic resolution of `VideoTargetMatrix` and updating of `StudentLearningProfile`.
+- [x] **Remediation REST API (`app/api/remediation.py`)**:
+  - [x] `POST /remediation/start`
+  - [x] `POST /remediation/submit`
+- [x] **Interactive Dashboard Integration (`app/api/dashboard.py`)**:
+  - [x] 🎯 Verify Mastery (Re-Test) action button beneath video player.
+  - [x] In-modal verification quiz card and instant grading feedback.
+  - [x] Real-time dynamic updates for badges (Amber ⚠ -> Green ✔ Mastered), overall score, and target queue.
+- [x] **Test Suite**:
+  - [x] `test_step4_remediation_loop.py` passing 5/5 test cases.
+
+---
+
+### Interactive Video RAG & Timestamp Q&A Agent
+- [x] **Video RAG Engine (`app/services/video_rag/engine.py`)**:
+  - [x] Accurate timestamp-to-scene resolution (`get_active_scene_at_timestamp`).
+  - [x] Multi-source grounded retrieval (`retrieve_grounding_citations`) combining Qdrant Layer A vectors and registered ContentUnits.
+  - [x] Pedagogical QA generator (`answer_video_question`) with scene context, textbook chunk citations, and follow-up prompts.
+  - [x] Offline deterministic fallback when external LLM providers are unavailable.
+- [x] **Video RAG REST API (`app/api/video_rag.py`)**:
+  - [x] `POST /video/rag/ask` with request validation, playback timestamp synchronization, and error handling.
+- [x] **Interactive Dashboard Integration (`app/api/dashboard.py`)**:
+  - [x] 💬 Video Q&A Assistant panel directly embedded inside the video modal.
+  - [x] Real-time HTML5 video playhead sync (`timeupdate` listener).
+  - [x] Quick-prompt pills (Explain Scene, Real-World Example, Core Principle).
+  - [x] Interactive clickable scene jump buttons (clicking seeks the video player to exact timestamp).
+  - [x] Source citation tags and clickable follow-up suggestions.
+- [x] **Verification Test Suite**:
+  - [x] `test_video_rag_agent.py` passing 5/5 test cases.
+
+---
+
+### Instructor Analytics & Human Intervention Portal
+- [x] **Analytics Engine (`app/services/instructor/analytics.py`)**:
+  - [x] Scan and aggregate student profiles across all uploaded materials.
+  - [x] Anti-loop kill-switch alert discovery (`REQUIRES_HUMAN_FALLBACK`).
+  - [x] Prerequisite bottleneck detection using KnowledgeGraph dependency traversal.
+  - [x] Instructor override and reset mechanism (`reset_student_concept_status`).
+- [x] **Instructor REST API (`app/api/instructor.py`)**:
+  - [x] `GET /instructor/api/overview` with cohort KPIs, active alerts, and concept analytics.
+  - [x] `POST /instructor/api/reset-mastery` to reset iterations or manually verify mastery.
+- [x] **Web Console UI (`app/api/instructor.py`)**:
+  - [x] Dark-mode responsive portal at `GET /instructor`.
+  - [x] KPI metrics: Total Students, Interventions Needed, Average Cohort Mastery, Prerequisite Bottlenecks.
+  - [x] Actionable alerts table with "Reset to Learning" and "Verify Mastered" controls.
+  - [x] Color-coded concept health heatmap with visual distribution bars.
+  - [x] Direct navigation link in dashboard header.
+- [x] **Verification Test Suite**:
+  - [x] `test_instructor_portal.py` passing 5/5 test cases.
+
+---
+
+## 2. Upcoming Roadmap Options
+
+### Option C: Production Deployment & Asynchronous Worker Queue
+- Transition background video rendering from in-process polling to Celery / Redis / BackgroundTasks.
+- Student authentication and multi-tenant persistence.
+- Docker compose containerization for the full pipeline.
 
 ### Enterprise & Platform Hardening
 - [ ] Implement user authentication (JWT / OAuth2).

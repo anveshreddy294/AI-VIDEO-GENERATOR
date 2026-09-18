@@ -191,16 +191,17 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     return len(points)
 
 
-def search_layer_a(query: str, limit: int = 5) -> list[dict[str, Any]]:
+def search_layer_a(query: str, limit: int = 5, source_id: str | None = None) -> list[dict[str, Any]]:
     client = get_client()
     vector = _embed([query])[0]
+    must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
+    if source_id:
+        must_conditions.append(qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)))
     hits = client.search(
         collection_name=settings.collection_name,
         query_vector=vector,
         limit=limit,
-        query_filter=qmodels.Filter(
-            must=[qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
-        ),
+        query_filter=qmodels.Filter(must=must_conditions),
     )
     return [hit.payload for hit in hits]
 

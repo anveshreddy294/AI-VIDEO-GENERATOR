@@ -59,6 +59,7 @@ REM --- Start server ---
 echo.
 echo [OK] Starting FastAPI backend on http://127.0.0.1:8000 ...
 echo [INFO] Dashboard:      http://localhost:8000
+echo [INFO] Instructor UI:  http://localhost:8000/instructor
 echo [INFO] Swagger UI:     http://localhost:8000/docs
 echo [INFO] Health Check:   http://localhost:8000/health
 echo [INFO] Press CTRL+C to stop.

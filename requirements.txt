@@ -33,3 +33,4 @@ faster-whisper==1.1.0
 # Step 3: Targeted AI Video Generation Engine
 edge-tts>=6.1.12
 imageio-ffmpeg>=0.5.1
+Pillow>=10.0.0

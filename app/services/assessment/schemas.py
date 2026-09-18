@@ -191,6 +191,7 @@ class ConceptMastery(BaseModel):
     iteration_count: int = Field(default=0, description="How many times this concept was tested and failed")
     last_attempt_at: str | None = None
     last_score: float = Field(default=0.0, description="Score on latest attempt (0.0 - 100.0)")
+    instructor_notes: str | None = Field(default=None, description="Optional instructor notes or intervention log")
 
 
 class VideoTarget(BaseModel):

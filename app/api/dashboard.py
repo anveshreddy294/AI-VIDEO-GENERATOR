@@ -537,9 +537,10 @@ DASHBOARD_HTML = """
     <div class="header">
         <h1>
             <span>🎓 VisualAI</span>
-            <span class="version">v0.2.0</span>
+            <span class="version">v0.4.0</span>
         </h1>
         <nav class="nav-links">
+            <a href="/instructor" target="_blank" style="color:#f0883e;font-weight:600;">👩‍🏫 Instructor Portal</a>
             <a href="/docs" target="_blank">Swagger API</a>
             <a href="/redoc" target="_blank">ReDoc</a>
             <a href="/health" target="_blank">Health Check</a>
@@ -694,11 +695,73 @@ DASHBOARD_HTML = """
                             <div id="modalProgressSub" style="color:#8b949e;font-size:12px;margin-top:6px;">Generating timed script, voiceover, and visual cards</div>
                         </div>
                         <div id="modalVideoWrapper" style="display:none;text-align:center;">
-                            <video id="html5VideoPlayer" controls style="width:100%;max-height:480px;border-radius:8px;background:#000;outline:none;" preload="auto">
+                            <video id="html5VideoPlayer" controls style="width:100%;max-height:420px;border-radius:8px;background:#000;outline:none;" preload="auto">
                                 <source id="videoSource" src="" type="video/mp4">
                                 <track id="videoTrack" label="English" kind="subtitles" srclang="en" src="" default>
                                 Your browser does not support the video tag.
                             </video>
+
+                            <!-- Video RAG & Timestamp Q&A Assistant -->
+                            <div id="videoRagSection" style="margin-top:16px;padding-top:14px;border-top:1px solid #30363d;text-align:left;width:100%;box-sizing:border-box;">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                                    <div style="display:flex;align-items:center;gap:8px;">
+                                        <span style="font-weight:700;color:#f0f6fc;font-size:14px;">💬 Video Q&A Assistant</span>
+                                        <span id="lblVideoTimestampBadge" class="badge badge-blue" style="font-size:11px;">⏱ Syncing Playhead...</span>
+                                    </div>
+                                    <button onclick="toggleRagPanel()" id="btnToggleRag" style="background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">Hide / Show</button>
+                                </div>
+
+                                <div id="videoRagContent" style="display:block;">
+                                    <!-- Quick Prompt Pills -->
+                                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+                                        <button onclick="askQuickQuestion('Explain what just happened in this scene.')" class="meta-chip" style="cursor:pointer;border:1px solid #30363d;background:#161b22;color:#58a6ff;font-size:12px;padding:4px 8px;">💡 Explain Current Scene</button>
+                                        <button onclick="askQuickQuestion('Can you give a concrete real-world example of this concept?')" class="meta-chip" style="cursor:pointer;border:1px solid #30363d;background:#161b22;color:#58a6ff;font-size:12px;padding:4px 8px;">🌍 Real-World Example</button>
+                                        <button onclick="askQuickQuestion('What are the critical governing principles behind this?')" class="meta-chip" style="cursor:pointer;border:1px solid #30363d;background:#161b22;color:#58a6ff;font-size:12px;padding:4px 8px;">⚖ Core Principle</button>
+                                    </div>
+
+                                    <!-- Chat Messages Stream -->
+                                    <div id="ragChatLog" style="max-height:220px;overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px;font-size:13px;box-sizing:border-box;">
+                                        <div style="color:#8b949e;font-size:12px;font-style:italic;">Ask any question about this video or click a quick prompt above. The assistant answers grounded in the current scene timestamp and course textbook.</div>
+                                    </div>
+
+                                    <!-- Input Row -->
+                                    <div style="display:flex;gap:8px;">
+                                        <input type="text" id="ragInput" class="form-input" placeholder="Ask a question about this video or concept..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') sendRagQuestion();" />
+                                        <button id="btnSendRag" onclick="sendRagQuestion()" class="action-btn" style="width:auto;padding:8px 16px;font-size:13px;white-space:nowrap;">
+                                            <span>Send ➔</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Verification Re-Testing Action -->
+                            <div id="remediationActionArea" style="margin-top:16px;padding-top:14px;border-top:1px solid #30363d;display:flex;flex-direction:column;gap:12px;align-items:center;">
+                                <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
+                                    <div style="text-align:left;">
+                                        <div style="font-weight:600;color:#f0f6fc;font-size:14px;">Mastery Verification</div>
+                                        <div style="font-size:12px;color:#8b949e;">Completed this video? Prove your comprehension to earn mastery.</div>
+                                    </div>
+                                    <button id="btnVerifyMastery" onclick="launchRemediationCheck()" class="action-btn" style="width:auto;padding:8px 18px;font-size:13px;display:flex;align-items:center;gap:6px;background:#238636;color:#fff;">
+                                        <span>🎯 Verify Mastery (Re-Test)</span>
+                                    </button>
+                                </div>
+
+                                <!-- Remediation Question Card -->
+                                <div id="remediationCard" style="display:none;width:100%;text-align:left;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;box-sizing:border-box;">
+                                    <div id="remediationCardHeader" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                                        <span class="badge badge-blue" id="lblRemediationVariant">APPLICATION CHECK</span>
+                                        <span class="badge badge-amber" id="lblRemediationDifficulty">TARGETED</span>
+                                    </div>
+                                    <div id="remediationStem" style="color:#f0f6fc;font-weight:600;font-size:14px;line-height:1.4;margin-bottom:12px;"></div>
+                                    <div id="remediationOptions" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+                                    <button id="btnSubmitRemediation" onclick="submitRemediationCheck()" class="action-btn" style="width:100%;padding:10px;font-size:14px;">
+                                        <span>Submit Verification</span>
+                                    </button>
+                                </div>
+
+                                <!-- Remediation Result Feedback -->
+                                <div id="remediationFeedback" style="display:none;width:100%;text-align:left;border-radius:8px;padding:14px;box-sizing:border-box;"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -744,6 +807,19 @@ DASHBOARD_HTML = """
                 <div class="step-endpoint">
                     <span class="method method-get">GET</span>
                     <span class="endpoint-path">/assessment/video-target/{student_id}/{source_id}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="step step-4">
+            <div class="step-indicator">4</div>
+            <div class="step-content">
+                <div class="step-label">Step 4 — Remediation Verification</div>
+                <div class="step-name">Comprehension Re-Testing Loop</div>
+                <div class="step-desc">Administers grounded 1-2 question checks after remedial videos, transitions mastery to MASTERED, and resolves the target matrix.</div>
+                <div class="step-endpoint">
+                    <span class="method method-post">POST</span>
+                    <span class="endpoint-path">/remediation/start &amp; /remediation/submit</span>
                 </div>
             </div>
         </div>
@@ -1258,11 +1334,17 @@ DASHBOARD_HTML = """
             resultsBox.scrollIntoView({ behavior: 'smooth' });
         }
 
+        let currentRemediationTarget = null;
+        let activeRemediationSession = null;
+        let activeVideoId = null;
+
         async function generateAndPlayVideo(conceptId, conceptName, difficulty, targetSeconds) {
             if (!currentSession) {
                 alert('No active session.');
                 return;
             }
+
+            currentRemediationTarget = { conceptId, conceptName, difficulty, targetSeconds };
 
             const modal = document.getElementById('videoModal');
             const modalTitle = document.getElementById('modalVideoTitle');
@@ -1271,6 +1353,18 @@ DASHBOARD_HTML = """
             const wrapper = document.getElementById('modalVideoWrapper');
             const progressText = document.getElementById('modalProgressText');
             const player = document.getElementById('html5VideoPlayer');
+
+            // Reset verification UI
+            const remCard = document.getElementById('remediationCard');
+            const remFeedback = document.getElementById('remediationFeedback');
+            const btnVerify = document.getElementById('btnVerifyMastery');
+            if (remCard) remCard.style.display = 'none';
+            if (remFeedback) { remFeedback.style.display = 'none'; remFeedback.innerHTML = ''; }
+            if (btnVerify) {
+                btnVerify.style.display = 'inline-flex';
+                btnVerify.disabled = false;
+                btnVerify.innerHTML = '<span>🎯 Verify Mastery (Re-Test)</span>';
+            }
 
             modalTitle.textContent = `Remediation: ${conceptName}`;
             modalSub.textContent = `${difficulty.toUpperCase()} • ${targetSeconds}s Targeted Lesson`;
@@ -1320,6 +1414,9 @@ DASHBOARD_HTML = """
                             const videoSrc = document.getElementById('videoSource');
                             const videoTrack = document.getElementById('videoTrack');
 
+                            activeVideoId = sData.video_id;
+                            resetVideoRagUI(sData.video_id);
+
                             videoSrc.src = `/video/${sData.video_id}/stream`;
                             videoTrack.src = `/video/${sData.video_id}/subtitles`;
 
@@ -1341,6 +1438,309 @@ DASHBOARD_HTML = """
 
             } catch (err) {
                 progressText.textContent = `❌ Error: ${err.message}`;
+            }
+        }
+
+        async function launchRemediationCheck() {
+            if (!currentRemediationTarget || !currentSession) return;
+            const btnVerify = document.getElementById('btnVerifyMastery');
+            btnVerify.disabled = true;
+            btnVerify.innerHTML = '<span>⏳ Preparing Verification...</span>';
+
+            const remCard = document.getElementById('remediationCard');
+            const remFeedback = document.getElementById('remediationFeedback');
+            remFeedback.style.display = 'none';
+
+            try {
+                const res = await fetch('/remediation/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: currentSession.student_id,
+                        source_id: currentSession.source_id,
+                        concept_id: currentRemediationTarget.conceptId,
+                        count: 1
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                activeRemediationSession = data;
+                const q = data.questions[0];
+
+                document.getElementById('lblRemediationVariant').textContent = (q.variant_type || 'application').toUpperCase();
+                document.getElementById('lblRemediationDifficulty').textContent = (q.difficulty || 'targeted').toUpperCase();
+                document.getElementById('remediationStem').textContent = q.stem;
+
+                const optsEl = document.getElementById('remediationOptions');
+                optsEl.innerHTML = q.options.map(opt => `
+                    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;cursor:pointer;color:#c9d1d9;font-size:13px;transition:border-color 0.2s;">
+                        <input type="radio" name="remOption" value="${opt.index}" style="cursor:pointer;" />
+                        <span>${opt.text}</span>
+                    </label>
+                `).join('');
+
+                btnVerify.style.display = 'none';
+                remCard.style.display = 'block';
+            } catch (err) {
+                btnVerify.disabled = false;
+                btnVerify.innerHTML = '<span>🎯 Verify Mastery (Re-Test)</span>';
+                alert('Could not start verification: ' + err.message);
+            }
+        }
+
+        async function submitRemediationCheck() {
+            if (!activeRemediationSession) return;
+            const selected = document.querySelector('input[name="remOption"]:checked');
+            if (!selected) {
+                alert('Please select an answer option.');
+                return;
+            }
+
+            const submitBtn = document.getElementById('btnSubmitRemediation');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span>⏳ Grading...</span>';
+
+            try {
+                const res = await fetch('/remediation/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: activeRemediationSession.session_id,
+                        student_id: activeRemediationSession.student_id,
+                        concept_id: activeRemediationSession.concept_id,
+                        answers: [{
+                            question_id: activeRemediationSession.questions[0].question_id,
+                            selected_index: parseInt(selected.value)
+                        }]
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                const remCard = document.getElementById('remediationCard');
+                const remFeedback = document.getElementById('remediationFeedback');
+                remCard.style.display = 'none';
+                remFeedback.style.display = 'block';
+
+                if (data.passed) {
+                    remFeedback.innerHTML = `
+                        <div style="background:#23863626;border:1px solid #238636;color:#3fb950;padding:14px;border-radius:8px;">
+                            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">
+                                🎉 Mastery Verified!
+                            </div>
+                            <div style="font-size:13px;color:#c9d1d9;margin-top:6px;">${data.message}</div>
+                            <div style="font-size:12px;color:#8b949e;margin-top:4px;">${data.explanations.join('<br>')}</div>
+                        </div>
+                    `;
+
+                    // Dynamic Dashboard Badge and Score Updates (Amber -> Green)
+                    if (data.profile_summary) {
+                        const strong = data.profile_summary.strong_concepts || [];
+                        const weak = data.profile_summary.weak_concepts || [];
+                        const masteriesEl = document.getElementById('lblMasteries');
+                        if (masteriesEl) {
+                            masteriesEl.innerHTML = '';
+                            strong.forEach(c => masteriesEl.innerHTML += `<span class="badge badge-green">✔ ${c} (Strong)</span> `);
+                            weak.forEach(c => masteriesEl.innerHTML += `<span class="badge badge-amber">⚠ ${c} (Needs Review)</span> `);
+                        }
+
+                        const scoreEl = document.getElementById('lblProfileScore');
+                        if (scoreEl && typeof data.profile_summary.overall_score === 'number') {
+                            scoreEl.textContent = `${data.profile_summary.overall_score.toFixed(1)}%`;
+                        }
+
+                        // Update video queue item
+                        const btnId = `btnGenVid_${currentRemediationTarget.conceptId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+                        const targetBtn = document.getElementById(btnId);
+                        if (targetBtn) {
+                            const parent = targetBtn.parentElement;
+                            if (parent) {
+                                targetBtn.remove();
+                                parent.innerHTML += '<span class="badge badge-green" style="padding:6px 12px;font-size:12px;font-weight:600;">✔ Mastered</span>';
+                            }
+                        }
+
+                        // Update badge count
+                        const badgeEl = document.getElementById('lblVideoCountBadge');
+                        if (badgeEl) {
+                            const remCount = (data.profile_summary.weak_concepts || []).length;
+                            badgeEl.textContent = `${remCount} Targets`;
+                            if (remCount === 0) {
+                                document.getElementById('lblVideoDirective').textContent = 'All assessed concepts in this assessment have been successfully mastered. No AI videos needed.';
+                            }
+                        }
+                    }
+                } else {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<span>Submit Verification</span>';
+                    remFeedback.innerHTML = `
+                        <div style="background:#da363326;border:1px solid #da3633;color:#f85149;padding:14px;border-radius:8px;">
+                            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">
+                                ❌ Verification Incomplete
+                            </div>
+                            <div style="font-size:13px;color:#c9d1d9;margin-top:6px;">${data.message}</div>
+                            <div style="font-size:12px;color:#8b949e;margin-top:4px;">${data.explanations.join('<br>')}</div>
+                            <button onclick="launchRemediationCheck()" class="action-btn" style="margin-top:10px;width:auto;padding:6px 14px;font-size:12px;">🔄 Try Again</button>
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<span>Submit Verification</span>';
+                alert('Error submitting verification: ' + err.message);
+            }
+        }
+
+        function toggleRagPanel() {
+            const content = document.getElementById('videoRagContent');
+            if (content) {
+                content.style.display = (content.style.display === 'none') ? 'block' : 'none';
+            }
+        }
+
+        function resetVideoRagUI(videoId) {
+            const chatLog = document.getElementById('ragChatLog');
+            if (chatLog) {
+                chatLog.innerHTML = `
+                    <div style="color:#8b949e;font-size:12px;font-style:italic;">
+                        Ask any question about this video or click a quick prompt above. The assistant answers grounded in the current scene timestamp and course textbook.
+                    </div>
+                `;
+            }
+            const input = document.getElementById('ragInput');
+            if (input) input.value = '';
+
+            const player = document.getElementById('html5VideoPlayer');
+            if (player && !player._timeUpdateAttached) {
+                player.addEventListener('timeupdate', () => {
+                    const cur = player.currentTime;
+                    const mins = Math.floor(cur / 60);
+                    const secs = Math.floor(cur % 60);
+                    const badge = document.getElementById('lblVideoTimestampBadge');
+                    if (badge) {
+                        badge.textContent = `⏱ At ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                    }
+                });
+                player._timeUpdateAttached = true;
+            }
+        }
+
+        function jumpToVideoTimestamp(seconds) {
+            const player = document.getElementById('html5VideoPlayer');
+            if (player) {
+                player.currentTime = parseFloat(seconds);
+                player.play().catch(() => {});
+            }
+        }
+
+        function askQuickQuestion(promptText) {
+            const input = document.getElementById('ragInput');
+            if (input) {
+                input.value = promptText;
+                sendRagQuestion();
+            }
+        }
+
+        async function sendRagQuestion() {
+            if (!activeVideoId) {
+                alert('Please wait for the video to finish loading.');
+                return;
+            }
+            const input = document.getElementById('ragInput');
+            const question = input.value.trim();
+            if (!question) return;
+
+            const player = document.getElementById('html5VideoPlayer');
+            const timestamp = player ? player.currentTime : 0;
+            const chatLog = document.getElementById('ragChatLog');
+
+            // Append User Bubble
+            const userMsg = document.createElement('div');
+            userMsg.style.cssText = 'background:#1f6feb26;border:1px solid #1f6feb55;padding:8px 12px;border-radius:6px;align-self:flex-end;max-width:85%;color:#f0f6fc;';
+            const curMins = Math.floor(timestamp / 60);
+            const curSecs = Math.floor(timestamp % 60);
+            userMsg.innerHTML = `<div style="font-size:11px;color:#58a6ff;font-weight:600;margin-bottom:2px;">You (${curMins}:${curSecs < 10 ? '0' : ''}${curSecs})</div><div>${question}</div>`;
+            chatLog.appendChild(userMsg);
+            input.value = '';
+
+            // Loading Indicator
+            const loadingMsg = document.createElement('div');
+            loadingMsg.style.cssText = 'background:#161b22;border:1px solid #30363d;padding:8px 12px;border-radius:6px;align-self:flex-start;max-width:85%;color:#8b949e;font-style:italic;';
+            loadingMsg.textContent = 'Analyzing video scene and textbook chunks...';
+            chatLog.appendChild(loadingMsg);
+            chatLog.scrollTop = chatLog.scrollHeight;
+
+            const sendBtn = document.getElementById('btnSendRag');
+            sendBtn.disabled = true;
+
+            try {
+                const res = await fetch('/video/rag/ask', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_id: activeVideoId,
+                        question: question,
+                        timestamp: timestamp,
+                        student_id: currentSession ? currentSession.student_id : 'student_1'
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                loadingMsg.remove();
+
+                // Assistant Bubble
+                const botMsg = document.createElement('div');
+                botMsg.style.cssText = 'background:#161b22;border:1px solid #30363d;padding:10px 14px;border-radius:6px;align-self:flex-start;max-width:92%;color:#e1e4e8;';
+
+                let sceneChip = '';
+                if (data.active_scene) {
+                    sceneChip = `
+                        <button onclick="jumpToVideoTimestamp(${data.active_scene.start_seconds})" class="badge badge-blue" style="cursor:pointer;border:none;margin-right:6px;font-size:11px;" title="Click to seek video">
+                            ▶ Scene ${data.active_scene.scene_number} (${data.active_scene.timestamp_label})
+                        </button>
+                    `;
+                }
+
+                let citationsHtml = '';
+                if (data.citations && data.citations.length > 0) {
+                    citationsHtml = '<div style="margin-top:8px;padding-top:6px;border-top:1px solid #21262d;font-size:11px;color:#8b949e;display:flex;flex-wrap:wrap;gap:4px;"><strong>Sources:</strong>';
+                    data.citations.forEach(c => {
+                        citationsHtml += `<span class="meta-chip">${c.chunk_id}${c.page ? ` (p.${c.page})` : ''}</span>`;
+                    });
+                    citationsHtml += '</div>';
+                }
+
+                let suggestionsHtml = '';
+                if (data.suggested_questions && data.suggested_questions.length > 0) {
+                    suggestionsHtml = '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">';
+                    data.suggested_questions.forEach(sq => {
+                        const safeSq = sq.replace(/'/g, "\\'");
+                        suggestionsHtml += `<button onclick="askQuickQuestion('${safeSq}')" class="meta-chip" style="cursor:pointer;background:#21262d;color:#58a6ff;font-size:11px;padding:2px 6px;">❓ ${sq}</button>`;
+                    });
+                    suggestionsHtml += '</div>';
+                }
+
+                botMsg.innerHTML = `
+                    <div style="font-size:11px;color:#3fb950;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
+                        <span>🎓 Video Assistant</span>
+                        ${sceneChip}
+                    </div>
+                    <div style="line-height:1.4;white-space:pre-line;">${data.answer}</div>
+                    ${citationsHtml}
+                    ${suggestionsHtml}
+                `;
+                chatLog.appendChild(botMsg);
+                chatLog.scrollTop = chatLog.scrollHeight;
+            } catch (err) {
+                loadingMsg.style.color = '#f85149';
+                loadingMsg.textContent = '❌ Error: ' + err.message;
+            } finally {
+                sendBtn.disabled = false;
             }
         }
 

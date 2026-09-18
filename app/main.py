@@ -7,18 +7,24 @@ from .api.upload import router as upload_router
 from .api.assessment import router as assessment_router
 from .api.pipeline import router as pipeline_router
 from .api.video import router as video_router
+from .api.remediation import router as remediation_router
+from .api.video_rag import router as video_rag_router
+from .api.instructor import router as instructor_router
 
 app = FastAPI(
     title="VisualAI — Personalized Educational Video Platform",
     description=(
-        "Upload study material → Extract knowledge → Generate quizzes → Track mastery → Generate targeted videos.\n\n"
+        "Upload study material → Extract knowledge → Generate quizzes → Track mastery → Generate targeted videos → Verify mastery → Interactive Video RAG → Instructor Analytics.\n\n"
         "**Step 1 — Ingestion:** Upload PDF, image, text, or video. "
         "System extracts content, builds knowledge graph, stores in vector DB.\n\n"
         "**Step 2 — Assessment:** Generate grounded quiz questions from uploaded material. "
         "Grade submissions, detect prerequisite gaps, track student mastery.\n\n"
-        "**Step 3 — Video Generation:** Synthesize timed multi-scene remedial video lessons with voiceover and diagrams."
+        "**Step 3 — Video Generation:** Synthesize timed multi-scene remedial video lessons with voiceover and diagrams.\n\n"
+        "**Step 4 — Remediation Verification:** Grounded 1-2 question re-testing loop to verify comprehension and close knowledge gaps.\n\n"
+        "**Interactive Video RAG:** In-player timestamp-synchronized conversational Q&A agent.\n\n"
+        "**Instructor Analytics:** Human intervention management for kill-switch alerts and cohort gap heatmaps."
     ),
-    version="0.3.0",
+    version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -28,6 +34,9 @@ app.include_router(upload_router)
 app.include_router(assessment_router)
 app.include_router(pipeline_router)
 app.include_router(video_router)
+app.include_router(remediation_router)
+app.include_router(video_rag_router)
+app.include_router(instructor_router)
 
 
 @app.get("/health")
@@ -35,8 +44,8 @@ def health() -> dict:
     return {
         "status": "ok",
         "service": "VisualAI",
-        "version": "0.3.0",
-        "steps": ["ingestion", "assessment", "video_generation"],
+        "version": "0.4.0",
+        "steps": ["ingestion", "assessment", "video_generation", "remediation", "video_rag", "instructor_analytics"],
     }
 
 
