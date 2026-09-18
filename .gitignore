@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .venv/
 .env
+storage/runtime/
 storage/uploads/*
 storage/processed/*
 storage/qdrant/*
@@ -10,5 +11,7 @@ storage/qdrant_storage/*
 storage/assessment_sessions/*
 storage/learning_profiles/*
 storage/video_targets/*
+storage/test_scratch/*
+storage/registry/SRC_*/
 !.gitkeep
 .DS_Store

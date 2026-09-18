@@ -269,7 +269,7 @@ def test_step2_flow():
     print(f"   Summary Directive: {video_matrix.summary}")
     print(f"   Target Video Items ({len(video_matrix.videos)}):")
     for v in video_matrix.videos:
-        print(f"   - Concept: {v.concept_name} [{v.difficulty}] → Duration: {v.target_seconds}s | Directive: \"{v.directive}\"")
+        print(f"   - Concept: {v.concept_name} [{v.difficulty}] -> Duration: {v.target_seconds}s | Directive: \"{v.directive}\"")
 
     # Verify pass filtering: Force (100%) must NOT be in video targets
     video_concept_ids = [v.concept_id for v in video_matrix.videos]

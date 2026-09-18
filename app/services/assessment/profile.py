@@ -7,22 +7,23 @@ These profiles are the handoff artifact to Step 3 (video generation).
 import json
 from pathlib import Path
 
-from ...core.config import BASE_DIR
+from ...core.config import BASE_DIR, settings
 from .schemas import ConceptMastery, StudentLearningProfile
 
-PROFILES_DIR = BASE_DIR / "storage" / "learning_profiles"
+PROFILES_DIR = getattr(settings, "learning_profiles_dir", BASE_DIR / "storage" / "runtime" / "learning_profiles")
 PROFILES_DIR.mkdir(parents=True, exist_ok=True)
+LEGACY_PROFILES_DIR = BASE_DIR / "storage" / "learning_profiles"
 
 
 def _profile_path(student_id: str, source_id: str) -> Path:
-    """Get the file path for a student's profile on a specific source."""
+    """Get the file path for a student's profile on a specific source in runtime storage."""
     safe_student = student_id.replace("/", "_").replace("\\", "_")
     safe_source = source_id.replace("/", "_").replace("\\", "_")
     return PROFILES_DIR / f"{safe_student}_{safe_source}.json"
 
 
 def save_profile(profile: StudentLearningProfile) -> None:
-    """Persist a StudentLearningProfile to disk."""
+    """Persist a StudentLearningProfile to runtime disk."""
     path = _profile_path(profile.student_id, profile.source_id)
     path.write_text(
         json.dumps(profile.model_dump(), indent=2, default=str),
@@ -31,8 +32,13 @@ def save_profile(profile: StudentLearningProfile) -> None:
 
 
 def load_profile(student_id: str, source_id: str) -> StudentLearningProfile | None:
-    """Load a StudentLearningProfile from disk. Returns None if not found."""
+    """Load a StudentLearningProfile from runtime disk with legacy fallback. Returns None if not found."""
     path = _profile_path(student_id, source_id)
+    if not path.exists() and LEGACY_PROFILES_DIR.exists():
+        safe_student = student_id.replace("/", "_").replace("\\", "_")
+        safe_source = source_id.replace("/", "_").replace("\\", "_")
+        path = LEGACY_PROFILES_DIR / f"{safe_student}_{safe_source}.json"
+
     if not path.exists():
         return None
     try:

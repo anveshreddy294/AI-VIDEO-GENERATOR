@@ -59,6 +59,7 @@ class Question(BaseModel):
     timestamp_end: float | str | None = Field(default=None, description="Video end timestamp if applicable")
     source_id: str = Field(description="The source document this question came from")
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
+    variant_type: str | None = Field(default=None, description="Pedagogical variant angle: definition, relationship, application, comparison, misconception")
 
 
 class SafeQuestion(BaseModel):
@@ -71,6 +72,7 @@ class SafeQuestion(BaseModel):
     stem: str
     options: list[SafeOption]
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
+    variant_type: str | None = None
     page_start: int | None = None
     page_end: int | None = None
     chunk_ids: list[str] = Field(default_factory=list)
@@ -193,28 +195,47 @@ class ConceptMastery(BaseModel):
 
 class VideoTarget(BaseModel):
     """A single concept that needs a targeted AI explanation video (Step 3 handoff)."""
+    session_id: str = Field(default="", description="The specific assessment session ID this target was evaluated in")
+    student_id: str = Field(default="", description="The student ID")
+    source_id: str = Field(default="", description="The source document/asset ID")
     concept_id: str
     concept_name: str
     definition: str = ""
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
-    score: float = Field(description="Per-concept score on the latest attempt (0-100)")
+    assessment_score: float = Field(default=0.0, description="Per-concept score on the evaluated attempt (0-100)")
+    score: float = Field(default=0.0, description="Backward-compatible alias for assessment_score")
     status: Literal["NEEDS_VIDEO", "REQUIRES_HUMAN_FALLBACK"] = "NEEDS_VIDEO"
     target_seconds: int = Field(default=30, description="Target AI video duration: 30s foundational, 45s intermediate, 60s advanced")
+    video_objective: str = Field(default="", description="Explicit pedagogical objective for Step 3 animation/narration")
     directive: str = Field(default="", description="Human-readable directive for video generation")
-    chunk_ids: list[str] = Field(default_factory=list, description="Provenance: source chunks to animate/narrate")
+    question_id: str = Field(default="", description="The exact question ID where the learner demonstrated the gap")
+    question_stem: str = Field(default="", description="The stem of the failed question")
+    selected_index: int = Field(default=-1, description="Student's chosen answer option index")
+    correct_index: int = Field(default=-1, description="Authoritative correct answer option index")
+    explanation: str = Field(default="", description="Authoritative explanation from hidden answer key")
+    misconception: str = Field(default="", description="Deterministic misconception/gap analysis comparing student choice vs correct answer")
+    prerequisite_concept_ids: list[str] = Field(default_factory=list, description="Direct prerequisites defined in KnowledgeGraph")
+    prerequisite_gaps: list[str] = Field(default_factory=list, description="Specific prerequisite concepts that were also failed")
+    chunk_ids: list[str] = Field(default_factory=list, description="Provenance: source chunk IDs used for grounding")
     source_content_ids: list[str] = Field(default_factory=list, description="ContentUnit IDs for Step 3 grounding")
     page_start: int | None = None
     page_end: int | None = None
+    timestamp_start: float | str | None = None
+    timestamp_end: float | str | None = None
+    authoritative_evidence: list[str] = Field(default_factory=list, description="Exact source text excerpts from Qdrant chunks or fallback ContentUnits")
+    scope: Literal["current_session", "historical_review"] = Field(default="current_session", description="Distinguishes current-session failures from historical review")
 
 
 class VideoTargetMatrix(BaseModel):
     """THE Step 2 → Step 3 handoff artifact. Tells the video engine exactly what to animate.
 
     Built after grading:
+    - Only concepts demonstrated as weak/incorrect in the current session receive video targets.
     - Everything passed (score >= threshold) is filtered out.
-    - Everything on the kill switch (>3 historical failures) is tagged REQUIRES_HUMAN_FALLBACK.
-    - Every failed concept gets a duration-scaled video target (30s / 45s / 60s).
+    - Everything on the kill switch (>3 historical failures) is tagged REQUIRES_HUMAN_FALLBACK and routed to human intervention.
+    - Every failed concept gets a duration-scaled video target (30s / 45s / 60s) with authoritative grounding.
     """
+    session_id: str = Field(default="", description="The assessment session ID generating this matrix")
     student_id: str
     source_id: str
     source_filename: str = ""
@@ -225,7 +246,8 @@ class VideoTargetMatrix(BaseModel):
     schema_version: int = 1
     decision: Literal["GENERATE_VIDEOS", "ALL_MASTERED", "HUMAN_INTERVENTION"] = "GENERATE_VIDEOS"
     summary: str = Field(default="", description="Direct summary instruction for Step 3, e.g. 'Generate a 30-second AI video explaining Concept B, and a 45-second AI video explaining Concept C.'")
-    videos: list[VideoTarget] = Field(default_factory=list)
+    videos: list[VideoTarget] = Field(default_factory=list, description="Current-session remediation video targets")
+    historical_review_videos: list[VideoTarget] = Field(default_factory=list, description="Optional historical review video targets for older weak concepts")
     human_intervention_concepts: list[str] = Field(
         default_factory=list,
         description="Concept names that hit the anti-loop kill switch requiring human intervention",
@@ -234,6 +256,29 @@ class VideoTargetMatrix(BaseModel):
         default_factory=list,
         description="Concept IDs requiring human instructor intervention",
     )
+
+
+class ProfileSummary(BaseModel):
+    """Aggregate learning profile summary returned with submission results."""
+    overall_score: float = Field(description="Historical aggregate average score across all sessions (0-100)")
+    strong_concepts: list[str] = Field(default_factory=list, description="List of mastered concept names")
+    weak_concepts: list[str] = Field(default_factory=list, description="List of weak/learning/kill-switch concept names")
+    strong_concept_ids: list[str] = Field(default_factory=list, description="List of mastered concept IDs")
+    weak_concept_ids: list[str] = Field(default_factory=list, description="List of weak/learning/kill-switch concept IDs")
+
+
+class AssessmentSubmitResponse(BaseModel):
+    """Authoritative API response schema for POST /assessment/submit."""
+    status: Literal["SUBMITTED"] = "SUBMITTED"
+    session_id: str
+    score: int = Field(description="Number of correct answers in THIS submission")
+    total: int = Field(description="Total questions evaluated in THIS submission")
+    percentage: float = Field(description="Authoritative assessment score percentage for THIS submission (score / total * 100)")
+    results: list[QuestionResult] = Field(default_factory=list)
+    prerequisite_gaps: list[str] = Field(default_factory=list)
+    profile_summary: ProfileSummary
+    concept_scores: dict[str, float] = Field(default_factory=dict, description="Concept name or ID to attempt score")
+    video_target_matrix: VideoTargetMatrix
 
 
 class StudentLearningProfile(BaseModel):
@@ -285,3 +330,19 @@ class AssessmentStartRequest(BaseModel):
     knowledge_graph: dict[str, Any] | None = None
     chunks: list[dict[str, Any]] | None = None
     metadata: dict[str, Any] | None = None
+
+
+class AssessmentStartResponse(BaseModel):
+    """Authoritative response schema for POST /assessment/start."""
+    status: Literal["READY", "FAILED"] = "READY"
+    session_id: str
+    student_id: str
+    source_id: str
+    expires_at: str | None = None
+    question_count: int = Field(description="Number of valid questions generated and active in session")
+    questions: list[SafeQuestion] = Field(description="Sanitized questions ready for client display")
+    concepts_tested: list[str] = Field(default_factory=list, description="List of concept names tested")
+    failed_concepts: list[str] = Field(default_factory=list, description="Concept IDs that failed generation/validation")
+    requested_questions: int = Field(description="The authoritative target question count requested")
+    generated_questions: int = Field(description="Actual number of distinct grounded questions generated")
+    shortfall: int = Field(default=0, description="Difference between requested and generated questions (max(0, requested - generated))")

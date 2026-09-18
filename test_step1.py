@@ -17,7 +17,7 @@ def run_test():
     print("--- Testing Step 1 Pipeline ---")
     
     # 1. Create a dummy test file
-    test_dir = Path(__file__).resolve().parent / "storage" / "test_scratch"
+    test_dir = Path(__file__).resolve().parent / "storage" / "runtime" / "test_scratch"
     test_dir.mkdir(parents=True, exist_ok=True)
     sample_file = test_dir / "physics_sample.txt"
     sample_file.write_text(

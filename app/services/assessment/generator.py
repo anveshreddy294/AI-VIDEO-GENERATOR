@@ -25,17 +25,41 @@ from .planner import classify_difficulty
 from .providers import LLMProvider, get_default_provider
 from .schemas import AssessmentOption, Question
 
+VARIANT_DIRECTIVES: dict[str, str] = {
+    "definition": (
+        "PEDAGOGICAL ANGLE: Core Definition & Recognition.\n"
+        "Focus strictly on what this concept is, its defining properties, and foundational meaning in the source text."
+    ),
+    "relationship": (
+        "PEDAGOGICAL ANGLE: Conceptual Relationship & Prerequisites.\n"
+        "Focus on how this concept relates to, depends upon, or interacts with its foundational prerequisites or broader domain systems."
+    ),
+    "application": (
+        "PEDAGOGICAL ANGLE: Practical Application & Scenario Analysis.\n"
+        "Present a practical scenario or concrete problem that tests how this concept operates or is applied in practice."
+    ),
+    "comparison": (
+        "PEDAGOGICAL ANGLE: Distinction & Comparison.\n"
+        "Focus on distinguishing this concept from closely related principles or identifying what uniquely characterizes it."
+    ),
+    "misconception": (
+        "PEDAGOGICAL ANGLE: Misconception Diagnosis.\n"
+        "Focus on identifying common errors, false assumptions, or typical student confusions regarding this concept."
+    ),
+}
+
 _QUESTION_PROMPT = """You are an expert educational assessment author.
 Based ONLY on this text, generate a multiple-choice question. Provide exactly 1 correct answer and 3 plausible but factually incorrect options.
 
 CONCEPT: {concept_name}
 DEFINITION: {concept_definition}
+{variant_directive}
 
 SOURCE MATERIAL (authoritative grounded text from student's study material):
 {source_chunks}
 
 STRICT INSTRUCTIONS:
-1. Test conceptual understanding grounded strictly in the provided text.
+1. Test conceptual understanding grounded strictly in the provided text according to the specified PEDAGOGICAL ANGLE.
 2. Provide exactly 4 options with indices 0, 1, 2, 3.
 3. Provide exactly 1 correct answer and 3 plausible but factually incorrect options (common student misconceptions).
 4. Negative prompt: Do not use trivial or obviously silly distractors. Every incorrect option must sound plausible.
@@ -132,6 +156,7 @@ def generate_question(
     provided_chunks: list[dict[str, Any]] | None = None,
     max_retries: int | None = None,
     llm_provider: LLMProvider | None = None,
+    variant_type: str = "definition",
 ) -> Question | None:
     """Generate a single grounded question for a concept with full provenance tracking.
 
@@ -183,9 +208,14 @@ def generate_question(
         for i, ch in enumerate(chunks)
     )
 
+    variant_directive = VARIANT_DIRECTIVES.get(
+        variant_type, VARIANT_DIRECTIVES["definition"]
+    )
+
     prompt = _QUESTION_PROMPT.format(
         concept_name=concept.name,
         concept_definition=concept.definition or "Core curriculum concept.",
+        variant_directive=variant_directive,
         source_chunks=chunk_text,
     )
 
@@ -218,6 +248,7 @@ def generate_question(
                 timestamp_end=timestamp_end,
                 source_id=source_id,
                 difficulty=difficulty,
+                variant_type=variant_type,
             )
 
         except Exception as exc:
@@ -243,6 +274,7 @@ def generate_question(
         timestamp_end=timestamp_end,
         source_id=source_id,
         difficulty=difficulty,
+        variant_type=variant_type,
     )
 
 
@@ -257,27 +289,63 @@ def _generate_grounded_fallback(
     timestamp_end: float | str | None,
     source_id: str,
     difficulty: str,
+    variant_type: str = "definition",
 ) -> Question:
-    """Deterministic, context-grounded fallback question builder with varied answer indices and concept-specific distractors."""
+    """Deterministic, context-grounded fallback question builder with distinct variant stems, distractors, and answer indices."""
     import hashlib
 
     chunk_sample = chunks[0].get("text", "").strip() if chunks else ""
     definition = concept.definition or (chunk_sample[:150] if chunk_sample else f"The principle of {concept.name}")
-
-    stem = f"Which of the following statements accurately characterizes {concept.name} according to the study material?"
-    correct_text = definition if len(definition) < 140 else f"{concept.name} is primarily defined as: {definition[:120]}..."
-
-    # Concept-specific distractors derived from the concept's prerequisites and domain
     prereq_str = f" its prerequisite ({', '.join(concept.prerequisite_concept_ids)})" if concept.prerequisite_concept_ids else " foundational principles"
-    distractor_1 = f"{concept.name} operates in direct contradiction to{prereq_str}, reversing the system's observable state."
-    distractor_2 = f"{concept.name} is classified as an auxiliary secondary property that has no measurable interaction with {concept.name}."
-    distractor_3 = f"{concept.name} serves merely as a transient buffer and does not represent an independent conceptual model."
+
+    def_snippet = definition[:60].strip()
+    if def_snippet and not def_snippet.endswith("."):
+        def_snippet += "..."
+
+    if variant_type == "relationship":
+        stem = f"Regarding {concept.name}, how does this principle connect to prerequisite context ({prereq_str}) to establish '{def_snippet}'?"
+        correct_text = f"{concept.name} builds directly upon {prereq_str} to establish that: {definition[:110]}."
+        distractor_1 = f"{concept.name} functions in complete isolation, superseding and invalidating {prereq_str}."
+        distractor_2 = f"{concept.name} inverts the causal sequence, requiring downstream applications to precede {prereq_str}."
+        distractor_3 = f"{concept.name} is a redundant synonym for {prereq_str} with no distinct properties of its own."
+        explanation = f"Directly derived from the prerequisite structure and source definition of {concept.name}."
+
+    elif variant_type == "application":
+        stem = f"In practical applications of {concept.name} ({def_snippet}), which scenario demonstrates its correct operation?"
+        correct_text = f"An application where {concept.name} is used to explain: {definition[:110]}."
+        distractor_1 = f"Applying {concept.name} to produce infinite output without consuming system energy or resources."
+        distractor_2 = f"Using {concept.name} exclusively as a static label without observing any state change in the system."
+        distractor_3 = f"Treating {concept.name} as applicable only when all environmental interactions are completely absent."
+        explanation = f"Grounded application of {concept.name} according to the source curriculum."
+
+    elif variant_type == "comparison":
+        stem = f"When distinguishing {concept.name} ({def_snippet}) from related domain principles, which criterion uniquely identifies it?"
+        correct_text = f"Only {concept.name} specifically describes: {definition[:110]}."
+        distractor_1 = f"{concept.name} uniquely lacks any measurable or observable consequences in physical systems."
+        distractor_2 = f"{concept.name} is characterized by being universally identical across all distinct phenomena."
+        distractor_3 = f"{concept.name} uniquely requires external observers to manually define its properties at each step."
+        explanation = f"Comparative distinction for {concept.name} grounded in source definition."
+
+    elif variant_type == "misconception":
+        stem = f"Which statement regarding {concept.name} ({def_snippet}) represents an accurate understanding rather than a misconception?"
+        correct_text = f"An accurate understanding recognizes that {concept.name} means: {definition[:110]}."
+        distractor_1 = f"A misconception assuming {concept.name} is merely a temporary convention with no factual basis."
+        distractor_2 = f"A flawed assumption that {concept.name} automatically guarantees equilibrium regardless of external conditions."
+        distractor_3 = f"An incorrect belief that {concept.name} operates only in theoretical approximations and never in actual scenarios."
+        explanation = f"Diagnostic distinction addressing misconceptions regarding {concept.name}."
+
+    else:  # "definition" / default
+        stem = f"According to the study material for {concept.name}, which statement accurately captures its core definition ({def_snippet})?"
+        correct_text = definition if len(definition) < 140 else f"{concept.name} is primarily defined as: {definition[:120]}..."
+        distractor_1 = f"{concept.name} operates in direct contradiction to{prereq_str}, reversing the system's observable state."
+        distractor_2 = f"{concept.name} is classified as an auxiliary secondary property that has no measurable interaction with {concept.name}."
+        distractor_3 = f"{concept.name} serves merely as a transient buffer and does not represent an independent conceptual model."
+        explanation = f"Directly derived from the source definition of {concept.name}: {definition[:120]}"
 
     distractors = [distractor_1, distractor_2, distractor_3]
 
-    # Varied, deterministic correct answer placement (0, 1, 2, or 3) based on concept_id hash
-    # Prevents predictable answer patterns where option 0 is always correct
-    h_val = int(hashlib.md5(concept.concept_id.encode("utf-8")).hexdigest(), 16)
+    # Varied, deterministic correct answer placement (0, 1, 2, or 3) based on concept_id and variant hash
+    h_val = int(hashlib.md5(f"{concept.concept_id}_{variant_type}".encode("utf-8")).hexdigest(), 16)
     correct_index = h_val % 4
 
     option_texts = []
@@ -300,7 +368,7 @@ def _generate_grounded_fallback(
         stem=stem,
         options=options,
         correct_index=correct_index,
-        explanation=f"Directly derived from the source definition of {concept.name}: {definition[:120]}",
+        explanation=explanation,
         chunk_ids=chunk_ids,
         content_ids=content_ids,
         page_start=page_start,
@@ -309,6 +377,7 @@ def _generate_grounded_fallback(
         timestamp_end=timestamp_end,
         source_id=source_id,
         difficulty=difficulty,
+        variant_type=variant_type,
     )
 
 

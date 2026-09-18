@@ -15,18 +15,31 @@ class Settings:
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
-        self.qdrant_path: Path = BASE_DIR / os.getenv("QDRANT_PATH", "storage/qdrant")
+        self.qdrant_path: Path = BASE_DIR / os.getenv("QDRANT_PATH", "storage/runtime/qdrant")
         self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a")
 
         # --- Models ---
         self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
         self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-3.5-flash")
 
-        # --- Storage ---
-        self.upload_dir: Path = BASE_DIR / os.getenv("UPLOAD_DIR", "storage/uploads")
-        self.processed_dir: Path = BASE_DIR / os.getenv("PROCESSED_DIR", "storage/processed")
+        # --- Storage Architecture (Separation of Fixtures & Runtime) ---
+        self.storage_dir: Path = BASE_DIR / os.getenv("STORAGE_DIR", "storage")
+        self.runtime_dir: Path = BASE_DIR / os.getenv("RUNTIME_DIR", "storage/runtime")
+        self.fixtures_dir: Path = BASE_DIR / os.getenv("FIXTURES_DIR", "tests/fixtures")
+        self.registry_dir: Path = BASE_DIR / os.getenv("REGISTRY_DIR", "storage/runtime/registry")
+        env_upload = os.getenv("UPLOAD_DIR")
+        self.upload_dir: Path = BASE_DIR / env_upload if (env_upload and env_upload != "storage/uploads") else self.runtime_dir / "uploads"
+
+        env_processed = os.getenv("PROCESSED_DIR")
+        self.processed_dir: Path = BASE_DIR / env_processed if (env_processed and env_processed != "storage/processed") else self.runtime_dir / "processed"
+
+        self.video_targets_dir: Path = BASE_DIR / os.getenv("VIDEO_TARGETS_DIR", "storage/runtime/video_targets")
+
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+        self.registry_dir.mkdir(parents=True, exist_ok=True)
         self.upload_dir.mkdir(parents=True, exist_ok=True)
         self.processed_dir.mkdir(parents=True, exist_ok=True)
+        self.video_targets_dir.mkdir(parents=True, exist_ok=True)
 
         # --- File validation ---
         self.allowed_extensions: set[str] = set(
@@ -49,9 +62,9 @@ class Settings:
         self.chunk_overlap: int = 150
 
         # --- Step 2: Assessment ---
-        self.assessment_dir: Path = BASE_DIR / os.getenv("ASSESSMENT_DIR", "storage/assessment_sessions")
+        self.assessment_dir: Path = BASE_DIR / os.getenv("ASSESSMENT_DIR", "storage/runtime/assessment_sessions")
         self.assessment_dir.mkdir(parents=True, exist_ok=True)
-        self.learning_profiles_dir: Path = BASE_DIR / os.getenv("LEARNING_PROFILES_DIR", "storage/learning_profiles")
+        self.learning_profiles_dir: Path = BASE_DIR / os.getenv("LEARNING_PROFILES_DIR", "storage/runtime/learning_profiles")
         self.learning_profiles_dir.mkdir(parents=True, exist_ok=True)
         self.max_questions: int = int(os.getenv("MAX_QUESTIONS", "10"))
         self.assessment_ttl_hours: int = int(os.getenv("ASSESSMENT_TTL_HOURS", "24"))

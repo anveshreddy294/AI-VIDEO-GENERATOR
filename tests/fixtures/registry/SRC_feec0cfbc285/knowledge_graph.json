@@ -1,0 +1,1935 @@
+{
+  "concepts": {
+    "CONCEPT_SYSTEM_DESIGN": {
+      "concept_id": "CONCEPT_SYSTEM_DESIGN",
+      "name": "System Design",
+      "definition": "The process of defining the architecture, components, modules, interfaces, and data for a system to satisfy specified requirements.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_8f54d97933d0",
+        "CU_c7fcb93082bd"
+      ]
+    },
+    "CONCEPT_DISTRIBUTED_SYSTEMS": {
+      "concept_id": "CONCEPT_DISTRIBUTED_SYSTEMS",
+      "name": "Distributed Systems",
+      "definition": "A system whose components are located on different networked computers, which communicate and coordinate their actions by passing messages to one another.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE",
+        "CONCEPT_INTERNET_WORKS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c7fcb93082bd",
+        "CU_05a76a79aa65"
+      ]
+    },
+    "CONCEPT_STORAGE": {
+      "concept_id": "CONCEPT_STORAGE",
+      "name": "Storage",
+      "definition": "The process and mechanisms for retaining digital data for later retrieval and use.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_05a76a79aa65",
+        "CU_3dc66d25e104"
+      ]
+    },
+    "CONCEPT_SECURITY": {
+      "concept_id": "CONCEPT_SECURITY",
+      "name": "Security",
+      "definition": "The protection of information systems from theft or damage to the hardware, software, and to the information on them, as well as from disruption or misdirection of the services they provide.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_05a76a79aa65",
+        "CU_d69d65e4e1ef"
+      ]
+    },
+    "CONCEPT_ASYNCHRONOUS_SYSTEMS": {
+      "concept_id": "CONCEPT_ASYNCHRONOUS_SYSTEMS",
+      "name": "Asynchronous Systems",
+      "definition": "Systems where operations can proceed independently without waiting for each other to complete, often using messaging to coordinate.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9314cca4c6b6"
+      ]
+    },
+    "CONCEPT_INTERNET_WORKS": {
+      "concept_id": "CONCEPT_INTERNET_WORKS",
+      "name": "How the Internet works",
+      "definition": "How a request physically travels from your laptop to a server, involving IP addressing, routers, and packets.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_10bcc244903b"
+      ]
+    },
+    "CONCEPT_IP_ADDRESSING": {
+      "concept_id": "CONCEPT_IP_ADDRESSING",
+      "name": "IP Addressing",
+      "definition": "A numerical label assigned to each device connected to a computer network that uses the Internet Protocol for communication.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_10bcc244903b"
+      ]
+    },
+    "CONCEPT_ROUTERS": {
+      "concept_id": "CONCEPT_ROUTERS",
+      "name": "Routers",
+      "definition": "Networking devices that forward data packets between computer networks.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INTERNET_WORKS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_10bcc244903b"
+      ]
+    },
+    "CONCEPT_PACKETS": {
+      "concept_id": "CONCEPT_PACKETS",
+      "name": "Packets",
+      "definition": "Units of data that are routed between an origin and a destination on the internet or any other packet-switched network.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INTERNET_WORKS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_10bcc244903b"
+      ]
+    },
+    "CONCEPT_OSI_MODEL": {
+      "concept_id": "CONCEPT_OSI_MODEL",
+      "name": "OSI Model",
+      "definition": "A conceptual framework that standardizes the functions of a telecommunication or computing system into seven abstraction layers.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_075f5054f6a0"
+      ]
+    },
+    "CONCEPT_TCP_IP_STACK": {
+      "concept_id": "CONCEPT_TCP_IP_STACK",
+      "name": "TCP/IP Stack",
+      "definition": "A four-layer conceptual model used to describe network communication protocols in real systems, practically based on the OSI model.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_OSI_MODEL"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_075f5054f6a0"
+      ]
+    },
+    "CONCEPT_TCP": {
+      "concept_id": "CONCEPT_TCP",
+      "name": "TCP",
+      "definition": "Transmission Control Protocol, providing reliable ordered delivery of data between applications.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_TCP_IP_STACK"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_02bbc7c8fc29"
+      ]
+    },
+    "CONCEPT_UDP": {
+      "concept_id": "CONCEPT_UDP",
+      "name": "UDP",
+      "definition": "User Datagram Protocol, providing fast connectionless delivery of data with no guarantees of reliability or order.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_TCP_IP_STACK"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_02bbc7c8fc29"
+      ]
+    },
+    "CONCEPT_DNS_RESOLUTION": {
+      "concept_id": "CONCEPT_DNS_RESOLUTION",
+      "name": "DNS Resolution",
+      "definition": "The process of translating a human-readable domain name into an IP address.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INTERNET_WORKS",
+        "CONCEPT_IP_ADDRESSING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_575d626a5f77"
+      ]
+    },
+    "CONCEPT_HTTP": {
+      "concept_id": "CONCEPT_HTTP",
+      "name": "HTTP",
+      "definition": "Hypertext Transfer Protocol, governing the request/response cycle for web communication.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INTERNET_WORKS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_575d626a5f77"
+      ]
+    },
+    "CONCEPT_HTTPS": {
+      "concept_id": "CONCEPT_HTTPS",
+      "name": "HTTPS",
+      "definition": "Hypertext Transfer Protocol Secure, an extension of HTTP that adds a secure layer via TLS handshake for encrypted communication.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_HTTP",
+        "CONCEPT_TLS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_575d626a5f77"
+      ]
+    },
+    "CONCEPT_CLIENT_SERVER_ARCHITECTURE": {
+      "concept_id": "CONCEPT_CLIENT_SERVER_ARCHITECTURE",
+      "name": "Client-Server Architecture",
+      "definition": "A computing model where clients (requesters of services) send requests to servers (providers of services).",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INTERNET_WORKS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c1c19f0a34f6"
+      ]
+    },
+    "CONCEPT_PROCESSES": {
+      "concept_id": "CONCEPT_PROCESSES",
+      "name": "Processes",
+      "definition": "An instance of a computer program that is being executed by one or many threads.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c1c19f0a34f6"
+      ]
+    },
+    "CONCEPT_THREADS": {
+      "concept_id": "CONCEPT_THREADS",
+      "name": "Threads",
+      "definition": "The smallest sequence of programmed instructions that can be managed independently by a scheduler, often within a process.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_PROCESSES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c1c19f0a34f6"
+      ]
+    },
+    "CONCEPT_CONCURRENCY": {
+      "concept_id": "CONCEPT_CONCURRENCY",
+      "name": "Concurrency",
+      "definition": "The ability of different parts of a program or system to be executed out-of-order or in partial order, potentially overlapping in execution time.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_PROCESSES",
+        "CONCEPT_THREADS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c1c19f0a34f6"
+      ]
+    },
+    "CONCEPT_PARALLELISM": {
+      "concept_id": "CONCEPT_PARALLELISM",
+      "name": "Parallelism",
+      "definition": "The ability of a system to perform multiple computations or processes simultaneously, often using multiple CPU cores.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CONCURRENCY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c1c19f0a34f6"
+      ]
+    },
+    "CONCEPT_OS_MEMORY_BASICS": {
+      "concept_id": "CONCEPT_OS_MEMORY_BASICS",
+      "name": "OS Memory Basics",
+      "definition": "Fundamental concepts of how an operating system manages and allocates memory to processes and threads.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_PROCESSES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c1c19f0a34f6"
+      ]
+    },
+    "CONCEPT_SCALABILITY": {
+      "concept_id": "CONCEPT_SCALABILITY",
+      "name": "Scalability",
+      "definition": "The ability of a system to handle a growing amount of work or its potential to be enlarged to accommodate that growth.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2383034da9c0"
+      ]
+    },
+    "CONCEPT_VERTICAL_SCALING": {
+      "concept_id": "CONCEPT_VERTICAL_SCALING",
+      "name": "Vertical Scaling",
+      "definition": "Scaling up by increasing the resources (CPU, RAM) of a single machine.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SCALABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2383034da9c0"
+      ]
+    },
+    "CONCEPT_HORIZONTAL_SCALING": {
+      "concept_id": "CONCEPT_HORIZONTAL_SCALING",
+      "name": "Horizontal Scaling",
+      "definition": "Scaling out by adding more machines to a system.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SCALABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2383034da9c0"
+      ]
+    },
+    "CONCEPT_LATENCY": {
+      "concept_id": "CONCEPT_LATENCY",
+      "name": "Latency",
+      "definition": "The time delay between a cause and effect, typically the time per request.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b19ccca29029"
+      ]
+    },
+    "CONCEPT_THROUGHPUT": {
+      "concept_id": "CONCEPT_THROUGHPUT",
+      "name": "Throughput",
+      "definition": "The rate at which work is processed, typically requests per second.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b19ccca29029"
+      ]
+    },
+    "CONCEPT_BANDWIDTH": {
+      "concept_id": "CONCEPT_BANDWIDTH",
+      "name": "Bandwidth",
+      "definition": "The maximum data transfer rate of a network or internet connection, typically max data per second.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b19ccca29029"
+      ]
+    },
+    "CONCEPT_AVAILABILITY": {
+      "concept_id": "CONCEPT_AVAILABILITY",
+      "name": "Availability",
+      "definition": "The proportion of time a system is functional and accessible, often measured in 'nines' (e.g., 99.9%).",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_4b5c78e8464c"
+      ]
+    },
+    "CONCEPT_RELIABILITY": {
+      "concept_id": "CONCEPT_RELIABILITY",
+      "name": "Reliability",
+      "definition": "The probability that a system will operate correctly for a specified period under specified conditions, often involving redundancy and failover.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_AVAILABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_4b5c78e8464c"
+      ]
+    },
+    "CONCEPT_FAULT_TOLERANCE": {
+      "concept_id": "CONCEPT_FAULT_TOLERANCE",
+      "name": "Fault Tolerance",
+      "definition": "The ability of a system to continue operating without interruption when one or more of its components fail, often through redundancy and graceful degradation.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RELIABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_4b5c78e8464c"
+      ]
+    },
+    "CONCEPT_CAP_THEOREM": {
+      "concept_id": "CONCEPT_CAP_THEOREM",
+      "name": "CAP Theorem",
+      "definition": "A fundamental theorem stating that a distributed system cannot simultaneously guarantee Consistency, Availability, and Partition tolerance; it must sacrifice one.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_SYSTEMS",
+        "CONCEPT_AVAILABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_8382f8db4164"
+      ]
+    },
+    "CONCEPT_PACELC_THEOREM": {
+      "concept_id": "CONCEPT_PACELC_THEOREM",
+      "name": "PACELC Theorem",
+      "definition": "An extension of the CAP theorem, stating that in the presence of network partitions (P), a system must choose between Availability (A) and Consistency (C), else (E) when there is no partition, it must choose between Latency (L) and Consistency (C).",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CAP_THEOREM",
+        "CONCEPT_LATENCY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_8382f8db4164"
+      ]
+    },
+    "CONCEPT_CONSISTENCY_MODELS": {
+      "concept_id": "CONCEPT_CONSISTENCY_MODELS",
+      "name": "Consistency Models",
+      "definition": "Different guarantees about how data updates are propagated and seen by different nodes in a distributed system, including strong, eventual, causal, and read-your-writes consistency.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CAP_THEOREM",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_c36d72269354"
+      ]
+    },
+    "CONCEPT_REST": {
+      "concept_id": "CONCEPT_REST",
+      "name": "REST",
+      "definition": "Representational State Transfer, an architectural style for networked applications that defines a set of constraints for creating web services, typically using a request/response API over HTTP.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_HTTP",
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3660cff32ca4"
+      ]
+    },
+    "CONCEPT_GRAPHQL": {
+      "concept_id": "CONCEPT_GRAPHQL",
+      "name": "GraphQL",
+      "definition": "A query language for APIs and a runtime for fulfilling those queries with your existing data, offering flexible querying and efficient data fetching.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_HTTP",
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3660cff32ca4"
+      ]
+    },
+    "CONCEPT_GRPC": {
+      "concept_id": "CONCEPT_GRPC",
+      "name": "gRPC",
+      "definition": "A high-performance Remote Procedure Call (RPC) framework that can run in any environment, enabling client and server applications to communicate transparently.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3660cff32ca4"
+      ]
+    },
+    "CONCEPT_WEBSOCKETS": {
+      "concept_id": "CONCEPT_WEBSOCKETS",
+      "name": "WebSockets",
+      "definition": "A communication protocol that provides full-duplex communication channels over a single TCP connection, enabling real-time interactions between a client and server.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_TCP"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3660cff32ca4"
+      ]
+    },
+    "CONCEPT_LOAD_BALANCERS": {
+      "concept_id": "CONCEPT_LOAD_BALANCERS",
+      "name": "Load Balancers",
+      "definition": "Devices or software that distribute incoming network traffic across multiple servers to improve responsiveness and availability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_HORIZONTAL_SCALING",
+        "CONCEPT_AVAILABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_1137a2b1a638"
+      ]
+    },
+    "CONCEPT_L4_LOAD_BALANCING": {
+      "concept_id": "CONCEPT_L4_LOAD_BALANCING",
+      "name": "L4 Load Balancing",
+      "definition": "Load balancing at the transport layer (Layer 4 of the OSI model), based on IP addresses and ports.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_LOAD_BALANCERS",
+        "CONCEPT_OSI_MODEL"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_1137a2b1a638"
+      ]
+    },
+    "CONCEPT_L7_LOAD_BALANCING": {
+      "concept_id": "CONCEPT_L7_LOAD_BALANCING",
+      "name": "L7 Load Balancing",
+      "definition": "Load balancing at the application layer (Layer 7 of the OSI model), based on content, URL, HTTP headers, etc.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_LOAD_BALANCERS",
+        "CONCEPT_OSI_MODEL",
+        "CONCEPT_HTTP"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_1137a2b1a638"
+      ]
+    },
+    "CONCEPT_LOAD_BALANCING_ALGORITHMS": {
+      "concept_id": "CONCEPT_LOAD_BALANCING_ALGORITHMS",
+      "name": "Load Balancing Algorithms",
+      "definition": "Methods used by load balancers to distribute traffic, such as round robin, least connections, IP hash, and weighted algorithms.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_LOAD_BALANCERS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_1137a2b1a638"
+      ]
+    },
+    "CONCEPT_API_GATEWAYS": {
+      "concept_id": "CONCEPT_API_GATEWAYS",
+      "name": "API Gateways",
+      "definition": "A single entry point for all clients, handling requests by routing them to appropriate microservices, performing authentication, rate limiting, and request aggregation.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2831e5586ed9"
+      ]
+    },
+    "CONCEPT_REVERSE_PROXIES": {
+      "concept_id": "CONCEPT_REVERSE_PROXIES",
+      "name": "Reverse Proxies",
+      "definition": "A server that retrieves resources on behalf of a client from one or more servers, providing an additional layer of abstraction or control to ensure security, high availability, and performance.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2831e5586ed9"
+      ]
+    },
+    "CONCEPT_CDNS": {
+      "concept_id": "CONCEPT_CDNS",
+      "name": "CDNs (Content Delivery Networks)",
+      "definition": "Networks of geographically distributed servers that cache content at edge locations closer to users to reduce latency and improve content delivery speed.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_LATENCY",
+        "CONCEPT_DNS_RESOLUTION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_290998ba857e"
+      ]
+    },
+    "CONCEPT_DNS_GEO_ROUTING": {
+      "concept_id": "CONCEPT_DNS_GEO_ROUTING",
+      "name": "DNS-based Geo-routing",
+      "definition": "Using DNS to route user requests to the closest or best-performing server based on geographical location, often in conjunction with CDNs.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DNS_RESOLUTION",
+        "CONCEPT_CDNS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_290998ba857e"
+      ]
+    },
+    "CONCEPT_SQL_DATABASES": {
+      "concept_id": "CONCEPT_SQL_DATABASES",
+      "name": "SQL Databases",
+      "definition": "Relational databases that store data in tables with predefined schemas, using SQL (Structured Query Language) for querying.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_fceeb623ac6a"
+      ]
+    },
+    "CONCEPT_NOSQL_DATABASES": {
+      "concept_id": "CONCEPT_NOSQL_DATABASES",
+      "name": "NoSQL Databases",
+      "definition": "Non-relational databases that provide flexible schemas and are designed for specific data models and use cases, offering high scalability and availability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_fceeb623ac6a"
+      ]
+    },
+    "CONCEPT_INDEXING": {
+      "concept_id": "CONCEPT_INDEXING",
+      "name": "Indexing",
+      "definition": "A technique used to optimize the speed of data retrieval in a database by creating a data structure, like B-Trees or hash indexes, that quickly locates records.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_STORAGE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5d317611d02b"
+      ]
+    },
+    "CONCEPT_B_TREES": {
+      "concept_id": "CONCEPT_B_TREES",
+      "name": "B-Trees",
+      "definition": "A self-balancing tree data structure that maintains sorted data and allows searches, sequential access, insertions, and deletions in logarithmic time, commonly used for database indexes.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INDEXING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5d317611d02b"
+      ]
+    },
+    "CONCEPT_HASH_INDEXES": {
+      "concept_id": "CONCEPT_HASH_INDEXES",
+      "name": "Hash Indexes",
+      "definition": "An index that uses a hash function to map keys to a location in storage, suitable for exact match lookups.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INDEXING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5d317611d02b"
+      ]
+    },
+    "CONCEPT_COMPOSITE_INDEXES": {
+      "concept_id": "CONCEPT_COMPOSITE_INDEXES",
+      "name": "Composite Indexes",
+      "definition": "An index on multiple columns of a table, used to optimize queries that involve those columns together.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_INDEXING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5d317611d02b"
+      ]
+    },
+    "CONCEPT_NORMALIZATION": {
+      "concept_id": "CONCEPT_NORMALIZATION",
+      "name": "Normalization",
+      "definition": "The process of organizing columns and tables of a relational database to minimize data redundancy and improve data integrity.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_07563be44051"
+      ]
+    },
+    "CONCEPT_DENORMALIZATION": {
+      "concept_id": "CONCEPT_DENORMALIZATION",
+      "name": "Denormalization",
+      "definition": "The process of adding redundant data to a database, often by combining tables, to improve read performance at the expense of increased data redundancy.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_NORMALIZATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_07563be44051"
+      ]
+    },
+    "CONCEPT_DATABASE_REPLICATION": {
+      "concept_id": "CONCEPT_DATABASE_REPLICATION",
+      "name": "Database Replication",
+      "definition": "The process of copying data from one database server (leader) to other servers (followers) to ensure high availability and improve read scalability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_AVAILABILITY",
+        "CONCEPT_SCALABILITY",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b22c47d77469"
+      ]
+    },
+    "CONCEPT_LEADER_FOLLOWER_REPLICATION": {
+      "concept_id": "CONCEPT_LEADER_FOLLOWER_REPLICATION",
+      "name": "Leader-Follower Replication",
+      "definition": "A replication model where one node (leader) processes all writes, and other nodes (followers) replicate the leader's data and handle read requests.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_REPLICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b22c47d77469"
+      ]
+    },
+    "CONCEPT_MULTI_LEADER_REPLICATION": {
+      "concept_id": "CONCEPT_MULTI_LEADER_REPLICATION",
+      "name": "Multi-Leader Replication",
+      "definition": "A replication model where multiple nodes can accept writes, with conflicts resolved asynchronously, often used for geographically distributed systems.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_REPLICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b22c47d77469"
+      ]
+    },
+    "CONCEPT_LEADERLESS_REPLICATION": {
+      "concept_id": "CONCEPT_LEADERLESS_REPLICATION",
+      "name": "Leaderless Replication",
+      "definition": "A replication model where any node can accept writes, and data consistency is maintained through mechanisms like quorum reads/writes.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_REPLICATION",
+        "CONCEPT_QUORUMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b22c47d77469"
+      ]
+    },
+    "CONCEPT_SYNCHRONOUS_REPLICATION": {
+      "concept_id": "CONCEPT_SYNCHRONOUS_REPLICATION",
+      "name": "Synchronous Replication",
+      "definition": "Replication where a write operation is not considered complete until all replicas have confirmed receipt of the data, ensuring strong consistency.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_REPLICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b22c47d77469"
+      ]
+    },
+    "CONCEPT_ASYNCHRONOUS_REPLICATION": {
+      "concept_id": "CONCEPT_ASYNCHRONOUS_REPLICATION",
+      "name": "Asynchronous Replication",
+      "definition": "Replication where a write operation is considered complete once the leader has written the data, with replicas updating eventually, prioritizing performance over strong consistency.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_REPLICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b22c47d77469"
+      ]
+    },
+    "CONCEPT_SHARDING": {
+      "concept_id": "CONCEPT_SHARDING",
+      "name": "Sharding",
+      "definition": "The process of horizontally partitioning a database into smaller, more manageable pieces called shards, distributing data across multiple machines.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_HORIZONTAL_SCALING",
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_64172ce3c01b"
+      ]
+    },
+    "CONCEPT_PARTITIONING": {
+      "concept_id": "CONCEPT_PARTITIONING",
+      "name": "Partitioning",
+      "definition": "Dividing a database into independent sections, which can be done horizontally (sharding) or vertically (by columns).",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SHARDING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_64172ce3c01b"
+      ]
+    },
+    "CONCEPT_HOT_SHARD_PROBLEM": {
+      "concept_id": "CONCEPT_HOT_SHARD_PROBLEM",
+      "name": "Hot-Shard Problem",
+      "definition": "A situation in sharded databases where one shard receives a disproportionately large amount of traffic, becoming a bottleneck.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SHARDING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_64172ce3c01b"
+      ]
+    },
+    "CONCEPT_ACID_PROPERTIES": {
+      "concept_id": "CONCEPT_ACID_PROPERTIES",
+      "name": "ACID Properties",
+      "definition": "A set of properties (Atomicity, Consistency, Isolation, Durability) guaranteeing that database transactions are processed reliably, typically found in relational databases.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b9631fffc240"
+      ]
+    },
+    "CONCEPT_BASE_PROPERTIES": {
+      "concept_id": "CONCEPT_BASE_PROPERTIES",
+      "name": "BASE Properties",
+      "definition": "A set of properties (Basically Available, Soft State, Eventually Consistent) that characterize the trade-offs in NoSQL databases, prioritizing availability and partition tolerance over immediate consistency.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_ACID_PROPERTIES",
+        "CONCEPT_CONSISTENCY_MODELS",
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b9631fffc240"
+      ]
+    },
+    "CONCEPT_KEY_VALUE_DATABASES": {
+      "concept_id": "CONCEPT_KEY_VALUE_DATABASES",
+      "name": "Key-Value Databases",
+      "definition": "A type of NoSQL database that stores data as a collection of key-value pairs, where each key is unique and maps to a value.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b9631fffc240",
+        "CU_eb38624d1bd2"
+      ]
+    },
+    "CONCEPT_DOCUMENT_DATABASES": {
+      "concept_id": "CONCEPT_DOCUMENT_DATABASES",
+      "name": "Document Databases",
+      "definition": "A type of NoSQL database that stores data in flexible, semi-structured document formats (like JSON or XML), often without a predefined schema.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b9631fffc240"
+      ]
+    },
+    "CONCEPT_COLUMN_FAMILY_DATABASES": {
+      "concept_id": "CONCEPT_COLUMN_FAMILY_DATABASES",
+      "name": "Column-Family Databases",
+      "definition": "A type of NoSQL database that stores data in column families, which are groups of related columns, optimizing for sparse data and high write throughput.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b9631fffc240"
+      ]
+    },
+    "CONCEPT_GRAPH_DATABASES": {
+      "concept_id": "CONCEPT_GRAPH_DATABASES",
+      "name": "Graph Databases",
+      "definition": "A type of NoSQL database that uses graph structures for semantic queries with nodes, edges, and properties to store and represent data.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b9631fffc240",
+        "CU_53e4940b1e84"
+      ]
+    },
+    "CONCEPT_CACHING": {
+      "concept_id": "CONCEPT_CACHING",
+      "name": "Caching",
+      "definition": "Storing copies of frequently accessed data in a temporary, faster storage location to reduce latency and improve performance.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_LATENCY",
+        "CONCEPT_THROUGHPUT"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_a88c0d176191"
+      ]
+    },
+    "CONCEPT_CACHING_HIERARCHY": {
+      "concept_id": "CONCEPT_CACHING_HIERARCHY",
+      "name": "Caching Hierarchy",
+      "definition": "The tiered system of different cache types (client, CDN, application, database) used to optimize data retrieval closest to the user.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING",
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE",
+        "CONCEPT_CDNS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_a88c0d176191"
+      ]
+    },
+    "CONCEPT_CLIENT_CACHE": {
+      "concept_id": "CONCEPT_CLIENT_CACHE",
+      "name": "Client Cache",
+      "definition": "Cache stored on the user's device (e.g., browser cache) to speed up subsequent requests.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_a88c0d176191"
+      ]
+    },
+    "CONCEPT_APPLICATION_CACHE": {
+      "concept_id": "CONCEPT_APPLICATION_CACHE",
+      "name": "Application Cache",
+      "definition": "Cache stored within the application layer, often in memory, to speed up data access for that specific application.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_a88c0d176191"
+      ]
+    },
+    "CONCEPT_DATABASE_CACHE": {
+      "concept_id": "CONCEPT_DATABASE_CACHE",
+      "name": "Database Cache",
+      "definition": "Cache integrated with or directly fronting a database to store query results or frequently accessed data from the database.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING",
+        "CONCEPT_SQL_DATABASES",
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_a88c0d176191"
+      ]
+    },
+    "CONCEPT_CACHE_STRATEGIES": {
+      "concept_id": "CONCEPT_CACHE_STRATEGIES",
+      "name": "Cache Strategies",
+      "definition": "Different patterns for interacting with a cache and a primary data store, including cache-aside, write-through, write-back, and read-through.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3edc0d1f97b5"
+      ]
+    },
+    "CONCEPT_CACHE_ASIDE": {
+      "concept_id": "CONCEPT_CACHE_ASIDE",
+      "name": "Cache-aside",
+      "definition": "A caching strategy where the application explicitly checks the cache first, and if data is not found, fetches it from the database and populates the cache.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_STRATEGIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3edc0d1f97b5"
+      ]
+    },
+    "CONCEPT_WRITE_THROUGH": {
+      "concept_id": "CONCEPT_WRITE_THROUGH",
+      "name": "Write-through",
+      "definition": "A caching strategy where data is written simultaneously to the cache and the primary data store, ensuring data consistency.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_STRATEGIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3edc0d1f97b5"
+      ]
+    },
+    "CONCEPT_WRITE_BACK": {
+      "concept_id": "CONCEPT_WRITE_BACK",
+      "name": "Write-back",
+      "definition": "A caching strategy where data is written to the cache first and then asynchronously written to the primary data store, offering faster write performance.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_STRATEGIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3edc0d1f97b5"
+      ]
+    },
+    "CONCEPT_READ_THROUGH": {
+      "concept_id": "CONCEPT_READ_THROUGH",
+      "name": "Read-through",
+      "definition": "A caching strategy where the cache itself is responsible for fetching data from the underlying data store if it's not present, abstracting the data source from the application.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_STRATEGIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3edc0d1f97b5"
+      ]
+    },
+    "CONCEPT_CACHE_EVICTION_POLICIES": {
+      "concept_id": "CONCEPT_CACHE_EVICTION_POLICIES",
+      "name": "Cache Eviction Policies",
+      "definition": "Algorithms that determine which items to remove from a cache when it reaches its capacity, such as LRU, LFU, and FIFO.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_88336c77b630"
+      ]
+    },
+    "CONCEPT_LRU": {
+      "concept_id": "CONCEPT_LRU",
+      "name": "LRU (Least Recently Used)",
+      "definition": "An eviction policy that discards the least recently used items first from the cache.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_EVICTION_POLICIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_88336c77b630"
+      ]
+    },
+    "CONCEPT_LFU": {
+      "concept_id": "CONCEPT_LFU",
+      "name": "LFU (Least Frequently Used)",
+      "definition": "An eviction policy that discards the items that have been used the fewest times from the cache.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_EVICTION_POLICIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_88336c77b630"
+      ]
+    },
+    "CONCEPT_FIFO_CACHE_EVICTION": {
+      "concept_id": "CONCEPT_FIFO_CACHE_EVICTION",
+      "name": "FIFO (First-In, First-Out) Cache Eviction",
+      "definition": "An eviction policy that discards the oldest items in the cache first.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHE_EVICTION_POLICIES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_88336c77b630"
+      ]
+    },
+    "CONCEPT_REDIS": {
+      "concept_id": "CONCEPT_REDIS",
+      "name": "Redis",
+      "definition": "An open-source, in-memory data structure store, used as a database, cache, and message broker, supporting various data structures.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING",
+        "CONCEPT_KEY_VALUE_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_589276453560"
+      ]
+    },
+    "CONCEPT_MEMCACHED": {
+      "concept_id": "CONCEPT_MEMCACHED",
+      "name": "Memcached",
+      "definition": "A free and open-source, high-performance, distributed memory object caching system, primarily used for speeding up dynamic web applications by alleviating database load.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CACHING",
+        "CONCEPT_KEY_VALUE_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_93f4a1edd972"
+      ]
+    },
+    "CONCEPT_MESSAGE_QUEUES": {
+      "concept_id": "CONCEPT_MESSAGE_QUEUES",
+      "name": "Message Queues",
+      "definition": "A form of asynchronous communication where messages are placed onto a queue and processed by a consumer at a later time, providing point-to-point delivery.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_ASYNCHRONOUS_SYSTEMS",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_00f90857ffad"
+      ]
+    },
+    "CONCEPT_PUB_SUB": {
+      "concept_id": "CONCEPT_PUB_SUB",
+      "name": "Pub/Sub (Publish-Subscribe)",
+      "definition": "A messaging pattern where senders (publishers) do not program messages to be sent directly to specific receivers (subscribers), but instead categorize published messages into topics or channels for fan-out delivery.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MESSAGE_QUEUES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_00f90857ffad"
+      ]
+    },
+    "CONCEPT_APACHE_KAFKA": {
+      "concept_id": "CONCEPT_APACHE_KAFKA",
+      "name": "Apache Kafka",
+      "definition": "A distributed streaming platform that allows publishing, subscribing to, storing, and processing streams of records, characterized by topics, partitions, consumer groups, and offsets.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_PUB_SUB"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9d92619bf647"
+      ]
+    },
+    "CONCEPT_KAFKA_TOPICS": {
+      "concept_id": "CONCEPT_KAFKA_TOPICS",
+      "name": "Kafka Topics",
+      "definition": "Categories or feed names to which records are published in Kafka.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_APACHE_KAFKA"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9d92619bf647"
+      ]
+    },
+    "CONCEPT_KAFKA_PARTITIONS": {
+      "concept_id": "CONCEPT_KAFKA_PARTITIONS",
+      "name": "Kafka Partitions",
+      "definition": "Divisions of a Kafka topic, allowing for parallel processing and scalability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_APACHE_KAFKA"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9d92619bf647"
+      ]
+    },
+    "CONCEPT_KAFKA_CONSUMER_GROUPS": {
+      "concept_id": "CONCEPT_KAFKA_CONSUMER_GROUPS",
+      "name": "Kafka Consumer Groups",
+      "definition": "A set of consumers that jointly consume data from a set of topics in Kafka, with each partition being consumed by only one consumer within the group.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_APACHE_KAFKA"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9d92619bf647"
+      ]
+    },
+    "CONCEPT_KAFKA_OFFSETS": {
+      "concept_id": "CONCEPT_KAFKA_OFFSETS",
+      "name": "Kafka Offsets",
+      "definition": "A sequential ID number given to each record within a Kafka partition, representing its position.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_APACHE_KAFKA"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9d92619bf647"
+      ]
+    },
+    "CONCEPT_EVENT_DRIVEN_ARCHITECTURE": {
+      "concept_id": "CONCEPT_EVENT_DRIVEN_ARCHITECTURE",
+      "name": "Event-Driven Architecture",
+      "definition": "An architectural style where decoupled services communicate by producing and consuming events, often involving event sourcing.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MESSAGE_QUEUES",
+        "CONCEPT_PUB_SUB",
+        "CONCEPT_MICROSERVICES_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5d389ce81250"
+      ]
+    },
+    "CONCEPT_EVENT_SOURCING": {
+      "concept_id": "CONCEPT_EVENT_SOURCING",
+      "name": "Event Sourcing",
+      "definition": "An architectural pattern where all changes to application state are stored as a sequence of immutable events.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_EVENT_DRIVEN_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_5d389ce81250"
+      ]
+    },
+    "CONCEPT_RATE_LIMITING": {
+      "concept_id": "CONCEPT_RATE_LIMITING",
+      "name": "Rate Limiting",
+      "definition": "A technique to control the number of requests a client can make to a server within a given time window, protecting systems from overload or abuse.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_THROUGHPUT",
+        "CONCEPT_AVAILABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_30066a6dc042"
+      ]
+    },
+    "CONCEPT_TOKEN_BUCKET": {
+      "concept_id": "CONCEPT_TOKEN_BUCKET",
+      "name": "Token Bucket Algorithm",
+      "definition": "A rate limiting algorithm where tokens are added to a bucket at a fixed rate, and each request consumes a token; requests are processed only if tokens are available.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RATE_LIMITING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_30066a6dc042"
+      ]
+    },
+    "CONCEPT_LEAKY_BUCKET": {
+      "concept_id": "CONCEPT_LEAKY_BUCKET",
+      "name": "Leaky Bucket Algorithm",
+      "definition": "A rate limiting algorithm where requests are added to a bucket and processed at a constant rate, smoothing out bursts of traffic.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RATE_LIMITING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_30066a6dc042"
+      ]
+    },
+    "CONCEPT_FIXED_WINDOW_RATE_LIMITING": {
+      "concept_id": "CONCEPT_FIXED_WINDOW_RATE_LIMITING",
+      "name": "Fixed Window Rate Limiting",
+      "definition": "A rate limiting algorithm that counts requests within a fixed time window, resetting the count at the start of each new window.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RATE_LIMITING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_30066a6dc042"
+      ]
+    },
+    "CONCEPT_SLIDING_WINDOW_RATE_LIMITING": {
+      "concept_id": "CONCEPT_SLIDING_WINDOW_RATE_LIMITING",
+      "name": "Sliding Window Rate Limiting",
+      "definition": "A rate limiting algorithm that offers a more accurate rate limit by taking into account a moving average of requests over a rolling time window.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RATE_LIMITING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_30066a6dc042"
+      ]
+    },
+    "CONCEPT_CONSISTENT_HASHING": {
+      "concept_id": "CONCEPT_CONSISTENT_HASHING",
+      "name": "Consistent Hashing",
+      "definition": "A hashing technique that minimizes data movement when nodes are added or removed from a distributed system, ensuring efficient distribution of keys across nodes.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SHARDING",
+        "CONCEPT_HORIZONTAL_SCALING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_7be6bf61a2a8"
+      ]
+    },
+    "CONCEPT_DATABASE_SCALING_PATTERNS": {
+      "concept_id": "CONCEPT_DATABASE_SCALING_PATTERNS",
+      "name": "Database Scaling Patterns",
+      "definition": "Strategies for improving the performance and capacity of databases, including read replicas, connection pooling, and CQRS.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SCALABILITY",
+        "CONCEPT_SQL_DATABASES",
+        "CONCEPT_NOSQL_DATABASES"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_84bf49417be2"
+      ]
+    },
+    "CONCEPT_READ_REPLICAS": {
+      "concept_id": "CONCEPT_READ_REPLICAS",
+      "name": "Read Replicas",
+      "definition": "Copies of a primary database that serve read-only queries, offloading read traffic from the master database to improve performance and scalability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_SCALING_PATTERNS",
+        "CONCEPT_DATABASE_REPLICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_84bf49417be2"
+      ]
+    },
+    "CONCEPT_CONNECTION_POOLING": {
+      "concept_id": "CONCEPT_CONNECTION_POOLING",
+      "name": "Connection Pooling",
+      "definition": "A technique used to manage and reuse database connections, reducing the overhead of establishing new connections for each request.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_SCALING_PATTERNS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_84bf49417be2"
+      ]
+    },
+    "CONCEPT_CQRS": {
+      "concept_id": "CONCEPT_CQRS",
+      "name": "CQRS (Command Query Responsibility Segregation)",
+      "definition": "An architectural pattern that separates the read and update operations for a data store, often leading to different models for each.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DATABASE_SCALING_PATTERNS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_84bf49417be2"
+      ]
+    },
+    "CONCEPT_BLOOM_FILTERS": {
+      "concept_id": "CONCEPT_BLOOM_FILTERS",
+      "name": "Bloom Filters",
+      "definition": "A space-efficient probabilistic data structure used to test whether an element is a member of a set, with a possibility of false positives but no false negatives.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2785397b0dff"
+      ]
+    },
+    "CONCEPT_HEARTBEATS": {
+      "concept_id": "CONCEPT_HEARTBEATS",
+      "name": "Heartbeats",
+      "definition": "Periodic signals sent from one system component to another to indicate that it is still operational and responsive.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_FAULT_TOLERANCE",
+        "CONCEPT_MONITORING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2785397b0dff"
+      ]
+    },
+    "CONCEPT_HEALTH_CHECKS": {
+      "concept_id": "CONCEPT_HEALTH_CHECKS",
+      "name": "Health Checks",
+      "definition": "Automated checks to verify the operational status and responsiveness of a system or service.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_FAULT_TOLERANCE",
+        "CONCEPT_MONITORING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_2785397b0dff"
+      ]
+    },
+    "CONCEPT_CONSENSUS_ALGORITHMS": {
+      "concept_id": "CONCEPT_CONSENSUS_ALGORITHMS",
+      "name": "Consensus Algorithms",
+      "definition": "Protocols that allow multiple distributed processes to agree on a single data value or state, even in the presence of failures.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_SYSTEMS",
+        "CONCEPT_FAULT_TOLERANCE",
+        "CONCEPT_CONSISTENCY_MODELS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d269c9f80a54"
+      ]
+    },
+    "CONCEPT_PAXOS": {
+      "concept_id": "CONCEPT_PAXOS",
+      "name": "Paxos",
+      "definition": "A family of protocols for solving consensus in a network of unreliable processors, among the most influential but complex consensus algorithms.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CONSENSUS_ALGORITHMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d269c9f80a54"
+      ]
+    },
+    "CONCEPT_RAFT": {
+      "concept_id": "CONCEPT_RAFT",
+      "name": "Raft",
+      "definition": "A consensus algorithm designed to be understandable and provide a robust fault-tolerant distributed system, typically simpler than Paxos.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CONSENSUS_ALGORITHMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d269c9f80a54"
+      ]
+    },
+    "CONCEPT_DISTRIBUTED_TRANSACTIONS": {
+      "concept_id": "CONCEPT_DISTRIBUTED_TRANSACTIONS",
+      "name": "Distributed Transactions",
+      "definition": "Transactions that involve multiple independent computational units or resources, requiring all or none of the operations to commit across all participants to maintain atomicity.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_ACID_PROPERTIES",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_4a72111f23f7"
+      ]
+    },
+    "CONCEPT_TWO_PHASE_COMMIT": {
+      "concept_id": "CONCEPT_TWO_PHASE_COMMIT",
+      "name": "Two-Phase Commit (2PC)",
+      "definition": "A distributed algorithm that ensures all nodes in a distributed transaction either commit or abort the transaction, aiming for atomicity across services.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_TRANSACTIONS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_4a72111f23f7"
+      ]
+    },
+    "CONCEPT_SAGA_PATTERN": {
+      "concept_id": "CONCEPT_SAGA_PATTERN",
+      "name": "Saga Pattern",
+      "definition": "A pattern that manages distributed transactions as a sequence of local transactions, where each local transaction updates data and publishes an event that triggers the next local transaction, with compensating transactions for failures.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_TRANSACTIONS",
+        "CONCEPT_EVENT_DRIVEN_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_4a72111f23f7"
+      ]
+    },
+    "CONCEPT_VECTOR_CLOCKS": {
+      "concept_id": "CONCEPT_VECTOR_CLOCKS",
+      "name": "Vector Clocks",
+      "definition": "A system for generating a partial ordering of events in a distributed system, used to determine causal relationships without a global clock.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3005d0895e33"
+      ]
+    },
+    "CONCEPT_QUORUMS": {
+      "concept_id": "CONCEPT_QUORUMS",
+      "name": "Quorums",
+      "definition": "A mechanism in distributed systems to ensure data consistency and availability by requiring a minimum number of nodes to agree (read quorum R, write quorum W) before an operation is considered successful, often R+W > N (total nodes).",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CONSISTENCY_MODELS",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3005d0895e33"
+      ]
+    },
+    "CONCEPT_IDEMPOTENCY": {
+      "concept_id": "CONCEPT_IDEMPOTENCY",
+      "name": "Idempotency",
+      "definition": "The property of an operation that it can be applied multiple times without changing the result beyond the initial application, making retried requests safe in distributed systems.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_SYSTEMS",
+        "CONCEPT_RELIABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3005d0895e33"
+      ]
+    },
+    "CONCEPT_MONOLITH_ARCHITECTURE": {
+      "concept_id": "CONCEPT_MONOLITH_ARCHITECTURE",
+      "name": "Monolith Architecture",
+      "definition": "A software architecture where an application is built as a single, unified unit, encompassing all its functionalities in one codebase.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SYSTEM_DESIGN"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_7e8e03d2e1c1"
+      ]
+    },
+    "CONCEPT_MICROSERVICES_ARCHITECTURE": {
+      "concept_id": "CONCEPT_MICROSERVICES_ARCHITECTURE",
+      "name": "Microservices Architecture",
+      "definition": "An architectural style that structures an application as a collection of loosely coupled services, each developed, deployed, and managed independently.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MONOLITH_ARCHITECTURE",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_7e8e03d2e1c1"
+      ]
+    },
+    "CONCEPT_MODULAR_MONOLITH": {
+      "concept_id": "CONCEPT_MODULAR_MONOLITH",
+      "name": "Modular Monolith",
+      "definition": "An architectural approach that structures a monolithic application internally into distinct modules with clear boundaries, aiming to gain some benefits of microservices while retaining the simplicity of a single deployment unit.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MONOLITH_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_7e8e03d2e1c1"
+      ]
+    },
+    "CONCEPT_SERVICE_DISCOVERY": {
+      "concept_id": "CONCEPT_SERVICE_DISCOVERY",
+      "name": "Service Discovery",
+      "definition": "The process by which applications and services locate each other on a network, especially in dynamic, distributed environments.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MICROSERVICES_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_58f953861237"
+      ]
+    },
+    "CONCEPT_CLIENT_SIDE_SERVICE_DISCOVERY": {
+      "concept_id": "CONCEPT_CLIENT_SIDE_SERVICE_DISCOVERY",
+      "name": "Client-Side Service Discovery",
+      "definition": "A service discovery pattern where the client (or an intermediary) queries a service registry to find available service instances and then directly calls them.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SERVICE_DISCOVERY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_58f953861237"
+      ]
+    },
+    "CONCEPT_SERVER_SIDE_SERVICE_DISCOVERY": {
+      "concept_id": "CONCEPT_SERVER_SIDE_SERVICE_DISCOVERY",
+      "name": "Server-Side Service Discovery",
+      "definition": "A service discovery pattern where a load balancer or router queries a service registry and routes requests to available service instances without the client being aware of the discovery process.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SERVICE_DISCOVERY",
+        "CONCEPT_LOAD_BALANCERS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_58f953861237"
+      ]
+    },
+    "CONCEPT_CIRCUIT_BREAKER_PATTERN": {
+      "concept_id": "CONCEPT_CIRCUIT_BREAKER_PATTERN",
+      "name": "Circuit Breaker Pattern",
+      "definition": "A design pattern used to prevent a network or service failure from cascading to other services, by 'tripping' calls to a failing dependency after a certain threshold.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_FAULT_TOLERANCE",
+        "CONCEPT_MICROSERVICES_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9c1c86679861"
+      ]
+    },
+    "CONCEPT_BULKHEAD_PATTERN": {
+      "concept_id": "CONCEPT_BULKHEAD_PATTERN",
+      "name": "Bulkhead Pattern",
+      "definition": "A design pattern used to isolate elements of a system into pools so that if one fails, the others can continue to function, preventing cascading failures.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_FAULT_TOLERANCE",
+        "CONCEPT_MICROSERVICES_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_9c1c86679861"
+      ]
+    },
+    "CONCEPT_BACKEND_FOR_FRONTEND": {
+      "concept_id": "CONCEPT_BACKEND_FOR_FRONTEND",
+      "name": "Backend-for-Frontend (BFF)",
+      "definition": "An architectural pattern where a separate backend service is created for each frontend application (e.g., web, mobile), allowing tailored APIs for specific client needs.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_API_GATEWAYS",
+        "CONCEPT_MICROSERVICES_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_33423962569c"
+      ]
+    },
+    "CONCEPT_AUTHENTICATION": {
+      "concept_id": "CONCEPT_AUTHENTICATION",
+      "name": "Authentication",
+      "definition": "The process of verifying the identity of a user, system, or process, typically by checking credentials like username/password or tokens.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SECURITY",
+        "CONCEPT_CLIENT_SERVER_ARCHITECTURE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_74bc279323a6"
+      ]
+    },
+    "CONCEPT_AUTHORIZATION": {
+      "concept_id": "CONCEPT_AUTHORIZATION",
+      "name": "Authorization",
+      "definition": "The process of determining what a verified user, system, or process is permitted to do or access within a system.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_AUTHENTICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_74bc279323a6"
+      ]
+    },
+    "CONCEPT_OAUTH_2_0": {
+      "concept_id": "CONCEPT_OAUTH_2_0",
+      "name": "OAuth 2.0",
+      "definition": "An open standard for access delegation, commonly used as a way for Internet users to grant websites or applications access to their information on other websites without giving them the passwords.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_AUTHORIZATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_74bc279323a6"
+      ]
+    },
+    "CONCEPT_JWT": {
+      "concept_id": "CONCEPT_JWT",
+      "name": "JWT (JSON Web Tokens)",
+      "definition": "A compact, URL-safe means of representing claims to be transferred between two parties, often used for authentication and authorization.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_AUTHENTICATION",
+        "CONCEPT_AUTHORIZATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_63cae52ec947"
+      ]
+    },
+    "CONCEPT_ENCRYPTION": {
+      "concept_id": "CONCEPT_ENCRYPTION",
+      "name": "Encryption",
+      "definition": "The process of encoding information in such a way that only authorized parties can access it, including symmetric (same key for encrypt/decrypt) and asymmetric (different keys) methods.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SECURITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_12457892a408"
+      ]
+    },
+    "CONCEPT_TLS": {
+      "concept_id": "CONCEPT_TLS",
+      "name": "TLS (Transport Layer Security)",
+      "definition": "A cryptographic protocol designed to provide communication security over a computer network, widely used for HTTPS.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_ENCRYPTION",
+        "CONCEPT_HTTPS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_12457892a408"
+      ]
+    },
+    "CONCEPT_DDOS_PROTECTION": {
+      "concept_id": "CONCEPT_DDOS_PROTECTION",
+      "name": "DDoS Protection",
+      "definition": "Measures taken to mitigate or prevent Distributed Denial of Service attacks, which aim to make a service unavailable by overwhelming it with traffic.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RATE_LIMITING",
+        "CONCEPT_SECURITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_520186bbf323"
+      ]
+    },
+    "CONCEPT_INPUT_VALIDATION": {
+      "concept_id": "CONCEPT_INPUT_VALIDATION",
+      "name": "Input Validation",
+      "definition": "The process of ensuring that user input conforms to expected formats, types, and constraints to prevent security vulnerabilities and data corruption.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_SECURITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_520186bbf323"
+      ]
+    },
+    "CONCEPT_LOGGING": {
+      "concept_id": "CONCEPT_LOGGING",
+      "name": "Logging",
+      "definition": "The process of recording events and data about the execution of a system or application, typically for debugging, monitoring, and auditing purposes.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d49d3a1c667c"
+      ]
+    },
+    "CONCEPT_METRICS": {
+      "concept_id": "CONCEPT_METRICS",
+      "name": "Metrics",
+      "definition": "Quantifiable measures used to track the performance and health of a system, such as CPU usage, memory, request rates, or error counts.",
+      "prerequisite_concept_ids": [],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d49d3a1c667c"
+      ]
+    },
+    "CONCEPT_TRACING": {
+      "concept_id": "CONCEPT_TRACING",
+      "name": "Tracing",
+      "definition": "The process of tracking the full lifecycle of a request as it propagates through a distributed system, providing visibility into inter-service communication and performance.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MICROSERVICES_ARCHITECTURE",
+        "CONCEPT_DISTRIBUTED_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d49d3a1c667c"
+      ]
+    },
+    "CONCEPT_MONITORING": {
+      "concept_id": "CONCEPT_MONITORING",
+      "name": "Monitoring",
+      "definition": "The continuous process of collecting, analyzing, and displaying data about the performance, health, and usage of a system.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_LOGGING",
+        "CONCEPT_METRICS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_cc3a75cedc17"
+      ]
+    },
+    "CONCEPT_ALERTING": {
+      "concept_id": "CONCEPT_ALERTING",
+      "name": "Alerting",
+      "definition": "The process of notifying relevant personnel when specific thresholds or anomalous conditions are detected by monitoring systems, indicating potential issues.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MONITORING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_cc3a75cedc17"
+      ]
+    },
+    "CONCEPT_BLOB_STORAGE": {
+      "concept_id": "CONCEPT_BLOB_STORAGE",
+      "name": "Blob Storage",
+      "definition": "Binary Large Object storage, a method of storing unstructured data objects (like images, videos, documents) in the cloud, often providing high scalability and durability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_STORAGE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_76f4dc308921"
+      ]
+    },
+    "CONCEPT_OBJECT_STORAGE": {
+      "concept_id": "CONCEPT_OBJECT_STORAGE",
+      "name": "Object Storage",
+      "definition": "A data storage architecture that manages data as objects, offering a highly scalable and cost-effective solution for unstructured data, often synonymous with blob storage.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_BLOB_STORAGE"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_76f4dc308921"
+      ]
+    },
+    "CONCEPT_DISTRIBUTED_FILE_SYSTEMS": {
+      "concept_id": "CONCEPT_DISTRIBUTED_FILE_SYSTEMS",
+      "name": "Distributed File Systems",
+      "definition": "File systems that are designed to be distributed across multiple network servers, allowing for high availability, scalability, and shared access to files, often involving chunking and replication.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_STORAGE",
+        "CONCEPT_RELIABILITY",
+        "CONCEPT_HORIZONTAL_SCALING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_89d1ed4628ca"
+      ]
+    },
+    "CONCEPT_GOOGLE_FILE_SYSTEM": {
+      "concept_id": "CONCEPT_GOOGLE_FILE_SYSTEM",
+      "name": "Google File System (GFS)",
+      "definition": "A proprietary distributed file system developed by Google to provide scalable and reliable storage for large data-intensive applications, using chunking and a single metadata master.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_FILE_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_89d1ed4628ca",
+        "CU_16301a88b944"
+      ]
+    },
+    "CONCEPT_HDFS": {
+      "concept_id": "CONCEPT_HDFS",
+      "name": "HDFS (Hadoop Distributed File System)",
+      "definition": "Hadoop Distributed File System, a distributed file system designed to run on commodity hardware, providing high-throughput access to application data, commonly used in big data ecosystems.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_FILE_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_89d1ed4628ca",
+        "CU_f02aa38dd69d"
+      ]
+    },
+    "CONCEPT_URL_SHORTENER_DESIGN": {
+      "concept_id": "CONCEPT_URL_SHORTENER_DESIGN",
+      "name": "URL Shortener Design Case Study",
+      "definition": "Design considerations for a system that takes a long URL and generates a short, unique URL, often involving hashing, base62 encoding, and database choices.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CONSISTENT_HASHING",
+        "CONCEPT_KEY_VALUE_DATABASES",
+        "CONCEPT_SCALABILITY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_e4a7b88ae0cf",
+        "CU_d5b617ef2946"
+      ]
+    },
+    "CONCEPT_RATE_LIMITER_DESIGN_CASE_STUDY": {
+      "concept_id": "CONCEPT_RATE_LIMITER_DESIGN_CASE_STUDY",
+      "name": "Rate Limiter Design Case Study",
+      "definition": "Designing a system to control and limit the rate of requests from users or services, often using token bucket, leaky bucket, or window-based algorithms.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_RATE_LIMITING",
+        "CONCEPT_CACHING"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_63dd4bafd9cb",
+        "CU_13cdc135b2d8"
+      ]
+    },
+    "CONCEPT_NEWS_FEED_DESIGN": {
+      "concept_id": "CONCEPT_NEWS_FEED_DESIGN",
+      "name": "News Feed Design Case Study (Twitter)",
+      "definition": "Designing a system like Twitter or Facebook's news feed, involving strategies for feed generation (fan-out push vs pull), data storage, and caching.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_PUB_SUB",
+        "CONCEPT_CACHING",
+        "CONCEPT_DATABASE_SCALING_PATTERNS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_645cfec618cc",
+        "CU_7304bad99058"
+      ]
+    },
+    "CONCEPT_CHAT_SYSTEM_DESIGN": {
+      "concept_id": "CONCEPT_CHAT_SYSTEM_DESIGN",
+      "name": "Chat System Design Case Study (WhatsApp)",
+      "definition": "Designing a real-time messaging system like WhatsApp, covering message delivery guarantees, read receipts, group chat fan-out, and scalability.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_WEBSOCKETS",
+        "CONCEPT_MESSAGE_QUEUES",
+        "CONCEPT_IDEMPOTENCY",
+        "CONCEPT_DISTRIBUTED_TRANSACTIONS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_3063c4592589",
+        "CU_f4d4cc0f1342"
+      ]
+    },
+    "CONCEPT_INSTAGRAM_DESIGN": {
+      "concept_id": "CONCEPT_INSTAGRAM_DESIGN",
+      "name": "Instagram Design Case Study",
+      "definition": "Designing a photo-sharing social media platform, including image storage, feed generation, CDN usage, and user interaction features.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_OBJECT_STORAGE",
+        "CONCEPT_CDNS",
+        "CONCEPT_NEWS_FEED_DESIGN"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d4f035f0a2f9",
+        "CU_bc8289a4fc0a"
+      ]
+    },
+    "CONCEPT_VIDEO_STREAMING_DESIGN": {
+      "concept_id": "CONCEPT_VIDEO_STREAMING_DESIGN",
+      "name": "Video Streaming Design Case Study (YouTube/Netflix)",
+      "definition": "Designing a video streaming service like YouTube or Netflix, focusing on video encoding pipelines, adaptive bitrate streaming, and CDN edge caching.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_CDNS",
+        "CONCEPT_OBJECT_STORAGE",
+        "CONCEPT_BANDWIDTH"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_6c6ac25a6abe",
+        "CU_b444ce16df69"
+      ]
+    },
+    "CONCEPT_RIDE_SHARING_DESIGN": {
+      "concept_id": "CONCEPT_RIDE_SHARING_DESIGN",
+      "name": "Ride-sharing Design Case Study (Uber)",
+      "definition": "Designing a ride-sharing application like Uber, which involves geospatial indexing (e.g., quad-trees, geohashing), matching engines, and real-time location updates.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MICROSERVICES_ARCHITECTURE",
+        "CONCEPT_GEOSPATIAL_INDEXING",
+        "CONCEPT_REAL_TIME_SYSTEMS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_8bb047ad01b6",
+        "CU_334abc7b09a0"
+      ]
+    },
+    "CONCEPT_CLOUD_STORAGE_SYNC_DESIGN": {
+      "concept_id": "CONCEPT_CLOUD_STORAGE_SYNC_DESIGN",
+      "name": "Cloud Storage Sync Design Case Study (Dropbox/Google Drive)",
+      "definition": "Designing a cloud storage and synchronization service like Dropbox or Google Drive, covering file chunking, sync mechanisms, deduplication, and metadata management.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_FILE_SYSTEMS",
+        "CONCEPT_CONSISTENT_HASHING",
+        "CONCEPT_DEDUPLICATION"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_ea1bd27cfba8",
+        "CU_e76195fc681b"
+      ]
+    },
+    "CONCEPT_WEB_CRAWLER_DESIGN": {
+      "concept_id": "CONCEPT_WEB_CRAWLER_DESIGN",
+      "name": "Web Crawler Design Case Study",
+      "definition": "Designing a system to systematically browse and index the World Wide Web, considering BFS crawling, deduplication using Bloom filters, and politeness/rate limits.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_BLOOM_FILTERS",
+        "CONCEPT_RATE_LIMITING",
+        "CONCEPT_HTTP"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_f03952b89b99",
+        "CU_66ad3a88b436"
+      ]
+    },
+    "CONCEPT_NOTIFICATION_SYSTEM_DESIGN": {
+      "concept_id": "CONCEPT_NOTIFICATION_SYSTEM_DESIGN",
+      "name": "Notification System Design Case Study",
+      "definition": "Designing a system for sending various types of notifications (push, SMS, email), involving fan-out via queues, integration with providers, retries, and deduplication.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_MESSAGE_QUEUES",
+        "CONCEPT_PUB_SUB",
+        "CONCEPT_IDEMPOTENCY"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_b7f8f00d4f22",
+        "CU_64d57d8358ef"
+      ]
+    },
+    "CONCEPT_TICKET_BOOKING_SYSTEM_DESIGN": {
+      "concept_id": "CONCEPT_TICKET_BOOKING_SYSTEM_DESIGN",
+      "name": "Ticket Booking System Design Case Study",
+      "definition": "Designing a system for booking tickets, addressing critical issues like seat locking, concurrency control, and preventing double-booking in a distributed environment.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_DISTRIBUTED_TRANSACTIONS",
+        "CONCEPT_CONCURRENCY",
+        "CONCEPT_CONSISTENCY_MODELS"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_0e70364ff7c6",
+        "CU_9984f07e5c14"
+      ]
+    },
+    "CONCEPT_ECOMMERCE_PAYMENT_SYSTEM_DESIGN": {
+      "concept_id": "CONCEPT_ECOMMERCE_PAYMENT_SYSTEM_DESIGN",
+      "name": "E-commerce Checkout / Payment System Design Case Study",
+      "definition": "Designing an e-commerce checkout and payment system, emphasizing idempotency keys, distributed transactions, and handling long-running workflows with patterns like Saga.",
+      "prerequisite_concept_ids": [
+        "CONCEPT_IDEMPOTENCY",
+        "CONCEPT_DISTRIBUTED_TRANSACTIONS",
+        "CONCEPT_SAGA_PATTERN"
+      ],
+      "related_concept_ids": [],
+      "source_content_ids": [
+        "CU_d25c3591705a",
+        "CU_73227086d684"
+      ]
+    }
+  }
+}
