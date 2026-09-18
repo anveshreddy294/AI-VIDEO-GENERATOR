@@ -241,6 +241,10 @@ def load_content_units(source_id: str) -> list[ContentUnit]:
     return [ContentUnit.model_validate(item) for item in data]
 
 
+# Alias for backward compatibility
+get_content_units = load_content_units
+
+
 def save_knowledge_graph(source_id: str, kg: KnowledgeGraph) -> None:
     """Persist Knowledge Graph for a source to JSON in runtime registry."""
     source_dir = get_registry_dir() / source_id

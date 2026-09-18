@@ -69,16 +69,17 @@ MATERIAL CONTENT UNITS:
 """
 
 
-def _client() -> genai.GenerativeModel:
-    settings.require_gemini()
-    genai.configure(api_key=settings.gemini_api_key)
-    return genai.GenerativeModel(settings.generation_model)
+def _generate_with_llm(payload: str) -> str:
+    """Generate content using the active LLM provider (OmniRoute, Gemini, or Ollama)."""
+    from .assessment.providers import get_default_provider
+    provider = get_default_provider()
+    return provider.generate_content(payload)
 
 
 def process_structure_and_concepts(
     units: list[ContentUnit],
 ) -> tuple[list[ContentUnit], KnowledgeGraph, TopicBlueprint]:
-    """Analyze ContentUnits with Gemini to detect structure, extract concepts, and build KnowledgeGraph."""
+    """Analyze ContentUnits with LLM to detect structure, extract concepts, and build KnowledgeGraph."""
     if not units:
         empty_kg = KnowledgeGraph(concepts={})
         empty_blueprint = TopicBlueprint(
@@ -103,8 +104,7 @@ def process_structure_and_concepts(
     raw_response = ""
     for attempt in range(2):
         try:
-            response = _client().generate_content(payload)
-            raw_response = response.text or ""
+            raw_response = _generate_with_llm(payload)
             data = _parse_json(raw_response)
             return _assemble_outputs(data, units)
         except Exception as exc:

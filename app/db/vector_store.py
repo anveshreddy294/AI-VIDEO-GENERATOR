@@ -69,15 +69,59 @@ def get_client() -> QdrantClient:
     return _client_instance
 
 
+def _deterministic_embedding(text: str, dim: int = 768) -> list[float]:
+    """Generate a deterministic normalized vector representation for offline/fallback mode."""
+    import hashlib
+    vec = [0.0] * dim
+    for word in text.lower().split():
+        h = int(hashlib.md5(word.encode("utf-8")).hexdigest(), 16)
+        idx = h % dim
+        vec[idx] += 1.0
+    norm = sum(x * x for x in vec) ** 0.5
+    if norm > 0:
+        vec = [x / norm for x in vec]
+    return vec
+
+
 def _embed(texts: list[str]) -> list[list[float]]:
-    settings.require_gemini()
-    genai.configure(api_key=settings.gemini_api_key)
-    result = genai.embed_content(
-        model=settings.embedding_model,
-        content=texts,
-        task_type="retrieval_document",
-    )
-    return result["embedding"]
+    """Embed texts using OmniRoute, Gemini, or deterministic fallback."""
+    # 1. Try OmniRoute embeddings if configured
+    if settings.llm_provider == "omniroute" and settings.omniroute_api_key:
+        try:
+            import json
+            import urllib.request
+            url = f"{settings.omniroute_base_url}/embeddings"
+            payload = json.dumps({
+                "model": "text-embedding-3-small",
+                "input": texts,
+            }).encode("utf-8")
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {settings.omniroute_api_key}",
+            }
+            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=10.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                if "data" in data and isinstance(data["data"], list):
+                    return [item["embedding"] for item in data["data"]]
+        except Exception as exc:
+            logger.info(f"[vector_store] OmniRoute embedding endpoint not used: {exc}")
+
+    # 2. Try Gemini API if key is set
+    if settings.gemini_api_key:
+        try:
+            genai.configure(api_key=settings.gemini_api_key)
+            result = genai.embed_content(
+                model=settings.embedding_model,
+                content=texts,
+                task_type="retrieval_document",
+            )
+            return result["embedding"]
+        except Exception as exc:
+            logger.warning(f"[vector_store] Gemini embed failed: {exc}. Using fallback.")
+
+    # 3. Deterministic normalized embedding fallback
+    return [_deterministic_embedding(t) for t in texts]
 
 
 def ensure_collection(client: QdrantClient) -> None:

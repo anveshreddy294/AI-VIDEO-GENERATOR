@@ -6,17 +6,19 @@ from .api.dashboard import router as dashboard_router
 from .api.upload import router as upload_router
 from .api.assessment import router as assessment_router
 from .api.pipeline import router as pipeline_router
+from .api.video import router as video_router
 
 app = FastAPI(
-    title="VisualAI — Student Knowledge Platform",
+    title="VisualAI — Personalized Educational Video Platform",
     description=(
-        "Upload study material → Extract knowledge → Generate quizzes → Track mastery.\n\n"
+        "Upload study material → Extract knowledge → Generate quizzes → Track mastery → Generate targeted videos.\n\n"
         "**Step 1 — Ingestion:** Upload PDF, image, text, or video. "
         "System extracts content, builds knowledge graph, stores in vector DB.\n\n"
         "**Step 2 — Assessment:** Generate grounded quiz questions from uploaded material. "
-        "Grade submissions, detect prerequisite gaps, track student mastery."
+        "Grade submissions, detect prerequisite gaps, track student mastery.\n\n"
+        "**Step 3 — Video Generation:** Synthesize timed multi-scene remedial video lessons with voiceover and diagrams."
     ),
-    version="0.2.0",
+    version="0.3.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -25,11 +27,17 @@ app.include_router(dashboard_router)
 app.include_router(upload_router)
 app.include_router(assessment_router)
 app.include_router(pipeline_router)
+app.include_router(video_router)
 
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "VisualAI", "version": "0.2.0", "steps": ["ingestion", "assessment"]}
+    return {
+        "status": "ok",
+        "service": "VisualAI",
+        "version": "0.3.0",
+        "steps": ["ingestion", "assessment", "video_generation"],
+    }
 
 
 @app.get("/sources")

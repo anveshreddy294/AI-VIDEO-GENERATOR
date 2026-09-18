@@ -670,9 +670,37 @@ DASHBOARD_HTML = """
                 </div>
 
                 <div style="background:#161b22;border:1px solid #21262d;border-radius:6px;padding:14px;margin-top:12px;">
-                    <div style="font-size:12px;font-weight:600;color:#58a6ff;text-transform:uppercase;margin-bottom:6px;">Step 3 Handoff — Video Target Matrix</div>
+                    <div style="font-size:12px;font-weight:600;color:#58a6ff;text-transform:uppercase;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+                        <span>Step 3 Handoff — Video Target Matrix</span>
+                        <span id="lblVideoCountBadge" class="badge badge-blue"></span>
+                    </div>
                     <div id="lblVideoDirective" style="font-size:13px;color:#c9d1d9;line-height:1.5;"></div>
-                    <div id="lblVideoQueue" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;"></div>
+                    <div id="lblVideoQueue" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;"></div>
+                </div>
+
+                <!-- Video Player Modal -->
+                <div id="videoModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;backdrop-filter:blur(4px);justify-content:center;align-items:center;">
+                    <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;width:90%;max-width:860px;padding:24px;box-shadow:0 16px 40px rgba(0,0,0,0.6);position:relative;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                            <div>
+                                <h3 id="modalVideoTitle" style="color:#f0f6fc;font-size:18px;font-weight:700;">Remediation Video</h3>
+                                <p id="modalVideoSub" style="color:#8b949e;font-size:13px;">Targeted Micro-Lesson</p>
+                            </div>
+                            <button onclick="closeVideoModal()" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;">✕ Close</button>
+                        </div>
+                        <div id="modalVideoLoader" style="display:none;padding:40px;text-align:center;">
+                            <div style="display:inline-block;width:36px;height:36px;border:3px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px;"></div>
+                            <div id="modalProgressText" style="color:#f0f6fc;font-weight:600;font-size:15px;">Synthesizing Lesson Video...</div>
+                            <div id="modalProgressSub" style="color:#8b949e;font-size:12px;margin-top:6px;">Generating timed script, voiceover, and visual cards</div>
+                        </div>
+                        <div id="modalVideoWrapper" style="display:none;text-align:center;">
+                            <video id="html5VideoPlayer" controls style="width:100%;max-height:480px;border-radius:8px;background:#000;outline:none;" preload="auto">
+                                <source id="videoSource" src="" type="video/mp4">
+                                <track id="videoTrack" label="English" kind="subtitles" srclang="en" src="" default>
+                                Your browser does not support the video tag.
+                            </video>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1206,19 +1234,123 @@ DASHBOARD_HTML = """
 
             const queueEl = document.getElementById('lblVideoQueue');
             queueEl.innerHTML = '';
-            (matrix.videos || []).forEach(v => {
+            const videos = matrix.videos || [];
+            const badgeEl = document.getElementById('lblVideoCountBadge');
+            if (badgeEl) {
+                badgeEl.textContent = `${videos.length} Targets`;
+            }
+
+            videos.forEach(v => {
+                const btnId = `btnGenVid_${v.concept_id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
                 queueEl.innerHTML += `
-                    <div style="background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:10px;display:flex;justify-content:space-between;align-items:center;">
+                    <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
                         <div>
-                            <span style="color:#f0f6fc;font-weight:600;">${v.concept_name}</span>
-                            <span style="font-size:12px;color:#8b949e;margin-left:8px;">${v.directive}</span>
+                            <div style="color:#f0f6fc;font-weight:600;font-size:14px;">${v.concept_name}</div>
+                            <div style="font-size:12px;color:#8b949e;margin-top:2px;">${v.directive} • <span style="color:#58a6ff;">${v.difficulty}</span></div>
                         </div>
-                        <span class="badge badge-blue">${v.target_seconds}s video</span>
+                        <button id="${btnId}" onclick="generateAndPlayVideo('${v.concept_id}', '${v.concept_name}', '${v.difficulty}', ${v.target_seconds})" class="action-btn" style="width:auto;padding:6px 14px;font-size:13px;display:flex;align-items:center;gap:6px;">
+                            <span>🎬 Generate & Watch (${v.target_seconds}s)</span>
+                        </button>
                     </div>
                 `;
             });
 
             resultsBox.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function generateAndPlayVideo(conceptId, conceptName, difficulty, targetSeconds) {
+            if (!currentSession) {
+                alert('No active session.');
+                return;
+            }
+
+            const modal = document.getElementById('videoModal');
+            const modalTitle = document.getElementById('modalVideoTitle');
+            const modalSub = document.getElementById('modalVideoSub');
+            const loader = document.getElementById('modalVideoLoader');
+            const wrapper = document.getElementById('modalVideoWrapper');
+            const progressText = document.getElementById('modalProgressText');
+            const player = document.getElementById('html5VideoPlayer');
+
+            modalTitle.textContent = `Remediation: ${conceptName}`;
+            modalSub.textContent = `${difficulty.toUpperCase()} • ${targetSeconds}s Targeted Lesson`;
+
+            modal.style.display = 'flex';
+            loader.style.display = 'block';
+            wrapper.style.display = 'none';
+            progressText.textContent = 'Initializing Step 3 Video Engine...';
+
+            try {
+                // Trigger POST /video/generate
+                const res = await fetch('/video/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: currentSession.student_id,
+                        source_id: currentSession.source_id,
+                        concept_id: conceptId
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) {
+                    throw new Error(data.detail || JSON.stringify(data));
+                }
+
+                const jobId = data.job_id;
+                progressText.textContent = `Generating timed script & synthesizing voiceover...`;
+
+                // Poll status until completed
+                let attempts = 0;
+                const pollInterval = setInterval(async () => {
+                    attempts++;
+                    try {
+                        const sRes = await fetch(`/video/status/${jobId}`);
+                        const sData = await sRes.json();
+
+                        if (sData.current_stage) {
+                            progressText.textContent = `[${sData.progress_percent}%] ${sData.current_stage}`;
+                        }
+
+                        if (sData.status === 'completed') {
+                            clearInterval(pollInterval);
+                            loader.style.display = 'none';
+                            wrapper.style.display = 'block';
+
+                            const videoSrc = document.getElementById('videoSource');
+                            const videoTrack = document.getElementById('videoTrack');
+
+                            videoSrc.src = `/video/${sData.video_id}/stream`;
+                            videoTrack.src = `/video/${sData.video_id}/subtitles`;
+
+                            player.load();
+                            player.play().catch(() => {});
+                        } else if (sData.status === 'failed') {
+                            clearInterval(pollInterval);
+                            progressText.textContent = `❌ Rendering Failed: ${sData.error_message || 'Unknown error'}`;
+                        }
+                    } catch (e) {
+                        console.error('Polling error:', e);
+                    }
+
+                    if (attempts > 120) {
+                        clearInterval(pollInterval);
+                        progressText.textContent = '⏱ Generation timed out. Please try again.';
+                    }
+                }, 1500);
+
+            } catch (err) {
+                progressText.textContent = `❌ Error: ${err.message}`;
+            }
+        }
+
+        function closeVideoModal() {
+            const modal = document.getElementById('videoModal');
+            const player = document.getElementById('html5VideoPlayer');
+            if (player) {
+                player.pause();
+            }
+            modal.style.display = 'none';
         }
 
         // Initialize sources on page load

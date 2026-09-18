@@ -15,3 +15,7 @@ storage/test_scratch/*
 storage/registry/SRC_*/
 !.gitkeep
 .DS_Store
+*.mp4
+*.wav
+*.mp3
+storage/videos/*
