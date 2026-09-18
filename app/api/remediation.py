@@ -5,6 +5,7 @@ Endpoints:
 - POST /remediation/submit → Grade verification answers, update mastery to MASTERED or trigger kill switch
 """
 
+import logging
 from typing import List
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -14,6 +15,8 @@ from ..services.remediation.engine import (
     create_remediation_session,
     evaluate_remediation_submission,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/remediation", tags=["Step 4 — Remediation & Re-Testing"])
 
@@ -79,8 +82,10 @@ def start_remediation(req: RemediationStartRequest) -> RemediationStartResponse:
             questions=safe_questions,
             status=session.status,
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to create remediation session: {str(e)}")
+    except Exception:
+        # SEC-010: Log full traceback server-side; return generic client message
+        logger.exception("Failed to create remediation session for student=%s concept=%s", req.student_id, req.concept_id)
+        raise HTTPException(status_code=500, detail="Failed to create remediation session. Check server logs.")
 
 
 @router.post("/submit", response_model=RemediationSubmitResponse)
@@ -96,5 +101,7 @@ def submit_remediation(req: RemediationSubmitRequest) -> RemediationSubmitRespon
         return RemediationSubmitResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to evaluate remediation submission: {str(e)}")
+    except Exception:
+        # SEC-010: Log full traceback server-side; return generic client message
+        logger.exception("Failed to evaluate remediation submission for session=%s", req.session_id)
+        raise HTTPException(status_code=500, detail="Failed to evaluate submission. Check server logs.")

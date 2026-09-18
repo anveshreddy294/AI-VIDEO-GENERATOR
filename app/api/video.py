@@ -17,6 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
+from ..core.config import settings
 from ..services.assessment.video_target import load_video_matrix
 from ..services.video_gen.pipeline import (
     execute_video_generation_pipeline,
@@ -30,6 +31,24 @@ router = APIRouter(prefix="/video", tags=["Video Generation Engine"])
 
 # Active in-memory jobs cache
 ACTIVE_JOBS: Dict[str, VideoRenderJob] = {}
+
+# SEC-005: Resolve once at startup for path traversal guard
+_STORAGE_ROOT = (settings.storage_dir if hasattr(settings, 'storage_dir') else Path("storage")).resolve()
+
+
+def _safe_path(raw_path: str) -> Path:
+    """Resolve a stored path and assert it stays within project storage.
+
+    SEC-005: Prevents path traversal attacks where a manipulated index entry
+    like ../../etc/passwd could cause arbitrary file reads.
+    """
+    resolved = Path(raw_path).resolve()
+    try:
+        resolved.relative_to(_STORAGE_ROOT)
+    except ValueError:
+        logger.warning("SEC-005: Path traversal attempt blocked: %s", raw_path)
+        raise HTTPException(status_code=403, detail="Access to this file path is not allowed.")
+    return resolved
 
 
 class GenerateVideoRequest(BaseModel):
@@ -181,7 +200,8 @@ async def stream_video(video_id: str):
     if not meta:
         raise HTTPException(status_code=404, detail=f"Video '{video_id}' not found.")
 
-    video_path = Path(meta["video_file_path"])
+    # SEC-005: Validate resolved path is inside storage to prevent path traversal
+    video_path = _safe_path(meta["video_file_path"])
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video file not found on disk.")
 
@@ -200,7 +220,8 @@ async def get_video_subtitles(video_id: str):
     if not meta or not meta.get("subtitles_file_path"):
         raise HTTPException(status_code=404, detail=f"Subtitles for '{video_id}' not found.")
 
-    sub_path = Path(meta["subtitles_file_path"])
+    # SEC-005: Validate resolved path is inside storage to prevent path traversal
+    sub_path = _safe_path(meta["subtitles_file_path"])
     if not sub_path.exists():
         raise HTTPException(status_code=404, detail="Subtitle file not found on disk.")
 

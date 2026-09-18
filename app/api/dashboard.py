@@ -1644,6 +1644,17 @@ DASHBOARD_HTML = """
             }
         }
 
+        // SEC-004: HTML escape utility — prevents XSS when injecting LLM/user content via innerHTML
+        function _escHtml(str) {
+            if (str == null) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#x27;');
+        }
+
         async function sendRagQuestion() {
             if (!activeVideoId) {
                 alert('Please wait for the video to finish loading.');
@@ -1657,12 +1668,12 @@ DASHBOARD_HTML = """
             const timestamp = player ? player.currentTime : 0;
             const chatLog = document.getElementById('ragChatLog');
 
-            // Append User Bubble
+            // Append User Bubble — SEC-004: escape question text before innerHTML injection
             const userMsg = document.createElement('div');
             userMsg.style.cssText = 'background:#1f6feb26;border:1px solid #1f6feb55;padding:8px 12px;border-radius:6px;align-self:flex-end;max-width:85%;color:#f0f6fc;';
             const curMins = Math.floor(timestamp / 60);
             const curSecs = Math.floor(timestamp % 60);
-            userMsg.innerHTML = `<div style="font-size:11px;color:#58a6ff;font-weight:600;margin-bottom:2px;">You (${curMins}:${curSecs < 10 ? '0' : ''}${curSecs})</div><div>${question}</div>`;
+            userMsg.innerHTML = `<div style="font-size:11px;color:#58a6ff;font-weight:600;margin-bottom:2px;">You (${curMins}:${curSecs < 10 ? '0' : ''}${curSecs})</div><div>${_escHtml(question)}</div>`;
             chatLog.appendChild(userMsg);
             input.value = '';
 
@@ -1706,11 +1717,17 @@ DASHBOARD_HTML = """
                     `;
                 }
 
+                // SEC-004: Use textContent for the LLM answer to prevent XSS injection
+                const answerDiv = document.createElement('div');
+                answerDiv.style.cssText = 'line-height:1.4;white-space:pre-line;';
+                answerDiv.textContent = data.answer || '';
+
                 let citationsHtml = '';
                 if (data.citations && data.citations.length > 0) {
                     citationsHtml = '<div style="margin-top:8px;padding-top:6px;border-top:1px solid #21262d;font-size:11px;color:#8b949e;display:flex;flex-wrap:wrap;gap:4px;"><strong>Sources:</strong>';
                     data.citations.forEach(c => {
-                        citationsHtml += `<span class="meta-chip">${c.chunk_id}${c.page ? ` (p.${c.page})` : ''}</span>`;
+                        // chunk_id and page are system-generated, safe to display but still escape
+                        citationsHtml += `<span class="meta-chip">${_escHtml(c.chunk_id)}${c.page ? ` (p.${_escHtml(String(c.page))})` : ''}</span>`;
                     });
                     citationsHtml += '</div>';
                 }
@@ -1719,8 +1736,10 @@ DASHBOARD_HTML = """
                 if (data.suggested_questions && data.suggested_questions.length > 0) {
                     suggestionsHtml = '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">';
                     data.suggested_questions.forEach(sq => {
-                        const safeSq = sq.replace(/'/g, "\\'");
-                        suggestionsHtml += `<button onclick="askQuickQuestion('${safeSq}')" class="meta-chip" style="cursor:pointer;background:#21262d;color:#58a6ff;font-size:11px;padding:2px 6px;">❓ ${sq}</button>`;
+                        // SEC-004: Use data attribute + event listener instead of inline onclick
+                        // to avoid HTML injection through suggested question text
+                        const safeSq = _escHtml(sq);
+                        suggestionsHtml += `<button class="meta-chip rag-suggest-btn" data-question="${safeSq}" style="cursor:pointer;background:#21262d;color:#58a6ff;font-size:11px;padding:2px 6px;">❓ ${safeSq}</button>`;
                     });
                     suggestionsHtml += '</div>';
                 }
@@ -1730,10 +1749,17 @@ DASHBOARD_HTML = """
                         <span>🎓 Video Assistant</span>
                         ${sceneChip}
                     </div>
-                    <div style="line-height:1.4;white-space:pre-line;">${data.answer}</div>
+                    <div id="answerTextSlot"></div>
                     ${citationsHtml}
                     ${suggestionsHtml}
                 `;
+                // Insert answer via textContent to prevent innerHTML XSS
+                botMsg.querySelector('#answerTextSlot').replaceWith(answerDiv);
+
+                // Attach click handlers to suggestion chips via JS (safe, no inline eval)
+                botMsg.querySelectorAll('.rag-suggest-btn').forEach(btn => {
+                    btn.addEventListener('click', () => askQuickQuestion(btn.dataset.question));
+                });
                 chatLog.appendChild(botMsg);
                 chatLog.scrollTop = chatLog.scrollHeight;
             } catch (err) {

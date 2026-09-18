@@ -11,6 +11,9 @@ Executes the complete Step 1 sequence:
 8. Topic Blueprint derivation & Status READY transition.
 """
 
+import logging
+import mimetypes
+import os
 import shutil
 import traceback
 from pathlib import Path
@@ -30,7 +33,51 @@ from ..services.registry import (
 from ..services.structurer import process_structure_and_concepts
 from ..services.validator import ValidationFailed, validate_ingestion_quality
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/upload", tags=["Step 1 — Ingestion"])
+
+# SEC-006: Configurable maximum upload size (default: 200 MB)
+_MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "200")) * 1024 * 1024
+
+# SEC-007: Extension → allowed MIME types mapping for basic content validation
+_MIME_ALLOWLIST: dict[str, set[str]] = {
+    "pdf":  {"application/pdf"},
+    "txt":  {"text/plain", "application/octet-stream"},
+    "png":  {"image/png"},
+    "jpg":  {"image/jpeg"},
+    "jpeg": {"image/jpeg"},
+    "mp4":  {"video/mp4", "application/octet-stream"},
+    "mov":  {"video/quicktime", "video/mp4", "application/octet-stream"},
+    "mkv":  {"video/x-matroska", "application/octet-stream"},
+}
+
+
+def _validate_mime(filename: str, content_type: str | None) -> None:
+    """SEC-007: Verify the Content-Type header matches the declared extension.
+
+    Protects against trivial extension spoofing (e.g. a .php renamed to .pdf).
+    We perform a best-effort check — browser Content-Type can be unreliable,
+    so we only reject when there is a clear, unambiguous mismatch.
+    """
+    if not content_type:
+        return  # Cannot validate without Content-Type; proceed with extension check only
+    ext = Path(filename).suffix.lstrip(".").lower()
+    allowed_mimes = _MIME_ALLOWLIST.get(ext)
+    if allowed_mimes is None:
+        return  # Extension not in map — already blocked by is_allowed check
+    ct_base = content_type.split(";")[0].strip().lower()
+    # Allow generic octet-stream from any uploader
+    if ct_base == "application/octet-stream":
+        return
+    if ct_base not in allowed_mimes:
+        raise HTTPException(
+            status_code=415,
+            detail=(
+                f"Content-Type '{ct_base}' does not match expected MIME types for .{ext} files. "
+                "Please upload a genuine file."
+            ),
+        )
 
 
 @router.post(
@@ -51,11 +98,36 @@ async def upload_file(
 ):
     filename = file.filename or "unnamed"
 
+    # SEC-007: Validate Content-Type vs extension before reading the file
+    _validate_mime(filename, file.content_type)
+
     # Save to temp location for hash calculation and validation
     temp_name = f"{uuid4().hex}_{Path(filename).name}"
     temp_path = settings.upload_dir / temp_name
-    with temp_path.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
+
+    # SEC-006: Stream file to disk, tracking size to enforce upload limit
+    bytes_written = 0
+    try:
+        with temp_path.open("wb") as out:
+            chunk_size = 1024 * 1024  # 1 MB chunks
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                bytes_written += len(chunk)
+                if bytes_written > _MAX_UPLOAD_BYTES:
+                    temp_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum upload size is {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
+                    )
+                out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        temp_path.unlink(missing_ok=True)
+        logger.exception("Failed to write uploaded file to temp storage")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
 
     source_record = None
 
@@ -183,8 +255,10 @@ def upsert_safely(chunks) -> int:
         from ..db.vector_store import upsert_chunks
 
         return upsert_chunks(chunks)
-    except Exception as exc:
+    except Exception:
+        # SEC-010: Do not expose internal Qdrant errors to clients
+        logger.exception("Qdrant upsert failure")
         raise HTTPException(
             status_code=503,
-            detail=f"Layer A vector sync failed (Qdrant error): {exc}",
-        ) from exc
+            detail="Vector database sync failed. Please try again or contact support.",
+        )

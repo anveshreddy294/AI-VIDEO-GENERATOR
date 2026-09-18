@@ -1,7 +1,7 @@
 """Pydantic data models for Instructor Analytics & Human Intervention Portal."""
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -42,11 +42,19 @@ class CohortOverview(BaseModel):
 
 class ResetMasteryRequest(BaseModel):
     """Instructor action to override or reset a student's concept mastery status."""
-    student_id: str = Field(description="Student identifier")
-    source_id: str = Field(description="Source identifier")
-    concept_id: str = Field(description="Concept identifier")
-    new_status: str = Field(default="LEARNING", description="'LEARNING' to allow retry, or 'MASTERED' to manually verify")
-    instructor_notes: Optional[str] = Field(default=None, description="Explanation or guidance note for student record")
+    student_id: str = Field(description="Student identifier", max_length=128)
+    source_id: str = Field(description="Source identifier", max_length=128)
+    concept_id: str = Field(description="Concept identifier", max_length=256)
+    # SEC-008: Only LEARNING and MASTERED are valid statuses — prevents arbitrary string injection
+    new_status: Literal["LEARNING", "MASTERED"] = Field(
+        default="LEARNING",
+        description="'LEARNING' to allow retry, or 'MASTERED' to manually verify",
+    )
+    instructor_notes: Optional[str] = Field(
+        default=None,
+        max_length=2000,
+        description="Explanation or guidance note for student record (max 2000 chars)",
+    )
 
 
 class ResetMasteryResponse(BaseModel):

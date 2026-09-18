@@ -4,11 +4,18 @@ Endpoints:
 - GET  /instructor              → HTML Instructor Dashboard UI
 - GET  /instructor/api/overview → Cohort overview, alerts, and concept analytics JSON
 - POST /instructor/api/reset-mastery → Override student mastery or reset from kill switch
+
+SEC-003: All API endpoints are guarded by an INSTRUCTOR_API_KEY header check.
+Set INSTRUCTOR_API_KEY in your .env file. If unset, access is blocked in all
+environments to prevent accidental exposure of student data.
 """
 
+import logging
+import os
 from typing import Optional
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from fastapi.responses import HTMLResponse
+from fastapi.security.api_key import APIKeyHeader
 
 from ..services.instructor.analytics import get_cohort_overview, reset_student_concept_status
 from ..services.instructor.schemas import (
@@ -16,6 +23,31 @@ from ..services.instructor.schemas import (
     ResetMasteryRequest,
     ResetMasteryResponse,
 )
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# SEC-003: Instructor API Key Guard
+# ---------------------------------------------------------------------------
+_INSTRUCTOR_KEY_ENV = "INSTRUCTOR_API_KEY"
+_api_key_header = APIKeyHeader(name="X-Instructor-Key", auto_error=False)
+
+
+def _require_instructor_key(api_key: str = Security(_api_key_header)) -> str:
+    """Dependency: validates the X-Instructor-Key header against INSTRUCTOR_API_KEY env var."""
+    expected = os.getenv(_INSTRUCTOR_KEY_ENV, "").strip()
+    if not expected:
+        raise HTTPException(
+            status_code=403,
+            detail="Instructor access is disabled. Set INSTRUCTOR_API_KEY in your .env to enable.",
+        )
+    if not api_key or api_key != expected:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing X-Instructor-Key header.",
+        )
+    return api_key
+
 
 router = APIRouter(prefix="/instructor", tags=["Instructor Analytics"])
 
@@ -373,14 +405,27 @@ def get_instructor_portal() -> HTMLResponse:
 
 
 @router.get("/api/overview", response_model=CohortOverview)
-def get_overview_api(source_id: Optional[str] = Query(default=None)) -> CohortOverview:
-    """Retrieve cohort overview metrics, active alerts, and concept analytics."""
+def get_overview_api(
+    source_id: Optional[str] = Query(default=None),
+    _key: str = Depends(_require_instructor_key),
+) -> CohortOverview:
+    """Retrieve cohort overview metrics, active alerts, and concept analytics.
+
+    Requires: X-Instructor-Key header matching INSTRUCTOR_API_KEY env var.
+    """
     return get_cohort_overview(source_id)
 
 
 @router.post("/api/reset-mastery", response_model=ResetMasteryResponse)
-def reset_mastery_api(req: ResetMasteryRequest) -> ResetMasteryResponse:
-    """Instructor override endpoint to reset or verify a student's concept mastery."""
+def reset_mastery_api(
+    req: ResetMasteryRequest,
+    _key: str = Depends(_require_instructor_key),
+) -> ResetMasteryResponse:
+    """Instructor override endpoint to reset or verify a student's concept mastery.
+
+    Requires: X-Instructor-Key header matching INSTRUCTOR_API_KEY env var.
+    SEC-008: new_status is constrained to ['LEARNING', 'MASTERED'] via schema Literal.
+    """
     try:
         return reset_student_concept_status(
             student_id=req.student_id,
@@ -391,5 +436,7 @@ def reset_mastery_api(req: ResetMasteryRequest) -> ResetMasteryResponse:
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to reset mastery: {str(e)}")
+    except Exception:
+        # SEC-010: Do not leak internal exception details to API responses
+        logger.exception("Failed to reset mastery for %s / %s", req.student_id, req.concept_id)
+        raise HTTPException(status_code=500, detail="Failed to reset mastery. Check server logs.")

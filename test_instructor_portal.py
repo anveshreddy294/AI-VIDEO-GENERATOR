@@ -225,17 +225,26 @@ class TestInstructorPortal(unittest.TestCase):
 
     def test_5_rest_api_endpoints(self):
         """Test 5: REST API contracts for overview, reset, and HTML dashboard."""
+        import os
+        # SEC-003: Set INSTRUCTOR_API_KEY for test so the auth guard can validate
+        test_key = "test-instructor-key-for-unit-tests"
+        os.environ["INSTRUCTOR_API_KEY"] = test_key
+        auth_headers = {"X-Instructor-Key": test_key}
         client = TestClient(app)
 
-        # 1. GET /instructor/api/overview
-        overview_res = client.get(f"/instructor/api/overview?source_id={self.source_id}")
+        # 1. GET /instructor/api/overview (with auth header)
+        overview_res = client.get(f"/instructor/api/overview?source_id={self.source_id}", headers=auth_headers)
         self.assertEqual(overview_res.status_code, 200)
         overview_data = overview_res.json()
         self.assertIn("total_students", overview_data)
         self.assertIn("alerts", overview_data)
         self.assertIn("concept_analytics", overview_data)
 
-        # 2. POST /instructor/api/reset-mastery
+        # 1b. Verify auth guard blocks unauthenticated access
+        unauth_res = client.get(f"/instructor/api/overview?source_id={self.source_id}")
+        self.assertIn(unauth_res.status_code, (401, 403), "Unauthenticated request must be rejected")
+
+        # 2. POST /instructor/api/reset-mastery (with auth header)
         reset_payload = {
             "student_id": self.student_a,
             "source_id": self.source_id,
@@ -243,16 +252,24 @@ class TestInstructorPortal(unittest.TestCase):
             "new_status": "LEARNING",
             "instructor_notes": "API test reset",
         }
-        post_res = client.post("/instructor/api/reset-mastery", json=reset_payload)
+        post_res = client.post("/instructor/api/reset-mastery", json=reset_payload, headers=auth_headers)
         self.assertEqual(post_res.status_code, 200)
         post_data = post_res.json()
         self.assertEqual(post_data["new_status"], "LEARNING")
 
-        # 3. GET /instructor (HTML UI)
+        # 2b. Verify invalid status is rejected by Pydantic Literal constraint (SEC-008)
+        bad_status_payload = {**reset_payload, "new_status": "HACKED"}
+        bad_res = client.post("/instructor/api/reset-mastery", json=bad_status_payload, headers=auth_headers)
+        self.assertEqual(bad_res.status_code, 422, "Invalid new_status must be rejected with 422 Unprocessable Entity")
+
+        # 3. GET /instructor (HTML UI — no auth required for the web page itself)
         html_res = client.get("/instructor")
         self.assertEqual(html_res.status_code, 200)
         self.assertIn("VisualAI Instructor Portal", html_res.text)
         self.assertIn("kpiInterventions", html_res.text)
+
+        # Cleanup
+        del os.environ["INSTRUCTOR_API_KEY"]
 
 
 if __name__ == "__main__":

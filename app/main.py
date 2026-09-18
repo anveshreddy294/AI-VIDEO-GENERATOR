@@ -1,6 +1,10 @@
 """VisualAI — Steps 1 & 2: Multimodal Ingestion + Student Knowledge Profiling."""
 
-from fastapi import FastAPI
+import os
+
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .api.dashboard import router as dashboard_router
 from .api.upload import router as upload_router
@@ -10,6 +14,12 @@ from .api.video import router as video_router
 from .api.remediation import router as remediation_router
 from .api.video_rag import router as video_rag_router
 from .api.instructor import router as instructor_router
+
+# ---------------------------------------------------------------------------
+# Allowed origins — override via VISUALAI_CORS_ORIGINS env var (comma-sep)
+# ---------------------------------------------------------------------------
+_cors_origins_raw = os.getenv("VISUALAI_CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
+ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 app = FastAPI(
     title="VisualAI — Personalized Educational Video Platform",
@@ -27,6 +37,15 @@ app = FastAPI(
     version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
+)
+
+# SEC-011: Explicit CORS policy — prevent unintended cross-origin access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(dashboard_router)
@@ -71,8 +90,17 @@ def get_sources():
 
 
 @app.get("/debug/qdrant")
-def debug_qdrant():
-    """Diagnostic endpoint to check Qdrant collection state."""
+def debug_qdrant(request: Request):
+    """Diagnostic endpoint to check Qdrant collection state.
+
+    SEC-002: Only available when VISUALAI_DEBUG=true is set in environment.
+    Must never be enabled in production deployments.
+    """
+    if os.getenv("VISUALAI_DEBUG", "").lower() not in ("1", "true", "yes"):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Debug endpoint disabled. Set VISUALAI_DEBUG=true to enable (development only)."},
+        )
     from .db.vector_store import get_client, ensure_collection, _embed
     from qdrant_client.http import models as qmodels
 
