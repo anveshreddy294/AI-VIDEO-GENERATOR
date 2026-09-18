@@ -1,0 +1,1855 @@
+================================================================================
+                    VISUALAI PLATFORM — FULL SYSTEM FLOW
+           REVERSE-ENGINEERED STEP 1 & STEP 2 CODEBASE SPECIFICATION
+================================================================================
+Generated for: Senior Software Architect / Engineering Lead
+Target: Complete, Grounded System Flow for STEP 1 (Ingestion) & STEP 2 (Assessment)
+Codebase Path: d:\ai video generator\AI-VIDEO-GENERATOR
+Git Branch: feature/step3-integration
+Git Status: Clean (working tree clean)
+Date: September 2026
+================================================================================
+
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1.  PHASE 1  — FULL CODEBASE DISCOVERY
+2.  PHASE 2  — STEP 1 REVERSE ENGINEERING (MULTIMODAL INGESTION & KNOWLEDGE GRAPH)
+3.  PHASE 3  — STEP 2 REVERSE ENGINEERING (ADAPTIVE ASSESSMENT & PROFILING)
+4.  PHASE 4  — DATABASE DEEP DIVE (STORAGE & PERSISTENCE ARCHITECTURE)
+5.  PHASE 5  — COMPLETE END-TO-END DATA FLOW
+6.  PHASE 6  — LINE-BY-LINE EXECUTION CODE FLOW
+7.  PHASE 7  — API FLOW & ROUTE SPECIFICATION TABLE
+8.  PHASE 8  — FILE & ARTIFACT STORAGE FLOW
+9.  PHASE 9  — AI / LLM / VISION PROCESSING FLOW
+10. PHASE 10 — STEP 1 -> STEP 2 CONNECTION CONTRACT
+11. PHASE 11 — COMPLETE SYSTEM ARCHITECTURE FLOWCHART (ASCII)
+12. PHASE 12 — DATABASE & DATA ENTITY ARCHITECTURE DIAGRAM (ASCII ERD)
+13. PHASE 13 — REAL CODE REFERENCES & SYMBOL MAP
+14. PHASE 14 — ERROR, EXCEPTION & FAILURE RECOVERY FLOW
+15. PHASE 15 — TEST SUITE AUDIT & COVERAGE ANALYSIS
+16. PHASE 16 — CURRENT IMPLEMENTATION STATUS (STEP 1, STEP 2, INTEGRATION)
+17. FINAL SECTION — ONE-PAGE MENTAL MODEL (2-MINUTE SUMMARY)
+================================================================================
+
+
+================================================================================
+PHASE 1 — FULL CODEBASE DISCOVERY
+================================================================================
+
+1. CURRENT WORKING DIRECTORY:
+   - Absolute Host Path: d:\ai video generator\AI-VIDEO-GENERATOR
+   - Operating System: Windows (powershell/cmd environment)
+
+2. GIT STATUS & BRANCH AUDIT:
+   - Active Branch: feature/step3-integration
+   - Up to date with: origin/feature/step3-integration
+   - Working Tree: Clean (0 uncommitted files)
+   - Other Branches Present:
+     * feature/shanmukh-step2-error-handling
+     * feature/step3-integration (checked out)
+     * main
+     * remotes/origin/feature/shanmukh-step-2
+     * remotes/origin/feature/step2-hardening-shanumukh
+     * remotes/origin/yogi-step-2-result
+
+3. REPOSITORY DIRECTORY STRUCTURE:
+   AI-VIDEO-GENERATOR/
+   ├── .env                             [Active environment secrets & config]
+   ├── .env.example                     [Template configuration]
+   ├── .gitignore                       [Git ignore rules]
+   ├── .venv/                           [Python virtual environment]
+   ├── ARCHITECTURE.md                  [High-level architecture documentation]
+   ├── COMMANDS.md                      [Command-line instructions]
+   ├── DATA_FLOW.md                     [Step 1 data flow documentation]
+   ├── Dockerfile                       [Production container definition (Python 3.12-slim + FFmpeg)]
+   ├── docker-compose.yml               [Multi-service definition: visualai-api + visualai-qdrant]
+   ├── Makefile                         [Development automation tasks]
+   ├── PROJECT_CONTEXT.md               [Authoritative project context & status document]
+   ├── README.md                        [Project overview]
+   ├── requirements.txt                 [Pinned Python package requirements]
+   ├── start.bat                        [Windows one-click runner script]
+   ├── start.sh                         [Linux/macOS launcher script]
+   ├── STEP1_STEP2_DATA_FLOW_AND_STORAGE.txt [Legacy specification document]
+   ├── STEP2_SPECIFICATION.md           [Step 2 design specification]
+   ├── TASKS.md                         [Milestone tracking document]
+   ├── test_step1.py                    [Step 1 ingestion test script]
+   ├── test_step2.py                    [Step 2 master flow test script]
+   ├── test_step2_backfill.py           [Phase 2A question backfill test suite]
+   ├── test_step2_phase2b.py            [Phase 2B session snapshot test suite]
+   ├── test_step2_phase2c.py            [Phase 2C dynamic config test suite]
+   ├── test_step2_phase3.py             [Phase 3 LLM provider abstraction test suite]
+   ├── test_step2_phase4.py             [Phase 4 production hardening test suite]
+   ├── app/                             [Core Python Application Package]
+   │   ├── __init__.py
+   │   ├── main.py                      [FastAPI application entrypoint & system endpoints]
+   │   ├── api/                         [REST API Route Handlers]
+   │   │   ├── __init__.py
+   │   │   ├── dashboard.py             [Embedded Single-Page Application (SPA) Web Console]
+   │   │   ├── upload.py                [POST /upload — Step 1 Ingestion Pipeline]
+   │   │   └── assessment.py            [Step 2 Assessment, Submit & Target Endpoints]
+   │   ├── core/                        [Application Configuration]
+   │   │   ├── __init__.py
+   │   │   └── config.py                [Settings class loading .env, path creation, defaults]
+   │   ├── db/                          [Database & Vector Store Adapters]
+   │   │   ├── __init__.py
+   │   │   └── vector_store.py          [Qdrant Client, Gemini Embeddings, Upsert/Search]
+   │   └── services/                    [Business Logic & Processing Engines]
+   │       ├── __init__.py
+   │       ├── schemas.py               [Canonical Step 1 Pydantic Schemas]
+   │       ├── registry.py              [Source Registry, SHA-256, File Versioning, JSON Store]
+   │       ├── dispatcher.py            [Modality Dispatcher: PDF, Image, TXT, Video]
+   │       ├── extractor.py             [PyMuPDF text & diagram block extraction]
+   │       ├── vision.py                [Gemini Vision API client for diagrams and frames]
+   │       ├── structurer.py            [Gemini Structurer & Regex Heuristic Fallback]
+   │       ├── chunker.py               [Concept-Aware Semantic Chunker (tiktoken/RecursiveSplitter)]
+   │       ├── validator.py             [5-Stage Quality Validation Gateway for Step 1]
+   │       ├── video/                   [Video Matrix Ingestion Subsystem]
+   │       │   ├── __init__.py
+   │       │   ├── pipeline.py          [Video processing orchestrator]
+   │       │   ├── av_splitter.py       [FFmpeg 16kHz mono WAV extraction]
+   │       │   ├── transcriber.py       [faster-whisper ASR transcription with timestamps]
+   │       │   ├── frame_extractor.py   [OpenCV keyframe extraction & perceptual deduplication]
+   │       │   └── fusion.py            [Multimodal temporal fusion into ContentUnits]
+   │       └── assessment/              [Step 2 Assessment & Profiling Subsystem]
+   │           ├── __init__.py
+   │           ├── schemas.py           [Step 2 Canonical Schemas: Questions, Sessions, Profiles, Targets]
+   │           ├── session_store.py     [Assessment session JSON persistence]
+   │           ├── planner.py           [Cold start balance, adaptive targeting, prereq pairing]
+   │           ├── generator.py         [Grounded question generator, Qdrant retrieval, fallback]
+   │           ├── providers.py         [LLM Provider protocol: Gemini, Ollama, Mock]
+   │           ├── validator.py         [Question schema, grounding overlap & duplicate gateways]
+   │           ├── engine.py            [Grading, consecutive mastery, anti-loop kill switch]
+   │           ├── profile.py           [StudentLearningProfile JSON persistence]
+   │           └── video_target.py      [VideoTargetMatrix duration scaling: 30s/45s/60s]
+   └── storage/                         [Local Persistent State Directory]
+       ├── uploads/                     [Ephemeral staging & permanent original files: {source_id}/original.<ext>]
+       ├── processed/                   [Intermediate audio rips: {video_stem}_audio.wav]
+       ├── registry/                    [Master catalog sources_index.json & {source_id}/ artifacts]
+       ├── qdrant/                      [Embedded local Qdrant vector database files]
+       ├── qdrant_local/                [Alternative embedded Qdrant database directory]
+       ├── qdrant_storage/              [Docker mount point for containerized Qdrant]
+       ├── assessment_sessions/         [Quiz sessions: {session_id}.json]
+       ├── learning_profiles/           [Student profiles: {student_id}_{source_id}.json]
+       ├── video_targets/               [Step 3 handoff matrices: {student_id}_{source_id}.json]
+       └── test_scratch/                [Scratch files generated during test runs]
+
+4. TECH STACK DISCOVERY:
+   - Backend Framework: FastAPI 0.141.1 running on Uvicorn 0.30.6
+   - Validation & Serialization: Pydantic v2 (2.13.5)
+   - Frontend: Embedded SPA in app/api/dashboard.py (HTML5 / Vanilla CSS3 / Vanilla JS)
+   - Relational Database / ORM: NONE. (There is NO PostgreSQL, MySQL, SQLite ORM, SQLAlchemy, Tortoise, or Alembic)
+   - Vector Database: Qdrant via qdrant-client 1.12.1. Dual-mode:
+     * Mode A: Docker container at http://localhost:6333 (collection: visualai_layer_a)
+     * Mode B: In-process embedded disk database at storage/qdrant/
+   - Persistence Method: File-system JSON document stores with Pydantic serialization
+   - Text Processing: PyMuPDF 1.28.2, langchain-text-splitters 1.1.2, tiktoken 0.14.0 (cl100k_base)
+   - Audio/Video Processing: System FFmpeg CLI, faster-whisper 1.1.0 (large-v3 model), OpenCV 5.0.0.93, NumPy 2.5.3
+   - AI/LLM Services:
+     * Google Gemini API (google-generativeai 0.8.3): gemini-3.5-flash for generation/structuring, models/gemini-embedding-2 for dense vector embeddings
+     * Ollama HTTP client adapter (providers.py) for local offline LLMs (llama3.2)
+     * MockProvider for deterministic offline unit testing
+   - Background Workers / Task Queues: NONE. (No Celery, Redis Queue, or RabbitMQ. All pipeline execution is synchronous within the FastAPI request cycle or handled via subprocess).
+
+
+================================================================================
+PHASE 2 — IDENTIFY STEP 1 (MULTIMODAL INGESTION & KNOWLEDGE GRAPH)
+================================================================================
+
+PURPOSE OF STEP 1:
+Ingests raw multimodal study materials (PDF documents, image diagrams, plain text,
+or lecture videos), validates signatures, normalizes content into canonical ContentUnit
+abstractions, extracts conceptual knowledge graphs with prerequisite dependencies,
+chunks text semantically with Layer A provenance, and syncs vectors to Qdrant.
+
+STEP 1 ENTRY POINT:
+- Endpoint: POST /upload
+- Handler: app.api.upload.upload_file()
+- Router File: app/api/upload.py
+
+STEP 1 SOURCE COMPONENTS (IN EXECUTION ORDER):
+
+1. FILE: app/api/upload.py
+   FUNCTION: upload_file()
+   PURPOSE: Receives multipart/form-data upload, stages temporary file, orchestrates pipeline.
+   INPUT: file: UploadFile, auto_start_assessment: bool = False, student_id: str = "student_default", max_questions: int = 5
+   PROCESSING:
+     - Saves incoming bytes to storage/uploads/{uuid4}_{filename}
+     - Calls register_source()
+     - Calls dispatch()
+     - Calls process_structure_and_concepts()
+     - Calls save_content_units() and save_knowledge_graph()
+     - Calls create_rich_chunks()
+     - Calls upsert_chunks() via upsert_safely()
+     - Calls validate_ingestion_quality()
+     - Updates status to READY
+     - Optionally triggers start_assessment() if auto_start_assessment=True
+   OUTPUT: Ingestion response dict (status, source_id, asset_id, content_units, chunks_synced, concepts_extracted, validation, topic_blueprint)
+   NEXT COMPONENT: Returns HTTP 200 to client OR passes source_id to Step 2.
+
+2. FILE: app/services/registry.py
+   FUNCTION: register_source(temp_path, filename, uploaded_by)
+   PURPOSE: File signature validation, SHA-256 deduplication, versioning, persistence of original file.
+   INPUT: temp_path: Path, filename: str, uploaded_by: str
+   PROCESSING:
+     - Calls validate_file(): checks size (max 500MB), extension, and magic bytes (PDF, PNG, JPG, MP4, MOV, MKV).
+     - Computes SHA-256 checksum: calculate_sha256().
+     - Checks if hash exists in storage/registry/sources_index.json. If found, increments version (e.g. version 2) and records parent_source_id.
+     - Creates SourceRecord with unique source_id (SRC_...), asset_id (AST_...), upload_id (UPL_...).
+     - Copies original file to storage/uploads/{source_id}/original.{ext}.
+     - Writes record to sources_index.json.
+   OUTPUT: tuple[SourceRecord, Path (persistent_file)]
+   NEXT COMPONENT: app/services/dispatcher.py::dispatch()
+
+3. FILE: app/services/dispatcher.py
+   FUNCTION: dispatch(file_path, source_id, asset_id)
+   PURPOSE: Routes raw file to modality-specific extractor and returns normalized ContentUnits.
+   INPUT: file_path: Path, source_id: str, asset_id: str
+   PROCESSING:
+     - If ext == "pdf": calls app/services/extractor.py::extract_from_pdf()
+     - If ext in {"png", "jpg", "jpeg"}: calls app/services/vision.py::describe_image_file() -> wraps in ContentUnit
+     - If ext == "txt": reads file, splits by paragraph (\n\n), computes char offsets, builds ContentUnits
+     - If ext in {"mp4", "mov", "mkv"}: calls app/services/video/pipeline.py::process_video_units()
+   OUTPUT: ExtractionResult(source_id, asset_id, modality, units: list[ContentUnit])
+   NEXT COMPONENT: app/services/structurer.py::process_structure_and_concepts()
+
+4. FILE: app/services/extractor.py
+   FUNCTION: extract_from_pdf(pdf_path, source_id, asset_id)
+   PURPOSE: Parses PDF text blocks with bounding box provenance and extracts diagrams for vision description.
+   INPUT: pdf_path: Path, source_id: str, asset_id: str
+   PROCESSING:
+     - Opens document via PyMuPDF (fitz.open).
+     - Iterates pages:
+       * page.get_text("blocks") extracts text blocks, line coordinates, bounding boxes [x0, y0, x1, y1].
+       * page.get_images() extracts embedded images; calls describe_image(image_bytes) via Gemini Vision.
+       * If page is scanned/image-only (no text, but images exist), renders page pixmap to PNG and calls describe_image().
+   OUTPUT: list[ContentUnit] (each with modality="pdf", page_number, sequence_index, bbox, confidence_score)
+   NEXT COMPONENT: app/services/structurer.py::process_structure_and_concepts()
+
+5. FILE: app/services/video/pipeline.py
+   FUNCTION: process_video_units(video_path, source_id, asset_id)
+   PURPOSE: 4-phase audio/visual extraction and temporal multimodal fusion.
+   INPUT: video_path: Path, source_id: str, asset_id: str
+   PROCESSING:
+     - Phase 1: av_splitter.py::extract_audio() runs FFmpeg CLI:
+       ffmpeg -y -i <video> -vn -acodec pcm_s16le -ar 16000 -ac 1 <out_wav>
+     - Phase 2: transcriber.py::transcribe_with_timestamps() runs faster-whisper (large-v3, CPU, beam_size=5), applies VAD silence filtering, strips Whisper hallucinations, yields Segment(start, end, text).
+     - Phase 3: frame_extractor.py::extract_frames() samples video every 12s via OpenCV. Compares 32x32 grayscale thumbnails against previous kept frame; if mean absolute difference < 0.04 (similarity threshold), frame is skipped as a duplicate static slide.
+     - Phase 3b: Kept frames are described by vision.py::describe_frame() (Gemini Vision).
+     - Phase 4: fusion.py::fuse_units() matches speech segments with visible frame descriptions within a 2.0s jitter tolerance, creating unified ContentUnit records.
+   OUTPUT: list[ContentUnit] (modality="video", timestamp_start, timestamp_end, frame_id, sequence_index)
+   NEXT COMPONENT: app/services/structurer.py::process_structure_and_concepts()
+
+6. FILE: app/services/structurer.py
+   FUNCTION: process_structure_and_concepts(units)
+   PURPOSE: Discovers curriculum structure, concept definitions, and prerequisite links.
+   INPUT: units: list[ContentUnit]
+   PROCESSING:
+     - Compiles serialized text blocks with ContentUnit IDs into prompt (up to 60,000 chars).
+     - Prompts Gemini (gemini-3.5-flash) with strict JSON schema for chapters, sections, concepts, prerequisites.
+     - Fallback Heuristic Parser: If Gemini fails or hits 429 quota exhaustion, executes regex-based extraction:
+       * Detects topic title from header lines.
+       * Detects acronyms and definitions: e.g. "Free Space Optical Communication (FSOC)".
+       * Matches definition patterns: "X is defined as...", "X refers to...", "X states that...".
+       * Extracts section headings and chains consecutive concepts as prerequisite links.
+     - Enriches ContentUnits with chapter and section names.
+     - Constructs KnowledgeGraph (concepts: dict[str, ConceptNode]).
+     - Derives TopicBlueprint (topic_name, key_concepts, prerequisites, difficulty_level).
+   OUTPUT: tuple[list[ContentUnit], KnowledgeGraph, TopicBlueprint]
+   NEXT COMPONENT: app/services/chunker.py::create_rich_chunks()
+
+7. FILE: app/services/chunker.py
+   FUNCTION: create_rich_chunks(units, kg)
+   PURPOSE: Concept-aware semantic chunking with Layer A provenance metadata.
+   INPUT: units: list[ContentUnit], kg: KnowledgeGraph
+   PROCESSING:
+     - Inverts concept mappings: content_id -> list of concept_ids.
+     - Groups ContentUnits into contiguous blocks by (chapter, section).
+     - Uses RecursiveCharacterTextSplitter with tiktoken cl100k_base encoding:
+       chunk_size=1000 tokens, chunk_overlap=150 tokens.
+     - Builds RichChunk objects containing:
+       chunk_id (CHUNK_...), source_id, asset_id, layer="A", type="rich_chunk",
+       text, modality, chapter, section, concept_ids, content_ids, page_start, page_end,
+       timestamp_start, timestamp_end, extraction_method.
+   OUTPUT: list[RichChunk]
+   NEXT COMPONENT: app/db/vector_store.py::upsert_chunks()
+
+8. FILE: app/db/vector_store.py
+   FUNCTION: upsert_chunks(chunks)
+   PURPOSE: Generates dense vector embeddings and upserts payload points into Qdrant collection visualai_layer_a.
+   INPUT: chunks: list[RichChunk]
+   PROCESSING:
+     - Connects to Qdrant (probe client checks Docker at http://localhost:6333; falls back to embedded storage/qdrant/).
+     - ensure_collection(): checks collection existence; probes embedding dimension using gemini-embedding-2 (768 dimensions).
+     - Generates embeddings via genai.embed_content(model="models/gemini-embedding-2", task_type="retrieval_document").
+     - Generates deterministic UUIDv5 point ID:
+       uuid.uuid5(uuid.NAMESPACE_DNS, f"{chunk.source_id}::{chunk.chunk_id}::{chunk.text[:100]}")
+       (Guarantee: Re-indexing the same source updates points idempotently without duplicate point inflation).
+     - Upserts PointStruct objects with full payload.
+   OUTPUT: int (count of upserted points)
+   NEXT COMPONENT: app/services/validator.py::validate_ingestion_quality()
+
+9. FILE: app/services/validator.py
+   FUNCTION: validate_ingestion_quality(record, file_path, units, kg, chunks, upserted_count)
+   PURPOSE: 5-stage quality validation gateway before marking source READY.
+   INPUT: record: SourceRecord, file_path: Path, units: list[ContentUnit], kg: KnowledgeGraph, chunks: list[RichChunk], upserted_count: int
+   PROCESSING:
+     - Check 1 (file_level): file exists on disk and size > 0 bytes.
+     - Check 2 (content_level): at least 1 ContentUnit exists; IDs populated; PDFs have page_number.
+     - Check 3 (chunk_level): at least 1 RichChunk created; layer == "A"; content_ids provenance present.
+     - Check 4 (concept_level): all concept nodes have valid concept_id and name.
+     - Check 5 (storage_level): upserted_count == len(chunks).
+   OUTPUT: dict report (passed: True, checks: {...})
+   NEXT COMPONENT: update_source_status(source_id, "READY") in app/services/registry.py
+
+
+================================================================================
+PHASE 3 — IDENTIFY STEP 2 (ADAPTIVE ASSESSMENT & KNOWLEDGE PROFILING)
+================================================================================
+
+PURPOSE OF STEP 2:
+Consumes the ingested study material (from Step 1), plans an adaptive diagnostic quiz,
+retrieves source-isolated chunks from Qdrant Layer A, generates strictly grounded multiple-choice
+questions with hidden answer keys, validates against grounding and duplication gateways,
+grades student submissions, updates persistent student learning profiles, enforces an
+Anti-Loop Kill Switch for repeated failures, detects prerequisite dependency gaps,
+and constructs the Video Target Matrix blueprint for downstream video generation (Step 3).
+
+STEP 2 ENTRY POINTS:
+- POST /assessment/start               (Initializes session, plans, generates, dispatches quiz)
+- POST /assessment/handoff             (Direct pipeline alias accepting Step 1 output)
+- POST /assessment/submit              (Grades quiz, updates profile, outputs Video Target Matrix)
+- GET  /assessment/profile/{student_id}/{source_id}      (Retrieves student learning profile)
+- GET  /assessment/status/{session_id}                  (Retrieves session status)
+- GET  /assessment/video-target/{student_id}/{source_id} (Retrieves Step 3 Video Target Matrix)
+
+STEP 2 SOURCE COMPONENTS (IN EXECUTION ORDER):
+
+1. FILE: app/api/assessment.py
+   FUNCTION: start_assessment(payload, student_id, source_id)
+   PURPOSE: Validates Step 1 input, loads KnowledgeGraph, creates AssessmentSession, coordinates planning, generation, validation, backfilling, and safe quiz dispatch.
+   INPUT: payload: AssessmentStartRequest, student_id: str | None, source_id: str | None
+   PROCESSING:
+     - Resolves student_id (default "student_default") and source_id. Ignores Swagger placeholders ("string").
+     - Verifies session integrity: if payload includes source_id, ensures it matches request source_id.
+     - Extracts KnowledgeGraph from payload memory (payload.step1_output or payload.knowledge_graph) OR loads from storage/registry/{source_id}/knowledge_graph.json.
+     - Verifies source status is "READY" via get_source_record() (returns HTTP 423 if still indexing).
+     - Loads or initializes StudentLearningProfile via get_or_create_profile().
+     - Identifies kill-switch concepts (status == "REQUIRES_HUMAN_FALLBACK") to strictly exclude from planning.
+     - Calls plan_assessment() to build primary candidate queue.
+     - Builds reserve pool from remaining KnowledgeGraph concepts, preserving prerequisite order.
+     - Serializes ConceptSnapshot dictionary into AssessmentSession for offline grading resilience (Phase 2B).
+     - Sets session expiration: now + 24 hours (configurable via ASSESSMENT_TTL_HOURS).
+     - Executes sequential question generation loop with automated reserve backfilling:
+       * Calls generate_question()
+       * Calls validate_question() (structural and provenance gateway)
+       * Calls validate_grounding() (semantic token overlap gateway)
+       * Calls is_duplicate() (Jaccard similarity gateway)
+       * Checks duplicate concept acceptance
+       * On rejection, pulls next candidate from reserve pool until target questions reached.
+     - Persists session to storage/assessment_sessions/{session_id}.json via save_session().
+     - Sanitizes questions into SafeQuestion objects (stripping correct_index, correct_answer, and explanation).
+   OUTPUT: JSON response containing status: "READY", session_id, student_id, source_id, expires_at, question_count, questions: list[SafeQuestion], concepts_tested, shortfall.
+   NEXT COMPONENT: Frontend Web UI / Client quiz taker.
+
+2. FILE: app/services/assessment/planner.py
+   FUNCTION: plan_assessment(kg, profile, max_questions, key_concepts)
+   PURPOSE: Selects and orders concepts to test based on student mastery and conceptual hierarchy.
+   INPUT: kg: KnowledgeGraph, profile: StudentLearningProfile, max_questions: int, key_concepts: list[str]
+   PROCESSING:
+     - Difficulty Classification via classify_difficulty(concept):
+       * 0 prerequisites: "foundational"
+       * 1-2 prerequisites: "intermediate"
+       * >2 prerequisites: "advanced"
+     - If no prior profile (Cold Start Rule):
+       * Tiers concepts: ~30% foundational, ~40% intermediate, ~30% advanced.
+       * If key_concepts specified in Step 1 JSON, prioritizes matching nodes first.
+     - If profile exists (Adaptive Re-Test):
+       * Priority 1: Concepts in REQUIRES_HUMAN_FALLBACK (if not excluded)
+       * Priority 2: Concepts in LEARNING (unmastered or failed)
+       * Priority 3: Concepts in NOT_ATTEMPTED
+       * Priority 4: Fill remaining from unselected
+     - Prerequisite Pairing Rule (_apply_prerequisite_pairing):
+       * Traverses DAG recursively.
+       * For every advanced concept selected, guarantees all foundational prerequisite concepts are queued before it.
+       * Implements visiting-set cycle detection to prevent infinite recursion on malformed graphs.
+   OUTPUT: list[ConceptNode] (ordered candidate queue)
+   NEXT COMPONENT: app/api/assessment.py (generation candidate stream)
+
+3. FILE: app/services/assessment/generator.py
+   FUNCTION: generate_question(concept, source_id, difficulty, provided_chunks, max_retries, llm_provider)
+   PURPOSE: Retrieves source chunks and prompts LLM to author grounded MCQs with provenance.
+   INPUT: concept: ConceptNode, source_id: str, difficulty: str, provided_chunks: list | None, max_retries: int, llm_provider: LLMProvider | None
+   PROCESSING:
+     - search_concept_chunks():
+       * Priority 1: checks in-memory provided_chunks from Step 1 JSON.
+       * Priority 2: queries Qdrant visualai_layer_a filtering strictly by source_id and layer="A".
+       * Fallback: constructs minimal synthetic chunk from concept definition without fabricated page numbers.
+     - Extracts provenance anchors: chunk_ids, content_ids, page_start, page_end, timestamp_start, timestamp_end.
+     - Formats _QUESTION_PROMPT with strict negative prompting:
+       * "Based ONLY on this text, generate a multiple-choice question. Provide exactly 1 correct answer and 3 plausible but factually incorrect options."
+     - Invokes LLM Provider (GeminiProvider, OllamaProvider, or MockProvider).
+     - Deterministic Grounded Fallback (_generate_grounded_fallback):
+       * Triggered immediately if LLM returns 429 quota exhaustion, network error, or invalid JSON.
+       * Computes MD5 hash of concept_id modulo 4 to deterministically assign correct_index to [0, 1, 2, or 3].
+       * Synthesizes 3 domain-specific distractors derived from prerequisite relationships.
+   OUTPUT: Question object (with question_id, stem, 4 AssessmentOption items, correct_index, explanation, provenance)
+   NEXT COMPONENT: app/services/assessment/validator.py
+
+4. FILE: app/services/assessment/providers.py
+   CLASSES: LLMProvider (Protocol), GeminiProvider, OllamaProvider, MockProvider
+   PURPOSE: Decouples question generation from vendor SDKs; supports local and offline test execution.
+   INPUT / PROCESSING:
+     - GeminiProvider: uses google.generativeai GenerativeModel(gemini-3.5-flash).
+     - OllamaProvider: native urllib HTTP request to http://localhost:11434/api/generate with format="json".
+     - MockProvider: offline, deterministic JSON generator for test environments.
+     - get_default_provider(): factory selecting provider via settings.llm_provider.
+   OUTPUT: str (raw JSON text response)
+   NEXT COMPONENT: app/services/assessment/generator.py::_parse_json()
+
+5. FILE: app/services/assessment/validator.py
+   FUNCTIONS: validate_question(), validate_grounding(), is_duplicate()
+   PURPOSE: 3 quality gateways ensuring questions are structurally valid, grounded, and non-repetitive.
+   INPUT / PROCESSING:
+     - validate_question(question, allowed_source_id):
+       * Verifies stem is non-empty.
+       * Verifies exactly 4 options with indices {0, 1, 2, 3}.
+       * Verifies correct_index in [0..3].
+       * Verifies no empty or duplicate option text.
+       * Verifies source_id matches allowed_source_id.
+       * Verifies presence of provenance anchors (at least one of chunk_ids or content_ids).
+       * Verifies page_start <= page_end and timestamp_start <= timestamp_end.
+     - validate_grounding(question, context_text):
+       * Extracts significant tokens (length >= 4, non-stopwords) from context and question.
+       * Verifies word overlap >= 1; rejects hallucinated questions with zero source vocabulary overlap.
+     - is_duplicate(new_question, existing_questions):
+       * Computes Jaccard similarity of question stem tokens; rejects if > 0.8.
+       * Rejects if >= 3 options match an existing question.
+   OUTPUT: tuple[bool, str] (is_valid, error_reason)
+   NEXT COMPONENT: Candidate accepted -> added to session.questions; rejected -> backfilled from reserve pool.
+
+6. FILE: app/services/assessment/session_store.py
+   FUNCTIONS: save_session(session), load_session(session_id)
+   PURPOSE: File-based JSON persistence for AssessmentSession entities.
+   STORAGE PATH: storage/assessment_sessions/{session_id}.json
+   INPUT: AssessmentSession
+   OUTPUT: Persisted file on disk or loaded Pydantic instance.
+   NEXT COMPONENT: app/api/assessment.py::submit_assessment()
+
+7. FILE: app/api/assessment.py & app/services/assessment/engine.py
+   FUNCTION: submit_assessment(submission) -> grade_submission()
+   PURPOSE: Grades submitted answers against hidden answer key, updates profile, detects prerequisite gaps, enforces kill switch.
+   INPUT: submission: StudentSubmission (session_id, answers: list[AnswerSubmission])
+   PROCESSING:
+     - Loads session from disk; verifies status == "READY" (rejects with HTTP 409 if already submitted).
+     - Checks session expiration (returns HTTP 410 Gone if datetime.now() > expires_at).
+     - Validates answers: verifies question_ids belong to session; rejects duplicates with HTTP 400.
+     - Reconstructs KnowledgeGraph: loads from disk registry OR reconstructs from session.concept_snapshot via reconstruct_kg_from_snapshot().
+     - Hidden Answer Grading: compares answer.selected_index against question.correct_index.
+     - Anti-Loop Kill Switch:
+       * Increments iteration_count for each failed concept.
+       * If iteration_count > settings.kill_switch_limit (default 3), status is set to "REQUIRES_HUMAN_FALLBACK".
+       * Concept is permanently locked out of automated video queues.
+     - False-Mastery Protection:
+       * Requires correct_attempts >= settings.mastery_threshold (default 2) AND consecutive_correct >= 1 to reach "MASTERED".
+     - Prerequisite Gap Detection:
+       * If student fails child concept AND fails its prerequisite concept, records explicit gap description:
+         "Prerequisite gap: Failed '<child>' (child) AND '<parent>' (parent)".
+     - Updates StudentLearningProfile: recalculates overall_score, strong/weak concept IDs, and masteries.
+     - Calls build_video_target_matrix() and save_video_matrix().
+     - Updates session.status to "SUBMITTED".
+   OUTPUT: Graded result JSON (score, total, percentage, results, prerequisite_gaps, profile_summary, concept_scores, video_target_matrix).
+   NEXT COMPONENT: app/services/assessment/video_target.py
+
+8. FILE: app/services/assessment/video_target.py
+   FUNCTION: build_video_target_matrix(profile, kg, source_filename, pass_threshold, session)
+   PURPOSE: Compiles the authoritative Step 3 Video Target Matrix blueprint.
+   INPUT: profile: StudentLearningProfile, kg: KnowledgeGraph, source_filename: str, pass_threshold: float = 70.0, session: AssessmentSession
+   PROCESSING:
+     - Scans concept masteries on profile:
+       * Filters out concepts with status == "MASTERED" or last_score >= 70.0 (no video required).
+       * Filters out concepts with status == "REQUIRES_HUMAN_FALLBACK" (routes to human_intervention_concepts).
+       * Isolates failed concepts needing automated remediation.
+     - Duration Scaling by Conceptual Depth (classify_difficulty):
+       * Foundational concept: 30 seconds
+       * Intermediate concept: 45 seconds
+       * Advanced concept:     60 seconds
+     - Recovers visual provenance from session questions: chunk_ids, source_content_ids, page ranges.
+     - Formats explicit directives:
+       e.g. "Generate a 45-second AI video explaining Newton's Second Law".
+     - Evaluates Decision State:
+       * "ALL_MASTERED": 0 videos needed, 0 human intervention concepts.
+       * "GENERATE_VIDEOS": 1+ videos in queue.
+       * "HUMAN_INTERVENTION": 0 videos in queue, but 1+ concepts hit kill switch.
+       * Mixed State: decision="GENERATE_VIDEOS" with human intervention notice appended to summary.
+     - Saves matrix to storage/video_targets/{student_id}_{source_id}.json via save_video_matrix().
+   OUTPUT: VideoTargetMatrix Pydantic model.
+   NEXT COMPONENT: Step 3 AI Video Generation Engine (consumed via filesystem or GET /assessment/video-target/{student_id}/{source_id}).
+
+
+================================================================================
+PHASE 4 — DATABASE DEEP DIVE (STORAGE & PERSISTENCE ARCHITECTURE)
+================================================================================
+
+DATABASE ENGINE AUDIT:
+- Primary Database Engine: Qdrant Vector Database
+- Relational Database Engine (RDBMS): NONE (No PostgreSQL, SQLite, MySQL, or SQL engine)
+- ORM: NONE (No SQLAlchemy, Tortoise, or Peewee)
+- Migration System: NONE (No Alembic or Flyway)
+- Connection Method:
+  * HTTP / gRPC via qdrant-client: QdrantClient(url="http://localhost:6333")
+  * Embedded Local Fallback: QdrantClient(path="storage/qdrant")
+- Secondary Storage Engine: File-system structured JSON document persistence managed by Python native json and Pydantic v2 serialization.
+
+--------------------------------------------------------------------------------
+1. VECTOR DATABASE: QDRANT COLLECTION SPECIFICATION
+--------------------------------------------------------------------------------
+COLLECTION NAME: visualai_layer_a
+DISTANCE METRIC: Cosine (qmodels.Distance.COSINE)
+VECTOR DIMENSION: Dynamic probe via gemini-embedding-2 (typically 768 dimensions)
+POINT ID GENERATION:
+  Deterministic UUIDv5 calculated as:
+  uuid.uuid5(uuid.NAMESPACE_DNS, f"{chunk.source_id}::{chunk.chunk_id}::{chunk.text[:100]}")
+  Guarantee: Upserting identical chunks updates existing vector points in-place without duplicating records.
+
+QDRANT PAYLOAD SCHEMA (RichChunk):
+┌───────────────────────────┬──────────────┬─────────────────────────────────────────────────────────────┐
+│ Field Name                │ Type         │ Description / Purpose                                       │
+├───────────────────────────┼──────────────┼─────────────────────────────────────────────────────────────┤
+│ chunk_id                  │ String       │ Unique chunk identifier (e.g. "CHUNK_f6366421aaae")         │
+│ source_id                 │ String       │ Source document identifier (e.g. "SRC_63d54087dc2e")         │
+│ asset_id                  │ String       │ Asset identifier (e.g. "AST_c9e1b20e3a93")                  │
+│ layer                     │ String (Enum)│ Always "A" (authoritative source ground truth)              │
+│ type                      │ String       │ Always "rich_chunk"                                         │
+│ text                      │ String       │ Extracted text chunk content (~500-1000 tokens)             │
+│ modality                  │ String (Enum)│ "pdf" | "image" | "txt" | "video"                           │
+│ chapter                   │ String | null│ Chapter title detected by structurer                        │
+│ section                   │ String | null│ Section title detected by structurer                        │
+│ concept_ids               │ List[String] │ Concept IDs mapped to this text chunk                       │
+│ content_ids               │ List[String] │ Provenance: ContentUnit IDs that formed this chunk          │
+│ page_start                │ Int | null   │ Starting page number in source document                     │
+│ page_end                  │ Int | null   │ Ending page number in source document                       │
+│ timestamp_start           │ Float | null │ Video start timestamp in seconds                            │
+│ timestamp_end             │ Float | null │ Video end timestamp in seconds                              │
+│ extraction_method         │ String       │ Extractor tag: "pymupdf_block", "whisper_gemini_fusion", etc│
+└───────────────────────────┴──────────────┴─────────────────────────────────────────────────────────────┘
+
+WHO WRITES TO QDRANT:
+- Writer: app/services/chunker.py -> app/db/vector_store.py::upsert_chunks()
+- Triggered by: POST /upload (Step 1 Ingestion)
+- Operation: client.upsert(collection_name="visualai_layer_a", points=points)
+
+WHO READS FROM QDRANT:
+- Reader: app/services/assessment/generator.py::search_concept_chunks()
+- Triggered by: POST /assessment/start (Step 2 Question Generation)
+- Operation: client.search(collection_name="visualai_layer_a", query_vector=vector, query_filter=Filter(must=[layer=="A", source_id==...]))
+
+--------------------------------------------------------------------------------
+2. STRUCTURED FILE PERSISTENCE (ATOMIC JSON SCHEMAS)
+--------------------------------------------------------------------------------
+
+TABLE / FILE 1: Master Source Registry
+FILE PATH: storage/registry/sources_index.json
+PRIMARY KEY: source_id (string, e.g. "SRC_63d54087dc2e")
+SCHEMA:
+  {
+    "<source_id>": {
+      "source_id": "SRC_63d54087dc2e",
+      "asset_id": "AST_c9e1b20e3a93",
+      "upload_id": "UPL_239d8275fb21",
+      "filename": "physics_sample.txt",
+      "source_type": "txt",
+      "mime_type": "text/plain",
+      "file_hash": "a4f2b... (SHA-256)",
+      "file_size": 1048576,
+      "uploaded_by": "student_default",
+      "version": 1,
+      "parent_source_id": null,
+      "status": "READY",
+      "error_message": null,
+      "created_at": "2026-09-17T22:00:00Z",
+      "updated_at": "2026-09-17T22:01:00Z"
+    }
+  }
+WHO WRITES: app/services/registry.py (save_source_record, update_source_status)
+WHO READS: app/services/registry.py, app/main.py (GET /sources), app/api/assessment.py (readiness check)
+
+TABLE / FILE 2: ContentUnits Store
+FILE PATH: storage/registry/{source_id}/content_units.json
+PRIMARY KEY: content_id (string, e.g. "CU_d8ec3544007b")
+FOREIGN KEY: source_id -> sources_index.json::source_id
+IMPORTANT FIELDS: modality, text, visual_description, page_number, timestamp_start, timestamp_end, bbox, sequence_index, extraction_method.
+WHO WRITES: app/services/registry.py::save_content_units() during POST /upload
+WHO READS: app/services/registry.py::load_content_units()
+
+TABLE / FILE 3: Knowledge Graph Store
+FILE PATH: storage/registry/{source_id}/knowledge_graph.json
+PRIMARY KEY: concept_id (string, e.g. "CONCEPT_NEWTON_SECOND_LAW")
+FOREIGN KEY: source_id -> sources_index.json::source_id
+IMPORTANT FIELDS: name, definition, prerequisite_concept_ids, related_concept_ids, source_content_ids.
+WHO WRITES: app/services/registry.py::save_knowledge_graph() during POST /upload
+WHO READS: app/api/assessment.py (planning & snapshotting), app/main.py (GET /sources concept count)
+
+TABLE / FILE 4: Assessment Sessions Store
+FILE PATH: storage/assessment_sessions/{session_id}.json
+PRIMARY KEY: session_id (string, e.g. "SESS_54c7e25fee5d")
+FOREIGN KEYS:
+  - student_id -> Student identifier
+  - source_id  -> sources_index.json::source_id
+IMPORTANT FIELDS:
+  - status: "PLANNING" | "GENERATING" | "VALIDATING" | "READY" | "SUBMITTED" | "EXPIRED" | "FAILED"
+  - questions: List[Question] (includes hidden correct_index, explanation, chunk_ids, page ranges)
+  - concept_queue: List[String]
+  - concept_snapshot: Dict[String, ConceptSnapshot] (self-contained offline graph snapshot)
+  - expires_at: ISO8601 timestamp (now + 24 hours)
+  - submitted_at: ISO8601 timestamp
+WHO WRITES: app/services/assessment/session_store.py::save_session() (created at start, updated on submit)
+WHO READS: app/services/assessment/session_store.py::load_session() (called during submit and status check)
+
+TABLE / FILE 5: Student Learning Profiles Store
+FILE PATH: storage/learning_profiles/{student_id}_{source_id}.json
+PRIMARY KEY: (student_id, source_id)
+IMPORTANT FIELDS:
+  - overall_score: Float (0.0 to 100.0)
+  - total_sessions: Int
+  - strong_concepts / strong_concept_ids: List[String]
+  - weak_concepts / weak_concept_ids: List[String]
+  - prerequisite_gaps: List[String]
+  - concept_masteries: Dict[String, ConceptMastery]
+    * attempts: Int
+    * correct_attempts: Int
+    * consecutive_correct: Int
+    * iteration_count: Int (failed count)
+    * status: "NOT_ATTEMPTED" | "LEARNING" | "MASTERED" | "REQUIRES_HUMAN_FALLBACK"
+    * last_score: Float (0.0 to 100.0)
+WHO WRITES: app/services/assessment/profile.py::save_profile() (updated on quiz submission)
+WHO READS: app/services/assessment/profile.py::load_profile(), app/api/assessment.py (GET /profile and start)
+
+TABLE / FILE 6: Video Target Matrices Store (Step 3 Handoff)
+FILE PATH: storage/video_targets/{student_id}_{source_id}.json
+PRIMARY KEY: (student_id, source_id)
+IMPORTANT FIELDS:
+  - schema_version: 1
+  - decision: "GENERATE_VIDEOS" | "ALL_MASTERED" | "HUMAN_INTERVENTION"
+  - summary: String (e.g. "Generate a 30-second AI video explaining Concept B...")
+  - videos: List[VideoTarget]
+    * concept_id, concept_name, definition, difficulty
+    * score: Float
+    * target_seconds: 30 | 45 | 60
+    * directive: String
+    * chunk_ids, source_content_ids, page_start, page_end
+  - human_intervention_concepts: List[String]
+  - human_intervention_concept_ids: List[String]
+WHO WRITES: app/services/assessment/video_target.py::save_video_matrix() (on quiz submit)
+WHO READS: Step 3 Video Engine / GET /assessment/video-target/{student_id}/{source_id}
+
+
+================================================================================
+PHASE 5 — COMPLETE END-TO-END DATA FLOW
+================================================================================
+
+```
+USER / STUDENT
+      │
+      ▼ (Uploads PDF, Video, Image, or Text file)
+FastAPI HTTP POST /upload (app/api/upload.py)
+      │
+      ▼
+Temporary Disk Staging (storage/uploads/<uuid>_<filename>)
+      │
+      ▼
+Registry Validation & Checksum Engine (app/services/registry.py::register_source)
+  ├── Checks file size (<500MB) & extension
+  ├── Checks binary magic bytes (%PDF, ftyp, \x89PNG, \xff\xd8\xff)
+  ├── Computes SHA-256 hash (detects duplicate files & versions)
+  ├── Generates source_id, asset_id, upload_id
+  ├── Saves original file to storage/uploads/<source_id>/original.<ext>
+  └── Writes SourceRecord to storage/registry/sources_index.json (Status: UPLOADED)
+      │
+      ▼ (Status: EXTRACTING)
+Modality Dispatcher (app/services/dispatcher.py::dispatch)
+  ├── [PDF]   PyMuPDF (app/services/extractor.py) -> Blocks, bboxes, page numbers, Gemini diagram OCR
+  ├── [Image] Gemini Vision API (app/services/vision.py) -> Detailed text & diagram descriptions
+  ├── [Text]  Semantic paragraph splitter -> Character offsets & sequence indices
+  └── [Video] Video Matrix Ingestion (app/services/video/pipeline.py)
+                ├── FFmpeg -> 16kHz mono WAV (av_splitter.py)
+                ├── faster-whisper -> Timestamps & speech segments (transcriber.py)
+                ├── OpenCV -> Sample keyframes every 12s with 32x32 perceptual dedupe (frame_extractor.py)
+                ├── Gemini Vision -> Frame transcription & description
+                └── Multimodal Fusion -> Matches speech + visuals within 2s jitter window (fusion.py)
+      │
+      ▼
+Normalized ContentUnit Objects (canonical abstraction)
+      │
+      ├───► Saved to storage/registry/<source_id>/content_units.json
+      │
+      ▼ (Status: NORMALIZING)
+Knowledge Structurer (app/services/structurer.py::process_structure_and_concepts)
+  ├── Prompts Gemini (gemini-3.5-flash) with serialized ContentUnits
+  ├── Grounded Regex Heuristic Fallback (if Gemini 429 / offline)
+  ├── Detects Chapters & Sections -> Maps back to ContentUnits
+  ├── Extracts Concepts, Definitions, and Prerequisite Dependencies
+  └── Derives TopicBlueprint (topic_name, key_concepts, difficulty_level)
+      │
+      ├───► Saved to storage/registry/<source_id>/knowledge_graph.json
+      │
+      ▼ (Status: INDEXING)
+Semantic Chunker (app/services/chunker.py::create_rich_chunks)
+  ├── Groups ContentUnits by (chapter, section) boundaries
+  ├── RecursiveCharacterTextSplitter (tiktoken cl100k_base: 1000 tokens, 150 overlap)
+  └── Produces RichChunk objects (layer="A", type="rich_chunk", concept_ids, provenance)
+      │
+      ▼
+Vector Database Sync (app/db/vector_store.py::upsert_chunks)
+  ├── Generates dense vector embeddings via Gemini (models/gemini-embedding-2)
+  ├── Generates deterministic UUIDv5 point IDs: uuid5(DNS, source_id::chunk_id::text[:100])
+  └── Upserts points into Qdrant collection: visualai_layer_a
+      │
+      ▼
+Quality Validation Gateway (app/services/validator.py::validate_ingestion_quality)
+  ├── Checks: File exists, ContentUnits > 0, RichChunks > 0, Concepts valid, Upsert count matched
+  └── Updates sources_index.json (Status: READY)
+      │
+      ▼
+HTTP 200 Response to Client (source_id, blueprint, validation report)
+      │
+════════════════════════════════════════════════════════════════════════════════
+                      STEP 1  ──────►  STEP 2 HANDOFF
+════════════════════════════════════════════════════════════════════════════════
+      │
+      ▼ (Student requests quiz: student_id, source_id, max_questions)
+FastAPI HTTP POST /assessment/start (app/api/assessment.py)
+      │
+      ▼
+Session Initialization & Snapshotting (app/api/assessment.py)
+  ├── Verifies source status is "READY" in storage/registry/sources_index.json
+  ├── Loads KnowledgeGraph from disk (or in-memory Step 1 payload)
+  ├── Loads or creates StudentLearningProfile (storage/learning_profiles/)
+  ├── Filters out concepts with kill switch active (REQUIRES_HUMAN_FALLBACK)
+  └── Creates lightweight ConceptSnapshot cached inside AssessmentSession (self-contained offline graph)
+      │
+      ▼
+Dynamic Assessment Planner (app/services/assessment/planner.py::plan_assessment)
+  ├── Classifies concept difficulty (0 prereqs = foundational, 1-2 = intermediate, >2 = advanced)
+  ├── Cold Start Plan: Balanced mix (~30% foundational, ~40% intermediate, ~30% advanced)
+  ├── Adaptive Re-Test: Prioritizes LEARNING concepts and NOT_ATTEMPTED concepts
+  ├── Prerequisite Pairing Rule: Automatically queues foundational concepts before advanced concepts
+  └── Assembles Reserve Pool from remaining unselected concepts
+      │
+      ▼
+Sequential Question Generation & Quality Gateways (Candidate Stream)
+      │
+      ├──► Chunk Retriever (app/services/assessment/generator.py::search_concept_chunks)
+      │      └── Queries Qdrant "visualai_layer_a" strictly filtering by source_id & layer="A"
+      │
+      ├──► Question Authoring (app/services/assessment/generator.py)
+      │      ├── Prompts LLM Provider (GeminiProvider, OllamaProvider, or MockProvider)
+      │      │     └── Strict negative prompting: 1 correct answer, 3 plausible distractors
+      │      └── Grounded Deterministic Fallback (if 429 quota reached or offline)
+      │            ├── MD5 hash of concept_id modulo 4 determines correct answer index (0, 1, 2, 3)
+      │            └── Contextual distractors generated from prerequisite domain relationships
+      │
+      ├──► Validation Gateway 1: Schema & Provenance (app/services/assessment/validator.py::validate_question)
+      │      └── Verifies 4 options, valid correct_index, non-empty text, source_id match, chunk/page provenance
+      │
+      ├──► Validation Gateway 2: Grounding Gateway (app/services/assessment/validator.py::validate_grounding)
+      │      └── Rejects questions with zero semantic token overlap against source chunks
+      │
+      ├──► Validation Gateway 3: Duplicate Gateway (app/services/assessment/validator.py::is_duplicate)
+      │      └── Rejects questions with Jaccard stem similarity > 0.8 or >= 3 options matching earlier items
+      │
+      └──► Reserve Backfilling:
+             └── If candidate fails any gateway, engine immediately pulls next concept from reserve pool!
+      │
+      ▼
+Session Persistence & Safe Quiz Dispatch
+  ├── Saves full session (with hidden answers & ConceptSnapshot) to storage/assessment_sessions/<session_id>.json
+  ├── Sanitizes questions into SafeQuestion models (strips correct_index, correct_answer, explanation)
+  └── Preserves source provenance (page_start, page_end, chunk_ids) for student reference
+      │
+      ▼
+HTTP 200 Response: Student takes quiz on Web Dashboard / UI
+      │
+      ▼ (Student submits selected option indices)
+FastAPI HTTP POST /assessment/submit (app/api/assessment.py)
+      │
+      ▼
+Grading & Kill Switch Engine (app/services/assessment/engine.py::grade_submission)
+  ├── Verifies session exists, status is READY, and not expired (now < expires_at)
+  ├── Validates question IDs and rejects duplicate submissions
+  ├── Reconstructs KnowledgeGraph from session.concept_snapshot if registry disk is offline
+  ├── Compares selected_index against ground-truth correct_index
+  ├── False-Mastery Protection: Requires 2+ consecutive correct answers for "MASTERED"
+  ├── Anti-Loop Kill Switch:
+  │     ├── Increments iteration_count for each failed concept
+  │     └── If iteration_count > 3: Tags concept as "REQUIRES_HUMAN_FALLBACK" (halts automated looping)
+  ├── Prerequisite Gap Detection:
+  │     └── Identifies if student failed child concept AND parent prerequisite simultaneously
+  └── Updates StudentLearningProfile -> Persists to storage/learning_profiles/<student_id>_<source_id>.json
+      │
+      ▼
+Video Target Matrix Builder (app/services/assessment/video_target.py::build_video_target_matrix)
+  ├── Filters out passed/mastered concepts (score >= 70%)
+  ├── Filters out kill-switch concepts (surfaced in human_intervention_concepts)
+  ├── Isolates unmastered concepts requiring remedial video instruction
+  ├── Scales target duration:
+  │     * Foundational Concept = 30 seconds
+  │     * Intermediate Concept = 45 seconds
+  │     * Advanced Concept     = 60 seconds
+  ├── Generates human-readable directives and attaches source chunk/page visual provenance
+  ├── Determines decision state: "ALL_MASTERED" | "GENERATE_VIDEOS" | "HUMAN_INTERVENTION"
+  └── Persists matrix to storage/video_targets/<student_id>_<source_id>.json
+      │
+      ▼
+HTTP 200 Response: Graded report, score breakdown, prerequisite gaps, and Video Target Matrix
+      │
+════════════════════════════════════════════════════════════════════════════════
+                      STEP 2  ──────►  STEP 3 HANDOFF
+════════════════════════════════════════════════════════════════════════════════
+      │
+      ▼
+Step 3 AI Video Generation Engine (Pending Implementation)
+  ├── Reads storage/video_targets/<student_id>_<source_id>.json
+  │   (or GET /assessment/video-target/{student_id}/{source_id})
+  └── Generates targeted animated video lessons strictly matching target durations!
+```
+
+
+================================================================================
+PHASE 6 — LINE-BY-LINE EXECUTION CODE FLOW
+================================================================================
+
+--------------------------------------------------------------------------------
+FLOW #1 — STEP 1 MULTIMODAL INGESTION WORKFLOW
+--------------------------------------------------------------------------------
+
+1. ENTRY:
+   app/api/upload.py
+   upload_file(file, auto_start_assessment, student_id, max_questions)
+
+2. CALLS:
+   shutil.copyfileobj(file.file, out)
+   Writes temporary staging file: storage/uploads/{uuid4}_{filename}
+
+3. CALLS:
+   app/services/registry.py
+   register_source(temp_path, filename)
+   - Checks file exists and size <= 500MB
+   - Checks magic bytes via validate_file()
+   - Computes SHA-256 via calculate_sha256()
+   - Queries sources_index.json via find_existing_by_hash(); increments version if duplicate
+   - Copies file to persistent storage: storage/uploads/{source_id}/original.{ext}
+   - Saves record: storage/registry/sources_index.json (status: UPLOADED)
+
+4. CALLS:
+   app/services/registry.py
+   update_source_status(source_id, "PROCESSING")
+   update_source_status(source_id, "EXTRACTING")
+
+5. CALLS:
+   app/services/dispatcher.py
+   dispatch(persistent_file, source_id, asset_id)
+   Routes based on extension:
+   - PDF -> app/services/extractor.py::extract_from_pdf()
+   - Image -> app/services/vision.py::describe_image_file()
+   - Text -> reads text, splits paragraphs into ContentUnits
+   - Video -> app/services/video/pipeline.py::process_video_units()
+   OUTPUT: ExtractionResult containing list of normalized ContentUnit objects
+
+6. CALLS:
+   app/services/registry.py
+   update_source_status(source_id, "NORMALIZING")
+
+7. CALLS:
+   app/services/structurer.py
+   process_structure_and_concepts(raw_units)
+   - Formats prompt with ContentUnit IDs
+   - Calls Gemini API (or triggers regex heuristic parser on failure/quota limit)
+   - Enriches ContentUnits with chapter/section titles
+   - Builds KnowledgeGraph (concepts, definitions, prerequisite IDs)
+   - Derives TopicBlueprint
+
+8. CALLS:
+   app/services/registry.py
+   save_content_units(source_id, enriched_units)
+   -> Writes to storage/registry/{source_id}/content_units.json
+   save_knowledge_graph(source_id, knowledge_graph)
+   -> Writes to storage/registry/{source_id}/knowledge_graph.json
+
+9. CALLS:
+   app/services/registry.py
+   update_source_status(source_id, "INDEXING")
+
+10. CALLS:
+    app/services/chunker.py
+    create_rich_chunks(enriched_units, knowledge_graph)
+    - Groups units into chapter/section windows
+    - Splits large text with RecursiveCharacterTextSplitter (chunk_size=1000 tokens)
+    - Builds RichChunk objects tagged with layer="A", concept_ids, and content_ids
+
+11. CALLS:
+    app/db/vector_store.py
+    upsert_chunks(rich_chunks)
+    - Checks Qdrant collection visualai_layer_a via ensure_collection()
+    - Generates dense vector embeddings via genai.embed_content()
+    - Assigns deterministic UUIDv5 point ID
+    - Executes client.upsert()
+
+12. CALLS:
+    app/services/validator.py
+    validate_ingestion_quality(record, persistent_file, enriched_units, knowledge_graph, rich_chunks, synced_count)
+    - Verifies file level, content level, chunk level, concept level, and storage level
+
+13. CALLS:
+    app/services/registry.py
+    update_source_status(source_id, "READY")
+
+14. OUTPUT:
+    HTTP 200 JSON dictionary with source_id, status: "READY", topic_blueprint, validation report.
+
+--------------------------------------------------------------------------------
+FLOW #2 — STEP 2 ASSESSMENT PLANNING & QUIZ DISPATCH WORKFLOW
+--------------------------------------------------------------------------------
+
+1. ENTRY:
+   app/api/assessment.py
+   start_assessment(payload, student_id, source_id)
+
+2. INPUT:
+   AssessmentStartRequest (student_id, source_id, max_questions, optional step1_output)
+
+3. VALIDATION & INTEGRITY:
+   - Sanitizes student_id and source_id (ignores Swagger "string" placeholders)
+   - Verifies session integrity (source_id in URL matches source_id in Step 1 payload)
+   - Verifies source exists in storage/registry/sources_index.json and status == "READY" (HTTP 423 if indexing)
+
+4. CALLS:
+   app/services/registry.py::load_knowledge_graph(source_id)
+   (or extracts in-memory graph from payload if present)
+
+5. CALLS:
+   app/services/assessment/profile.py
+   get_or_create_profile(student_id, source_id)
+   - Reads storage/learning_profiles/{student_id}_{source_id}.json or creates fresh instance
+
+6. CALLS:
+   app/services/assessment/planner.py
+   plan_assessment(kg, profile, max_questions, key_concepts)
+   - Identifies kill-switch concepts to strictly exclude
+   - Classifies concept difficulty (0 prereqs = foundational, 1-2 = intermediate, >2 = advanced)
+   - If cold start: samples balanced ratio (~30% foundational, ~40% intermediate, ~30% advanced)
+   - If existing profile: prioritizes LEARNING and NOT_ATTEMPTED concepts
+   - Applies Prerequisite Pairing Rule (recursively queues foundational concepts before advanced dependents)
+   - Builds primary candidate queue and reserve pool
+
+7. CALLS:
+   ConceptSnapshot serializing:
+   Builds ConceptSnapshot dictionary embedded directly into AssessmentSession
+
+8. SESSION CREATION:
+   Creates AssessmentSession(session_id, student_id, source_id, status="GENERATING", expires_at=now+24h)
+
+9. CALLS:
+   app/services/assessment/generator.py
+   generate_question(concept, source_id, difficulty, provided_chunks, max_retries, provider)
+   - Queries Qdrant visualai_layer_a scoped strictly to source_id & layer="A"
+   - Generates question with provider (Gemini / Ollama / Mock) or falls back to deterministic grounded generator
+
+10. CALLS:
+    app/services/assessment/validator.py
+    validate_question() -> checks structure and provenance anchors
+    validate_grounding() -> checks vocabulary overlap with source text
+    is_duplicate() -> checks Jaccard similarity against existing questions
+    - On failure: logs rejection and immediately pulls next candidate from reserve pool (backfilling)!
+
+11. CALLS:
+    app/services/assessment/session_store.py
+    save_session(session)
+    - Persists complete session to storage/assessment_sessions/{session_id}.json
+
+12. TRANSFORMATION:
+    Sanitizes questions into SafeQuestion objects:
+    - Strips correct_index, correct answer text, and explanation
+    - Retains chunk_ids, page ranges, and timestamps for student verification
+
+13. OUTPUT:
+    HTTP 200 JSON dictionary with session_id, expires_at, question_count, questions: list[SafeQuestion], shortfall.
+
+--------------------------------------------------------------------------------
+FLOW #3 — STEP 2 SUBMISSION, GRADING & VIDEO TARGET MATRIX WORKFLOW
+--------------------------------------------------------------------------------
+
+1. ENTRY:
+   app/api/assessment.py
+   submit_assessment(submission)
+
+2. INPUT:
+   StudentSubmission(session_id, answers: list[AnswerSubmission(question_id, selected_index)])
+
+3. CALLS:
+   app/services/assessment/session_store.py
+   load_session(session_id)
+   - Rejects with HTTP 404 if session missing
+   - Rejects with HTTP 409 if session.status == "SUBMITTED"
+   - Rejects with HTTP 400 if session.status != "READY"
+
+4. VALIDATION:
+   - Checks session expiration (returns HTTP 410 Gone if datetime.now() > expires_at)
+   - Verifies question_ids belong to session; rejects duplicate answers with HTTP 400
+
+5. KNOWLEDGE GRAPH RESOLUTION:
+   - Loads KnowledgeGraph from storage/registry/{source_id}/knowledge_graph.json
+   - Fallback (Phase 2B): Reconstructs minimal graph from session.concept_snapshot via reconstruct_kg_from_snapshot()
+
+6. CALLS:
+   app/services/assessment/profile.py
+   get_or_create_profile(session.student_id, session.source_id)
+
+7. CALLS:
+   app/services/assessment/engine.py
+   grade_submission(submission, session, kg, profile)
+   - Compares selected_index against ground-truth correct_index
+   - Computes overall score and percentage
+   - Updates concept mastery:
+     * Increments attempts
+     * If all correct: increments correct_attempts, consecutive_correct
+     * If incorrect: resets consecutive_correct to 0, increments iteration_count
+     * False-Mastery Guard: requires correct_attempts >= 2 for "MASTERED"
+     * Anti-Loop Kill Switch: if iteration_count > 3, sets status to "REQUIRES_HUMAN_FALLBACK"
+   - Prerequisite Gap Detection:
+     * If child concept failed AND parent concept failed, appends gap description
+   - Updates profile aggregate scores and lists
+
+8. CALLS:
+   app/services/assessment/session_store.py
+   session.status = "SUBMITTED"
+   save_session(session)
+
+9. CALLS:
+   app/services/assessment/profile.py
+   save_profile(profile)
+   - Persists to storage/learning_profiles/{student_id}_{source_id}.json
+
+10. CALLS:
+    app/services/assessment/video_target.py
+    build_video_target_matrix(profile, kg, source_filename, session)
+    - Filters out mastered/passed concepts (score >= 70%)
+    - Filters out kill-switch concepts (surfaced in human_intervention_concepts)
+    - Isolates unmastered concepts
+    - Scales target duration: Foundational = 30s, Intermediate = 45s, Advanced = 60s
+    - Attaches provenance chunk_ids and page numbers from session questions
+    - Sets decision state: "ALL_MASTERED" | "GENERATE_VIDEOS" | "HUMAN_INTERVENTION"
+
+11. CALLS:
+    app/services/assessment/video_target.py
+    save_video_matrix(video_matrix)
+    - Persists to storage/video_targets/{student_id}_{source_id}.json
+
+12. OUTPUT:
+    HTTP 200 JSON dictionary with score, percentage, results, prerequisite_gaps, profile_summary, concept_scores, and video_target_matrix.
+
+
+================================================================================
+PHASE 7 — API FLOW & ROUTE SPECIFICATION TABLE
+================================================================================
+
+┌────────┬─────────────────────────────────────────────────┬────────────────────────────┬──────────────────────────────────────┬───────────────────────────────────────────┬───────────────────────────────────────────┐
+│ METHOD │ ROUTE                                           │ FILE / HANDLER             │ REQUEST SCHEMA                       │ RESPONSE SCHEMA                           │ ERRORS / STATUS CODES                     │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /                                               │ app/api/dashboard.py       │ None                                 │ HTMLResponse (Vanilla JS SPA)             │ 200 OK                                    │
+│        │                                                 │ dashboard()                │                                      │                                           │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /health                                         │ app/main.py                │ None                                 │ {"status": "ok", "service": "VisualAI",   │ 200 OK                                    │
+│        │                                                 │ health()                   │                                      │  "version": "0.2.0", "steps": [...]}      │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /sources                                        │ app/main.py                │ None                                 │ {"sources": [{"source_id": "...",         │ 200 OK                                    │
+│        │                                                 │ get_sources()              │                                      │  "status": "READY", "concepts_count": N}]}│                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /debug/qdrant                                   │ app/main.py                │ None                                 │ {"points_count": N, "vector_size": 768,   │ 200 OK                                    │
+│        │                                                 │ debug_qdrant()             │                                      │  "status": "green", "sample_payloads": []}│                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ POST   │ /upload                                         │ app/api/upload.py          │ Multipart/Form-Data:                 │ {"status": "READY", "source_id": "...",   │ 400 Bad Request (invalid file/magic bytes)│
+│        │                                                 │ upload_file()              │ - file: UploadFile                   │  "asset_id": "...", "content_units": N,   │ 422 Unprocessable (empty content/val fail)│
+│        │                                                 │                            │ - auto_start_assessment: bool        │  "chunks_synced": N, "topic_blueprint":{}}│ 500 Internal Error (extraction crash)     │
+│        │                                                 │                            │ - student_id: str                    │                                           │ 503 Service Unavailable (Qdrant down)     │
+│        │                                                 │                            │ - max_questions: int                 │                                           │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ POST   │ /assessment/start                               │ app/api/assessment.py      │ AssessmentStartRequest:              │ {"status": "READY", "session_id": "...",  │ 400 Bad Request (missing/mismatched IDs)  │
+│        │                                                 │ start_assessment()         │ - student_id: str                    │  "question_count": N,                     │ 404 Not Found (source not in registry)    │
+│        │                                                 │                            │ - source_id: str                     │  "questions": [SafeQuestion...],          │ 422 Unprocessable (no concepts / 0 gen)   │
+│        │                                                 │                            │ - max_questions: int | null          │  "shortfall": N}                          │ 423 Locked (source still indexing)        │
+│        │                                                 │                            │ - step1_output: dict | null          │                                           │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ POST   │ /assessment/handoff                             │ app/api/assessment.py      │ AssessmentStartRequest:              │ {"status": "READY", "session_id": "...",  │ Same as /assessment/start                 │
+│        │                                                 │ handoff_from_step1()       │ (Direct pipeline handoff alias)      │  "questions": [SafeQuestion...]}          │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ POST   │ /assessment/submit                              │ app/api/assessment.py      │ StudentSubmission:                   │ {"status": "SUBMITTED",                   │ 400 Bad Request (invalid/duplicate Q IDs) │
+│        │                                                 │ submit_assessment()        │ - session_id: str                    │  "score": N, "total": N,                  │ 404 Not Found (session missing)           │
+│        │                                                 │                            │ - answers: [                         │  "percentage": Float,                     │ 409 Conflict (already submitted)          │
+│        │                                                 │                            │     {"question_id": "...",           │  "prerequisite_gaps": [...],              │ 410 Gone (session expired)                │
+│        │                                                 │                            │      "selected_index": 0..3}         │  "video_target_matrix": {...}}            │ 500 Internal Error (grading failure)      │
+│        │                                                 │                            │   ]                                  │                                           │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /assessment/profile/{student_id}/{source_id}    │ app/api/assessment.py      │ Path parameters:                     │ {"status": "OK", "student_id": "...",     │ 200 OK                                    │
+│        │                                                 │ get_profile()              │ - student_id: str                    │  "overall_score": Float,                  │ (Returns {"status": "NO_DATA"} if fresh)  │
+│        │                                                 │                            │ - source_id: str                     │  "strong_concepts": [...],                │                                           │
+│        │                                                 │                            │                                      │  "concept_masteries": {...}}              │                                           │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /assessment/status/{session_id}                 │ app/api/assessment.py      │ Path parameters:                     │ {"session_id": "...", "status": "READY",  │ 404 Not Found (session missing)           │
+│        │                                                 │ get_session_status()       │ - session_id: str                    │  "question_count": N, "expires_at": "..."}│ 200 OK                                    │
+├────────┼─────────────────────────────────────────────────┼────────────────────────────┼──────────────────────────────────────┼───────────────────────────────────────────┼───────────────────────────────────────────┤
+│ GET    │ /assessment/video-target/{student_id}/{source_id}│ app/api/assessment.py     │ Path parameters:                     │ VideoTargetMatrix:                        │ 404 Not Found (matrix missing; require    │
+│        │                                                 │ get_video_target_matrix... │ - student_id: str                    │ {"decision": "GENERATE_VIDEOS",           │      submission first)                    │
+│        │                                                 │                            │ - source_id: str                     │  "summary": "...", "videos": [...]}       │ 200 OK                                    │
+└────────┴─────────────────────────────────────────────────┴────────────────────────────┴──────────────────────────────────────┴───────────────────────────────────────────┴───────────────────────────────────────────┘
+
+
+================================================================================
+PHASE 8 — FILE & STORAGE FLOW
+================================================================================
+
+Storage Directory Base Path: storage/ (configured in app/core/config.py)
+
+1. INPUT FILE UPLOAD & STAGING:
+   - Client sends file to POST /upload
+   - UploadFile stream is buffered to temporary file:
+     Path: storage/uploads/{uuid4}_{original_filename}
+   - Handled by: app/api/upload.py (lines 55-59)
+   - Cleaned up in finally: block via temp_path.unlink(missing_ok=True)
+
+2. PERMANENT ORIGINAL FILE RETENTION:
+   - If magic bytes and SHA-256 validate:
+     Path: storage/uploads/{source_id}/original.{ext}
+   - Handled by: app/services/registry.py::register_source()
+   - Original bytes are copied and preserved immutably.
+
+3. INTERMEDIATE AUDIO EXTRACTION (VIDEO MODALITY ONLY):
+   - FFmpeg rips 16kHz mono 16-bit PCM WAV:
+     Path: storage/processed/{video_stem}_audio.wav
+   - Handled by: app/services/video/av_splitter.py::extract_audio()
+   - Cleaned up in finally: block of app/services/video/pipeline.py::process_video_units()
+
+4. MASTER CATALOG INDEX:
+   - Path: storage/registry/sources_index.json
+   - Format: Single JSON object mapping source_id -> SourceRecord dictionary.
+   - Atomic file update via app/services/registry.py::_save_sources_index().
+
+5. NORMALIZED CONTENT UNITS ARTIFACT:
+   - Path: storage/registry/{source_id}/content_units.json
+   - Format: JSON array of serialized ContentUnit objects.
+   - Handled by: app/services/registry.py::save_content_units().
+
+6. KNOWLEDGE GRAPH ARTIFACT:
+   - Path: storage/registry/{source_id}/knowledge_graph.json
+   - Format: JSON object {"concepts": { "<concept_id>": ConceptNode, ... }}.
+   - Handled by: app/services/registry.py::save_knowledge_graph().
+
+7. ASSESSMENT SESSIONS STORE:
+   - Path: storage/assessment_sessions/{session_id}.json
+   - Format: JSON object of AssessmentSession containing complete question objects, hidden answer keys, and ConceptSnapshot.
+   - Handled by: app/services/assessment/session_store.py::save_session().
+
+8. STUDENT LEARNING PROFILES STORE:
+   - Path: storage/learning_profiles/{student_id}_{source_id}.json
+   - Format: JSON object of StudentLearningProfile containing overall_score, concept_masteries, iteration_counts, strong/weak concept IDs, prerequisite_gaps.
+   - Handled by: app/services/assessment/profile.py::save_profile().
+
+9. VIDEO TARGET MATRICES (STEP 3 HANDOFF ARTIFACT):
+   - Path: storage/video_targets/{student_id}_{source_id}.json
+   - Format: JSON object of VideoTargetMatrix containing decisions, summary, duration-scaled video targets (30s/45s/60s), and human intervention concepts.
+   - Handled by: app/services/assessment/video_target.py::save_video_matrix().
+
+
+================================================================================
+PHASE 9 — AI / LLM / VISION PROCESSING FLOW
+================================================================================
+
+The system contains four distinct AI processing stages:
+
+--------------------------------------------------------------------------------
+STAGE 1: DIAGRAM & KEYFRAME VISION ANALYSIS
+--------------------------------------------------------------------------------
+- Models Used: Google Gemini API (gemini-3.5-flash)
+- Implementation File: app/services/vision.py
+- Functions: describe_image(), describe_frame(), describe_image_file()
+- Diagram Prompt (_DIAGRAM_PROMPT):
+  "You are an expert textbook diagram and image reader with perfect visual recognition...
+   1. Transcribe ALL text exactly as written...
+   2. Describe ALL visual elements (shapes, arrows, lines)...
+   3. Explain the flow, process, or concept...
+   4. Output ONLY the description."
+- Frame Prompt (_FRAME_PROMPT):
+  "You are an expert lecture frame analyzer with perfect visual recognition...
+   1. Transcribe ALL text visible (whiteboard, slides)...
+   2. Describe diagrams and visual aids...
+   3. Describe speaker actions if relevant...
+   5. If frame shows only speaker: 'Speaker visible, no board/slide content.'"
+- Media Serialization: Base64-encoded bytes with mime_type="image/png" or "image/jpeg".
+- Fallback: Returns placeholder text if vision API returns empty string.
+
+--------------------------------------------------------------------------------
+STAGE 2: CURRICULUM & KNOWLEDGE GRAPH EXTRACTION
+--------------------------------------------------------------------------------
+- Model Used: Google Gemini API (gemini-3.5-flash)
+- Implementation File: app/services/structurer.py
+- Function: process_structure_and_concepts()
+- Prompt (_STRUCTURE_AND_CONCEPT_PROMPT):
+  Demands STRICT JSON containing topic_name, difficulty_level, chapters, sections, concepts, definitions, prerequisite_concept_ids, source_content_ids.
+- Grounded Regex Heuristic Fallback (_fallback_outputs):
+  * Activated when: Gemini hits HTTP 429 quota exhaustion or network timeout.
+  * Operation: Parses capitalized acronyms (e.g. "FSOC"), definition triggers ("X is defined as...", "X refers to..."), and heading patterns.
+  * Guarantee: KnowledgeGraph and TopicBlueprint are NEVER empty.
+
+--------------------------------------------------------------------------------
+STAGE 3: DENSE VECTOR EMBEDDINGS
+--------------------------------------------------------------------------------
+- Model Used: Google Gemini Embeddings (models/gemini-embedding-2)
+- Implementation File: app/db/vector_store.py
+- Function: _embed()
+- Task Type: task_type="retrieval_document"
+- Dimensions: 768 dimensions (probed dynamically on initialization)
+- Upsert Target: Qdrant collection visualai_layer_a
+
+--------------------------------------------------------------------------------
+STAGE 4: GROUNDED ASSESSMENT QUESTION GENERATION
+--------------------------------------------------------------------------------
+- Provider Abstraction: app/services/assessment/providers.py
+  * GeminiProvider: gemini-3.5-flash (cloud)
+  * OllamaProvider: llama3.2 (local HTTP http://localhost:11434/api/generate)
+  * MockProvider: deterministic offline JSON generator for unit testing
+- Factory: get_default_provider() resolved via settings.llm_provider
+- Generator Implementation: app/services/assessment/generator.py::generate_question()
+- Prompt Strategy (_QUESTION_PROMPT):
+  * Injects exact authoritative chunk text retrieved from Qdrant Layer A.
+  * Negative Prompt: "Based ONLY on this text, generate a multiple-choice question. Provide exactly 1 correct answer and 3 plausible but factually incorrect options. Do not use trivial or obviously silly distractors."
+- Deterministic Grounded Fallback (_generate_grounded_fallback):
+  * Activated when: LLM provider throws quota error (429), network error, or invalid JSON.
+  * Correct Index Variation: MD5 hash of concept_id modulo 4 deterministically distributes correct answers across [0, 1, 2, 3] (prevents predictable option 0 bias).
+  * Distractors: Synthesized from concept domain and prerequisite relationships.
+
+
+================================================================================
+PHASE 10 — STEP 1 -> STEP 2 CONNECTION CONTRACT
+================================================================================
+
+The connection between Step 1 and Step 2 is explicit, deterministic, and contractual.
+
+EXPLICIT ARCHITECTURAL QUESTIONS & ANSWERS:
+
+1. WHAT DOES STEP 1 PRODUCE?
+   - A registered SourceRecord (with unique source_id e.g. "SRC_63d54087dc2e", status: "READY").
+   - Preserved original study file at storage/uploads/{source_id}/original.{ext}.
+   - Normalized ContentUnit records at storage/registry/{source_id}/content_units.json.
+   - Conceptual KnowledgeGraph and TopicBlueprint at storage/registry/{source_id}/knowledge_graph.json.
+   - Vectorized RichChunks in Qdrant collection visualai_layer_a with layer="A", concept_ids, and content_ids.
+
+2. WHERE IS IT STORED?
+   - File system: storage/registry/{source_id}/
+   - Vector DB: Qdrant collection visualai_layer_a (tagged with payload field "source_id")
+
+3. HOW DOES STEP 2 FIND IT?
+   - The client passes the source_id from Step 1's response to Step 2 endpoints:
+     POST /assessment/start { "student_id": "student_1", "source_id": "SRC_63d54087dc2e" }
+   - Or automatically via single-step handoff:
+     POST /upload?auto_start_assessment=true&student_id=student_1
+
+4. WHICH EXACT FILE READS IT?
+   - app/api/assessment.py (lines 120-136)
+   - app/services/registry.py (load_knowledge_graph, get_source_record)
+   - app/services/assessment/generator.py (search_concept_chunks)
+
+5. WHICH EXACT FUNCTIONS PROCESS IT?
+   - app/api/assessment.py::start_assessment()
+   - app/services/registry.py::load_knowledge_graph()
+   - app/services/assessment/planner.py::plan_assessment()
+   - app/services/assessment/generator.py::search_concept_chunks()
+
+6. WHAT DATABASE RECORDS CONNECT STEP 1 AND STEP 2?
+   - source_id: Foreign key string matching across:
+     * sources_index.json::source_id
+     * knowledge_graph.json
+     * Qdrant payload::source_id
+     * AssessmentSession::source_id
+     * StudentLearningProfile::source_id
+     * VideoTargetMatrix::source_id
+
+7. WHAT HAPPENS IF STEP 1 DATA IS MISSING?
+   - If source_id is not in sources_index.json and no knowledge graph is in payload:
+     Returns HTTP 404 Not Found: "Source '<source_id>' not found in registry".
+   - If source status is not "READY" (e.g. still "INDEXING"):
+     Returns HTTP 423 Locked: "Source '<source_id>' is not ready (status: INDEXING). Wait for ingestion."
+   - If knowledge graph is empty:
+     Returns HTTP 422 Unprocessable Entity: "No concepts found for source. Knowledge graph is empty."
+   - Offline Snapshot Resilience (Phase 2B):
+     If grading a submission and storage/registry/{source_id}/knowledge_graph.json was deleted,
+     reconstruct_kg_from_snapshot() reconstructs the graph from session.concept_snapshot!
+
+8. WHAT HAPPENS IF STEP 2 FAILS?
+   - If question generation produces 0 valid questions:
+     session.status is marked "FAILED", saved to disk, and API returns HTTP 422 Unprocessable Entity.
+   - If submission grading fails:
+     Returns HTTP 400 (if invalid question IDs) or HTTP 410 (if expired) or HTTP 409 (if already submitted).
+   - Step 1 registry and vector chunks remain completely intact and unaffected.
+
+9. IS THE CONNECTION SYNCHRONOUS OR ASYNCHRONOUS?
+   - Synchronous HTTP request-response cycle. POST /assessment/start executes planning, vector search, question generation, and validation before returning the sanitized quiz JSON to the caller.
+
+10. IS ANYTHING CURRENTLY MOCKED OR BYPASSED?
+    - Production runtime defaults to real Google Gemini API and real Qdrant.
+    - MockProvider exists in app/services/assessment/providers.py for zero-cost offline test environments.
+    - Embedded local Qdrant exists as an automatic fallback when Docker Qdrant is offline.
+    - Regex heuristic structurer exists as an automatic fallback when Gemini hits rate limits (HTTP 429).
+    - Grounded template generator exists as an automatic fallback when LLM question generation fails.
+
+
+================================================================================
+PHASE 11 — COMPLETE ARCHITECTURE FLOWCHART (ASCII)
+================================================================================
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            STUDENT / CLIENT / UI                            │
+└──────────────┬──────────────────────────────────────────────▲───────────────┘
+               │                                              │
+      [1] POST /upload (File)                     [6] Sanitized Quiz (SafeQuestion)
+               │                                              │
+               ▼                                              │
+┌──────────────────────────────┐              ┌───────────────┴───────────────┐
+│     FASTAPI BACKEND APP      │              │      FASTAPI BACKEND APP      │
+│     (app/api/upload.py)      │              │   (app/api/assessment.py)     │
+└──────────────┬───────────────┘              └───────────────▲───────────────┘
+               │                                              │
+      [2] File Registration                         [5] Save Session &
+          & SHA-256 Check                               Sanitize Quiz
+               │                                              │
+               ▼                                              │
+┌──────────────────────────────┐              ┌───────────────┴───────────────┐
+│       SOURCE REGISTRY        │              │       ASSESSMENT ENGINE       │
+│  (app/services/registry.py)  │              │  (app/services/assessment/)   │
+└──────────────┬───────────────┘              └───────────────▲───────────────┘
+               │                                              │
+      [3] Dispatch Modality                                   │ [4] Dynamic Planning
+               │                                              │     & Grounded Gen
+               ▼                                              │
+┌──────────────────────────────┐                              │
+│     MODALITY EXTRACTORS      │                              │
+│  • PyMuPDF (PDF Parser)      │                              │
+│  • Gemini Vision (Diagrams)  │                              │
+│  • Whisper + OpenCV (Video)  │                              │
+└──────────────┬───────────────┘                              │
+               │                                              │
+      [4] Canonical ContentUnits                              │
+               │                                              │
+               ▼                                              │
+┌──────────────────────────────┐                              │
+│    KNOWLEDGE STRUCTURER      │                              │
+│ (app/services/structurer.py) │                              │
+└──────────────┬───────────────┘                              │
+               │                                              │
+      [5] Concepts & Prereqs                                  │
+               │                                              │
+               ▼                                              │
+┌──────────────────────────────┐                              │
+│       SEMANTIC CHUNKER       │                              │
+│  (app/services/chunker.py)   │                              │
+└──────────────┬───────────────┘                              │
+               │                                              │
+      [6] RichChunks (Layer A)                                │
+               │                                              │
+               ▼                                              │
+┌──────────────────────────────┐                              │
+│     QDRANT VECTOR STORE      │                              │
+│ (visualai_layer_a Collection)│──────────────────────────────┘
+└──────────────┬───────────────┘    Chunk Retrieval Scoped to source_id
+               │
+      [7] Status: READY
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       STEP 2: SUBMISSION & VIDEO BLUEPRINT                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+               │
+      [7] POST /assessment/submit (Selected Option Indices)
+               │
+               ▼
+┌──────────────────────────────┐
+│     SUBMISSION GRADING       │
+│  (app/services/assessment/   │
+│           engine.py)         │
+└──────────────┬───────────────┘
+               │
+               ├──► False Mastery Guard (Requires 2+ consecutive correct)
+               ├──► Prerequisite Gap Detection (Child failed + Parent failed)
+               └──► Anti-Loop Kill Switch (>3 failed iterations -> REQUIRES_HUMAN_FALLBACK)
+               │
+               ▼
+┌──────────────────────────────┐
+│   STUDENT LEARNING PROFILE   │──► Persists to storage/learning_profiles/
+│ (app/services/assessment/    │    ({student_id}_{source_id}.json)
+│          profile.py)         │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│  VIDEO TARGET MATRIX BUILDER │
+│  (app/services/assessment/   │
+│       video_target.py)       │
+└──────────────┬───────────────┘
+               │
+               ├──► Filters passed concepts (score >= 70%)
+               ├──► Filters kill-switch concepts (routes to human intervention alert)
+               ├──► Scales duration: Foundational=30s, Intermediate=45s, Advanced=60s
+               └──► Persists blueprint to storage/video_targets/
+               │
+               ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    STEP 3: TARGETED AI VIDEO GENERATION                     │
+│                        (Upcoming Development Phase)                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+
+================================================================================
+PHASE 12 — DATABASE & DATA ENTITY ARCHITECTURE DIAGRAM (ASCII ERD)
+================================================================================
+
+```
+┌──────────────────────────────────────────────────┐
+│ sources_index.json (SourceRecord)                │
+├──────────────────────────────────────────────────┤
+│ source_id               PK (String)              │
+│ asset_id                   (String)              │
+│ upload_id                  (String)              │
+│ filename                   (String)              │
+│ source_type                ("pdf"|"image"|...)   │
+│ file_hash                  (SHA-256 Hex)         │
+│ version                    (Int)                 │
+│ parent_source_id        FK (String | null)       │
+│ status                     ("READY"|"FAILED"|...)│
+└─────────┬───────────────────┬────────────────────┘
+          │ 1                 │ 1
+          │                   │
+          │ N                 │ N
+          ▼                   ▼
+┌──────────────────────────┐ ┌────────────────────────────────────────────────┐
+│ content_units.json       │ │ knowledge_graph.json (KnowledgeGraph)          │
+├──────────────────────────┤ ├────────────────────────────────────────────────┤
+│ content_id    PK (String)│ │ concept_id                 PK (String)         │
+│ source_id     FK (String)│ │ name                          (String)         │
+│ text             (String)│ │ definition                    (String)         │
+│ page_number      (Int)   │ │ prerequisite_concept_ids   FK (List[String])──┐│
+│ bbox             (List)  │ │ source_content_ids         FK (List[String])  ││
+│ sequence_index   (Int)   │ └─────────┬─────────────────────────────────────┘│
+└─────────┬────────────────┘           │ 1                                   ││
+          │ N                          │                                     ││
+          │                            │ N                                   ││
+          ▼                            ▼                                     ││
+┌──────────────────────────────────────────────────┐                         ││
+│ Qdrant Vector Collection: visualai_layer_a       │                         ││
+├──────────────────────────────────────────────────┤                         ││
+│ id (UUIDv5 Point ID)    PK (UUID)                │                         ││
+│ vector                     (Dense 768-dim float) │                         ││
+│ payload.chunk_id           (String)              │                         ││
+│ payload.source_id       FK (String)              │                         ││
+│ payload.layer              ("A")                 │                         ││
+│ payload.concept_ids     FK (List[String])        │                         ││
+│ payload.content_ids     FK (List[String])        │                         ││
+│ payload.text               (String)              │                         ││
+│ payload.page_start         (Int | null)          │                         ││
+│ payload.page_end           (Int | null)          │                         ││
+└──────────────────────────────────────────────────┘                         ││
+                                                                             ││
+                                       ┌─────────────────────────────────────┘│
+                                       │ (Self-Referential Prerequisite DAG)  │
+                                       └──────────────────────────────────────┘
+          │ 1
+          │
+          │ N
+          ▼
+┌──────────────────────────────────────────────────┐
+│ assessment_sessions/<id>.json                    │
+├──────────────────────────────────────────────────┤
+│ session_id              PK (String)              │
+│ student_id                 (String)              │
+│ source_id               FK (String)              │
+│ status                     ("READY"|"SUBMITTED") │
+│ questions                  (List[Question])      │
+│ expires_at                 (ISO8601 Timestamp)   │
+│ concept_snapshot           (Dict[ConceptSnapshot])
+└─────────┬────────────────────────────────────────┘
+          │ 1
+          │
+          │ 1
+          ▼
+┌──────────────────────────────────────────────────┐
+│ learning_profiles/<student_id>_<source_id>.json  │
+├──────────────────────────────────────────────────┤
+│ student_id              PK (String)              │
+│ source_id               PK (String)              │
+│ overall_score              (Float 0-100)         │
+│ total_sessions             (Int)                 │
+│ strong_concept_ids         (List[String])        │
+│ weak_concept_ids           (List[String])        │
+│ prerequisite_gaps          (List[String])        │
+│ concept_masteries          (Dict[ConceptMastery])│
+│   ├── status               ("MASTERED"|...)      │
+│   ├── iteration_count      (Int)                 │
+│   └── last_score           (Float 0-100)         │
+└─────────┬────────────────────────────────────────┘
+          │ 1
+          │
+          │ 1
+          ▼
+┌──────────────────────────────────────────────────┐
+│ video_targets/<student_id>_<source_id>.json      │
+├──────────────────────────────────────────────────┤
+│ student_id              PK (String)              │
+│ source_id               PK (String)              │
+│ decision                   ("GENERATE_VIDEOS"|...)│
+│ summary                    (String)              │
+│ videos                     (List[VideoTarget])   │
+│   ├── concept_id        FK (String)              │
+│   ├── difficulty           ("foundational"|...)  │
+│   ├── target_seconds       (30 | 45 | 60)        │
+│   ├── directive            (String)              │
+│   └── chunk_ids         FK (List[String])        │
+│ human_intervention_concepts(List[String])        │
+└──────────────────────────────────────────────────┘
+```
+
+
+================================================================================
+PHASE 13 — REAL CODE REFERENCES & SYMBOL MAP
+================================================================================
+
+1. CONFIGURATION & ENTRY POINTS:
+   - app/core/config.py:
+     * Class Settings (lines 12-64)
+     * settings instance (line 77)
+     * Variables: settings.gemini_api_key, settings.qdrant_url, settings.collection_name, settings.upload_dir, settings.kill_switch_limit, settings.mastery_threshold
+   - app/main.py:
+     * FastAPI app instance (line 9)
+     * Health check: def health() (line 28)
+     * Sources catalog: def get_sources() (line 33)
+     * Vector diagnostics: def debug_qdrant() (line 54)
+
+2. STEP 1 INGESTION ENGINE:
+   - app/api/upload.py:
+     * Endpoint: @router.post("") def upload_file() (lines 36-170)
+     * Helper: def upsert_safely() (lines 181-190)
+   - app/services/registry.py:
+     * Function: register_source() (lines 120-159)
+     * Function: validate_file() (lines 61-108)
+     * Function: calculate_sha256() (lines 52-58)
+     * Function: save_content_units() (lines 188-195)
+     * Function: save_knowledge_graph() (lines 206-212)
+     * Function: update_source_status() (lines 169-185)
+   - app/services/dispatcher.py:
+     * Function: dispatch() (lines 36-114)
+   - app/services/extractor.py:
+     * Function: extract_from_pdf() (lines 16-121)
+   - app/services/structurer.py:
+     * Function: process_structure_and_concepts() (lines 78-120)
+     * Function: _fallback_outputs() (lines 172-292)
+   - app/services/chunker.py:
+     * Function: create_rich_chunks() (lines 21-106)
+   - app/db/vector_store.py:
+     * Function: get_client() (lines 39-69)
+     * Function: upsert_chunks() (lines 126-148)
+     * Function: search_layer_a() (lines 150-161)
+   - app/services/validator.py:
+     * Function: validate_ingestion_quality() (lines 19-81)
+
+3. STEP 2 ASSESSMENT & PROFILING ENGINE:
+   - app/api/assessment.py:
+     * Endpoint: @router.post("/start") def start_assessment() (lines 51-358)
+     * Endpoint: @router.post("/handoff") def handoff_from_step1() (lines 360-364)
+     * Endpoint: @router.post("/submit") def submit_assessment() (lines 366-484)
+     * Endpoint: @router.get("/profile/{student_id}/{source_id}") def get_profile() (lines 486-523)
+     * Endpoint: @router.get("/video-target/{student_id}/{source_id}") (lines 544-555)
+   - app/services/assessment/planner.py:
+     * Function: plan_assessment() (lines 38-76)
+     * Function: classify_difficulty() (lines 20-36)
+     * Function: _apply_prerequisite_pairing() (lines 177-212)
+   - app/services/assessment/generator.py:
+     * Function: generate_question() (lines 128-247)
+     * Function: search_concept_chunks() (lines 58-126)
+     * Function: _generate_grounded_fallback() (lines 249-313)
+   - app/services/assessment/providers.py:
+     * Protocol: LLMProvider (lines 23-28)
+     * Classes: GeminiProvider (lines 31-58), OllamaProvider (lines 61-97), MockProvider (lines 99-126)
+     * Factory: get_default_provider() (lines 128-137)
+   - app/services/assessment/validator.py:
+     * Function: validate_question() (lines 11-71)
+     * Function: validate_grounding() (lines 73-111)
+     * Function: is_duplicate() (lines 113-142)
+   - app/services/assessment/engine.py:
+     * Function: grade_submission() (lines 49-189)
+     * Function: rebuild_profile_metrics() (lines 29-47)
+   - app/services/assessment/profile.py:
+     * Function: get_or_create_profile() (lines 46-52)
+     * Function: save_profile() (lines 24-31)
+     * Function: load_profile() (lines 33-44)
+   - app/services/assessment/video_target.py:
+     * Function: build_video_target_matrix() (lines 38-140)
+     * Function: save_video_matrix() (lines 142-154)
+     * Function: load_video_matrix() (lines 157-171)
+
+
+================================================================================
+PHASE 14 — ERROR AND FAILURE FLOW
+================================================================================
+
+1. INVALID INPUT / DISGUISED FILE:
+   - Detected in: app/services/registry.py::validate_file()
+   - Mechanism: Checks file extension against ALLOWED_EXTENSIONS; verifies magic bytes.
+   - Result: Raises ValueError.
+   - API Effect: HTTP 400 Bad Request ("File signature check failed...").
+   - User Experience: Error banner in Web Dashboard explaining file is unsupported or corrupted.
+
+2. EMPTY CONTENT FILE:
+   - Detected in: app/api/upload.py (line 93)
+   - Mechanism: Checks if extraction_result.units is empty.
+   - Result: update_source_status(source_id, "FAILED", error_message="No content extracted").
+   - API Effect: HTTP 422 Unprocessable Entity.
+
+3. GEMINI API QUOTA EXHAUSTION (HTTP 429 RATE LIMIT):
+   - In Step 1 Structurer (app/services/structurer.py):
+     Catches exception and immediately invokes _fallback_outputs().
+     Regex heuristic parser extracts acronyms, definitions, and headings directly from text blocks.
+     Pipeline NEVER crashes; KnowledgeGraph is guaranteed non-empty.
+   - In Step 2 Question Generator (app/services/assessment/generator.py):
+     Detects "exceeded your current quota" or "429"; switches to _generate_grounded_fallback().
+     Builds deterministic questions using MD5 hash modulo 4 for answer indices and prerequisite distractors.
+
+4. QDRANT VECTOR STORE OUTAGE:
+   - During Connection:
+     get_client() in app/db/vector_store.py probes Docker at http://localhost:6333 (timeout: 2s).
+     If unreachable, logs info and immediately falls back to embedded on-disk Qdrant storage at storage/qdrant/.
+   - During Upsert:
+     If Qdrant fails completely, upsert_safely() raises HTTPException(status_code=503, detail="Layer A vector sync failed...").
+
+5. FFMPEG NOT INSTALLED ON HOST:
+   - Detected in: app/services/video/av_splitter.py::_find_ffmpeg()
+   - Mechanism: extract_audio() catches missing binary.
+   - Fallback: app/services/video/pipeline.py catches error and falls back to _visuals_only_units(),
+     extracting visual keyframes without audio rather than failing the whole upload.
+
+6. QUESTION GENERATION REJECTION / HALLUCINATION DETECTED:
+   - Detected in: app/services/assessment/validator.py (validate_question, validate_grounding, is_duplicate)
+   - Recovery: Rejected candidate is logged; generator immediately backfills by pulling the next concept from the reserve pool.
+   - User Effect: Student receives full target question count without noticing internal retries.
+
+7. EXPIRED ASSESSMENT SESSION:
+   - Detected in: app/services/assessment/engine.py (lines 71-75)
+   - Condition: datetime.now(timezone.utc) > datetime.fromisoformat(session.expires_at)
+   - Result: Raises ValueError("Assessment session has expired...").
+   - API Effect: HTTP 410 Gone.
+   - User Experience: Dashboard alerts student that quiz time limit elapsed; prompts starting a new quiz.
+
+8. DUPLICATE QUESTION SUBMISSION:
+   - Detected in: app/api/assessment.py (lines 382-405)
+   - Condition: session.status == "SUBMITTED" or duplicate question_id in answers list.
+   - API Effect: HTTP 409 Conflict (already submitted) or HTTP 400 Bad Request (duplicate question ID).
+
+9. DISK REGISTRY UNAVAILABILITY DURING GRADING:
+   - Detected in: app/api/assessment.py (lines 408-426)
+   - Condition: storage/registry/{source_id}/knowledge_graph.json is missing or inaccessible.
+   - Recovery (Phase 2B): reconstruct_kg_from_snapshot() reconstructs KnowledgeGraph directly
+     from session.concept_snapshot saved in the session JSON file.
+   - User Effect: Grading succeeds seamlessly without disk dependency.
+
+10. ANTI-LOOP KILL SWITCH (>3 REPEATED FAILURES):
+    - Detected in: app/services/assessment/engine.py (lines 135-138)
+    - Condition: mastery.iteration_count > settings.kill_switch_limit (default 3)
+    - Mechanism: Sets mastery.status = "REQUIRES_HUMAN_FALLBACK".
+    - Effect:
+      * Concept is permanently excluded from future automated quiz planning.
+      * Concept is filtered out of VideoTargetMatrix automated video queues.
+      * Concept is surfaced in human_intervention_concepts for teacher/instructor intervention.
+
+
+================================================================================
+PHASE 15 — TEST COVERAGE & AUDIT
+================================================================================
+
+AUTOMATED TEST SUITES IN REPOSITORY:
+
+1. TEST FILE: test_step1.py
+   - Test: run_test()
+   - Components Tested: register_source, dispatch, process_structure_and_concepts, create_rich_chunks, validate_ingestion_quality.
+   - Verifies: Full Step 1 ingestion sequence on sample physics text.
+
+2. TEST FILE: test_step2.py
+   - Test: test_step2_flow()
+   - Components Tested: End-to-end Step 2 execution: Step 1 JSON ingestion, cold start planning, grounded question generation, validation, grading, kill switch, and VideoTargetMatrix generation.
+   - Uses FastAPI TestClient against live endpoints.
+
+3. TEST FILE: test_step2_backfill.py
+   - Focus: Phase 2A question backfilling and reserve candidate pool.
+   - Tests: Shortfall calculation, candidate stream sequencing, reserve pool assembly.
+
+4. TEST FILE: test_step2_phase2b.py
+   - Focus: Phase 2B self-contained assessment session snapshots.
+   - Tests: ConceptSnapshot creation, reconstruct_kg_from_snapshot(), offline grading resilience when registry is missing.
+
+5. TEST FILE: test_step2_phase2c.py
+   - Focus: Phase 2C configuration binding and stable concept IDs.
+   - Tests: Dynamic settings override via Settings class, environment variable precedence, concept ID persistence.
+
+6. TEST FILE: test_step2_phase3.py
+   - Focus: Phase 3 LLM provider abstraction protocol.
+   - Tests: GeminiProvider, OllamaProvider, MockProvider, and get_default_provider() factory resolution.
+
+7. TEST FILE: test_step2_phase4.py (Comprehensive Master Verification Suite)
+   - 15 Distinct Production Hardening Checks:
+     * Check 1:  test_cross_source_isolation() (verifies Qdrant search filter must include source_id)
+     * Check 2:  test_provenance_no_fabricated_page() (verifies page is None rather than fake page=1)
+     * Check 3:  test_grounding_validation() (verifies token overlap gateway rejects hallucinations)
+     * Check 4:  test_duplicate_detection() (verifies Jaccard stem duplicate rejection)
+     * Check 5:  test_fallback_diversity_and_unpredictability() (verifies varied answer indices via MD5 hash)
+     * Check 6:  test_backfilling_reserve_pool() (verifies reserve candidates satisfy target question count)
+     * Check 7:  test_kill_switch_and_video_exclusion() (verifies REQUIRES_HUMAN_FALLBACK exclusion)
+     * Check 8:  test_prerequisite_gaps_with_snapshot() (verifies prerequisite gap detection via snapshot)
+     * Check 9:  test_session_kg_snapshot_offline_reconstruction() (verifies source_id integrity checks)
+     * Check 10: test_configuration_dynamic_settings() (verifies central settings constants)
+     * Check 11: test_profile_ids_and_names_persisted() (verifies both human names and stable IDs stored)
+     * Check 12: test_video_matrix_contract_and_decisions() (verifies all 4 decision states: ALL_MASTERED, GENERATE_VIDEOS, HUMAN_INTERVENTION, Mixed)
+     * Check 13: test_api_integrity_and_safe_question() (verifies answer hiding and HTTP 400 on bad questions)
+     * Check 14: test_expired_session_rejected() (verifies HTTP 410 Gone on expired sessions)
+     * Check 15: test_windows_output_compatibility() (verifies CP1252/ASCII console safety)
+   - Status: 15 / 15 TESTS PASSING (Verified).
+
+IMPORTANT FLOWS CURRENTLY REQUIRING CAUTION / UNTESTED AREAS:
+1. Live Video Upload with FFmpeg on Host:
+   - Unit tests use mock audio/video or text samples. Processing real multi-gigabyte video files depends on host FFmpeg CLI and faster-whisper CPU/GPU execution speed.
+2. Production Multi-Tenancy / Authentication:
+   - Currently operating in development mode with student_id="student_default". There is no JWT authentication, password hashing, or role-based access control (RBAC).
+
+
+================================================================================
+PHASE 16 — CURRENT IMPLEMENTATION STATUS
+================================================================================
+
+STEP 1 STATUS:
+- Completed:
+  * Multimodal dispatching for PDF, PNG, JPG, JPEG, TXT, MP4, MOV, MKV.
+  * PyMuPDF block parsing with bounding boxes and Gemini Vision diagram extraction.
+  * FFmpeg audio track separation and faster-whisper speech transcription.
+  * OpenCV keyframe sampling with 32x32 grayscale perceptual deduplication (<4% change skipped).
+  * Multimodal fusion of speech segments and visual frame descriptions into ContentUnits.
+  * Structurer with Gemini LLM hierarchy extraction and regex heuristic fallback.
+  * Concept-aware semantic chunker producing RichChunks with Layer A provenance.
+  * Qdrant collection (visualai_layer_a) vector sync with deterministic UUIDv5 IDs.
+  * 5-stage quality validation gateway.
+- Partial:
+  * None.
+- Missing:
+  * None.
+- Mocked:
+  * None in production code. (Offline mock provider available for tests).
+- Untested:
+  * Ultra-large 4K video files exceeding 2GB.
+
+STEP 2 STATUS:
+- Completed:
+  * Session initialization and registry lock checking (rejects unready sources).
+  * Compact ConceptSnapshot embedding inside AssessmentSession for self-contained offline sessions.
+  * Dynamic assessment planning with cold start balance (~30/40/30) and prerequisite pairing DAG traversal.
+  * Grounded question generation with source isolation filtering in Qdrant.
+  * Pluggable LLM provider abstraction (Gemini, Ollama, Mock).
+  * Resilient deterministic grounded fallback generator with varied answer index hashing.
+  * 3 Quality Gateways: Structural/provenance, grounding vocabulary overlap, Jaccard duplicate detection.
+  * Automated reserve pool backfilling when candidates fail validation gateways.
+  * Safe quiz sanitization (correct answers and explanations stripped before client dispatch).
+  * Submission grading against hidden answer key.
+  * False-mastery protection (requires 2+ consecutive correct answers).
+  * Anti-Loop Kill Switch (>3 failures sets status to REQUIRES_HUMAN_FALLBACK).
+  * Prerequisite gap detection (child failed AND parent failed).
+  * StudentLearningProfile persistence.
+  * VideoTargetMatrix generation scaling duration by difficulty (30s foundational, 45s intermediate, 60s advanced).
+  * Exclusion of kill-switch concepts from video generation queues.
+- Partial:
+  * None.
+- Missing:
+  * None.
+- Mocked:
+  * MockProvider exists for fast test runs; production uses GeminiProvider.
+- Untested:
+  * High-concurrency concurrent submissions by hundreds of simultaneous students on the same file.
+
+STEP 1 -> STEP 2 INTEGRATION:
+- Connected: 100% CONNECTED.
+  * Automated single-step handoff: POST /upload?auto_start_assessment=true
+  * Explicit API handoff: POST /assessment/start (source_id)
+  * Web Dashboard handoff: Dropdown selector populated via GET /sources -> one-click quiz generation.
+- Potential Issues:
+  * Single-tenant development mode: Students share the same file system storage directory. Concurrent write locks on sources_index.json during heavy multi-user load should be monitored.
+
+
+================================================================================
+FINAL SECTION — ONE-PAGE MENTAL MODEL (2-MINUTE SUMMARY)
+================================================================================
+
+```
+USER / STUDENT
+      │
+      ▼
+[1. ENTRY]
+      POST /upload with study material (PDF, Text, Diagram Image, or Lecture Video).
+      │
+      ▼
+[2. STEP 1: INGESTION & KNOWLEDGE EXTRACTION]
+      Validates magic bytes & SHA-256; normalizes into canonical ContentUnits;
+      extracts Concepts & Prerequisite DAG (KnowledgeGraph) via Gemini (with heuristic fallback);
+      semantically chunks text into RichChunks with full provenance (pages, bboxes, timestamps).
+      │
+      ▼
+[3. DATABASE / STORAGE]
+      Embeds vectors into Qdrant collection (visualai_layer_a);
+      writes original file, content_units.json, and knowledge_graph.json to storage/registry/.
+      │
+      ▼
+[4. STEP 1 OUTPUT]
+      SourceRecord (source_id, status: READY) + TopicBlueprint (key concepts, prerequisites).
+      │
+      ▼
+[5. STEP 2: ASSESSMENT PLANNING & QUIZ DISPATCH]
+      POST /assessment/start creates session with ConceptSnapshot;
+      plans balanced quiz (30% foundational, 40% intermediate, 30% advanced);
+      retrieves source-isolated chunks from Qdrant; generates grounded MCQs;
+      validates grounding and non-duplication; backfills from reserve pool;
+      dispatches sanitized quiz (SafeQuestion) with hidden answers to the student.
+      │
+      ▼
+[6. PROCESSING: SUBMISSION, GRADING & PROFILING]
+      POST /assessment/submit grades answers against hidden answer key;
+      enforces False-Mastery Protection (2+ consecutive successes needed);
+      triggers Anti-Loop Kill Switch (>3 failures flags REQUIRES_HUMAN_FALLBACK);
+      detects Prerequisite Gaps (child failed AND parent failed);
+      updates StudentLearningProfile (strong/weak concepts, scores).
+      │
+      ▼
+[7. DATABASE / STORAGE]
+      Saves session to storage/assessment_sessions/;
+      saves profile to storage/learning_profiles/<student_id>_<source_id>.json;
+      saves VideoTargetMatrix to storage/video_targets/<student_id>_<source_id>.json.
+      │
+      ▼
+[8. FINAL OUTPUT]
+      VideoTargetMatrix: Tells Step 3 exactly WHICH unmastered concepts need remedial videos,
+      scales duration by difficulty (30s foundational, 45s intermediate, 60s advanced),
+      provides exact source page/chunk visual provenance, and alerts on kill-switch concepts.
+```
+
+BOX-BY-BOX ARCHITECTURAL SUMMARY:
+1. [ENTRY]: app/api/upload.py receives multipart file streams, enforces file size limits (<500MB), and verifies magic byte signatures.
+2. [STEP 1]: Dispatcher routes file to PyMuPDF, Gemini Vision, or FFmpeg/Whisper/OpenCV; structurer generates hierarchical KnowledgeGraph; chunker maps Layer A provenance.
+3. [DATABASE/STORAGE]: Qdrant stores dense embeddings with deterministic UUIDv5 IDs; disk registry stores immutable source files, ContentUnits, and KnowledgeGraph JSONs.
+4. [STEP 1 OUTPUT]: Contractual handoff point: source_id string referencing a verified READY study document with extracted concepts.
+5. [STEP 2]: Assessment planner applies cold-start balance and prerequisite pairing; generator pulls chunks from Qdrant and authors MCQs; validator gates grounding and backfills from reserve candidates; dispatches safe questions.
+6. [PROCESSING]: Grading engine compares answers with backend key, prevents lucky guesses, halts infinite failure loops via kill switch, and pinpoints root prerequisite gaps.
+7. [DATABASE/STORAGE]: Active sessions, cumulative student profiles, and remedial video blueprints are persisted as atomic structured JSON documents on disk.
+8. [FINAL OUTPUT]: VideoTargetMatrix blueprint specifying target seconds (30s/45s/60s), visual chunk provenance, and teacher alerts for upcoming Step 3 automated video generation.
+================================================================================
+END OF FILE — STEP1_STEP2_FULL_SYSTEM_FLOW.txt
+================================================================================
