@@ -9,13 +9,15 @@ Uses `large-v3` by default for maximum accuracy. Post-processing cleans up
 common Whisper hallucinations and formatting artifacts.
 """
 
+import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-
-from faster_whisper import WhisperModel
+from typing import Any
 
 from ...core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,8 +72,13 @@ def transcribe_with_timestamps(audio_path: Path) -> list[Segment]:
     return results
 
 
-def _load_model() -> WhisperModel:
+def _load_model() -> Any:
     """Load the whisper model, falling back to smaller models on failure."""
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as e:
+        raise RuntimeError(f"faster-whisper is not installed: {e}")
+
     sizes_to_try = [settings.whisper_model_size, "base", "tiny"]
     # Deduplicate while preserving order
     seen = set()
@@ -83,16 +90,16 @@ def _load_model() -> WhisperModel:
 
     for size in ordered_sizes:
         try:
-            print(f"[info] Loading whisper model '{size}'...")
+            logger.info("[transcriber] Loading whisper model '%s'...", size)
             model = WhisperModel(
                 size,
                 device="cpu",
                 compute_type="int8",  # fast on CPU, negligible quality loss
             )
-            print(f"[info] Whisper model '{size}' loaded successfully.")
+            logger.info("[transcriber] Whisper model '%s' loaded successfully.", size)
             return model
         except Exception as exc:
-            print(f"[warn] Failed to load whisper model '{size}': {exc}")
+            logger.warning("[transcriber] Failed to load whisper model '%s': %s", size, exc)
             continue
 
     raise RuntimeError("Could not load any whisper model. Check your installation.")

@@ -7,14 +7,14 @@ and provides authoritative pedagogical answers with citations and follow-up prom
 
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import List, Optional, Tuple
 
 from ...core.config import settings
-from ...db.vector_store import get_client, search_layer_a
+from ...db.vector_store import search_layer_a
 from ...services.assessment.providers import LLMProvider, get_default_provider
 from ...services.registry import load_content_units, load_knowledge_graph
-from ...services.schemas import ContentUnit, KnowledgeGraph
+from ...services.schemas import StageDiagnostics
 from ...services.video_gen.pipeline import VIDEOS_DIR, load_videos_index
 from ...services.video_gen.schemas import VideoScene, VideoScript
 from .schemas import SceneReference, SourceCitation, VideoQAResponse
@@ -108,7 +108,7 @@ def retrieve_grounding_citations(
     # 2. Fallback to ContentUnits from registry if needed
     if len(citations) < limit:
         cus = load_content_units(source_id) or []
-        # Pass 1: matching keywords or concept
+        # Grounded matching based on keywords or concept IDs
         for cu in cus:
             if cu.content_id not in seen_chunks:
                 text_lower = cu.text.lower()
@@ -117,22 +117,6 @@ def retrieve_grounding_citations(
                 cu_concepts = getattr(cu, "concept_ids", None)
                 if any(qw in text_lower for qw in query_words) or (cu_concepts and concept_id in cu_concepts):
                     seen_chunks.add(cu.content_id)
-                    citations.append(
-                        SourceCitation(
-                            chunk_id=cu.content_id,
-                            page=page_num,
-                            text_preview=cu.text[:280].strip(),
-                        )
-                    )
-                    if len(citations) >= limit:
-                        break
-
-        # Pass 2: any remaining ContentUnits for this source
-        if len(citations) < limit:
-            for cu in cus:
-                if cu.content_id not in seen_chunks:
-                    seen_chunks.add(cu.content_id)
-                    page_num = getattr(cu, "page_number", None) or getattr(cu, "page", None)
                     citations.append(
                         SourceCitation(
                             chunk_id=cu.content_id,
@@ -163,8 +147,13 @@ def answer_video_question(
     student_id: Optional[str] = None,
     provider: Optional[LLMProvider] = None,
     mock_mode: bool = False,
+    fallback_reason: Optional[str] = None,
+    t0: Optional[float] = None,
 ) -> VideoQAResponse:
     """Generate an authoritative, pedagogically grounded answer to a student's video question."""
+    if t0 is None:
+        t0 = time.time()
+
     # 1. Load script
     script = load_video_script(video_id)
     if not script:
@@ -230,6 +219,15 @@ def answer_video_question(
             f"**Authoritative Source Grounding:**\n{citation_texts}"
         )
 
+        duration_ms = round((time.time() - t0) * 1000, 2)
+        diagnostics = StageDiagnostics(
+            provider_used="deterministic_video_rag_fallback",
+            fallback_used=True,
+            fallback_reason=fallback_reason or ("Mock mode requested" if mock_mode else "LLM provider unconfigured"),
+            grounding_verified=True,
+            duration_ms=duration_ms,
+        )
+
         return VideoQAResponse(
             answer=answer_text,
             video_id=video_id,
@@ -237,6 +235,7 @@ def answer_video_question(
             active_scene=scene_ref,
             citations=citations,
             suggested_questions=suggested_questions,
+            diagnostics=diagnostics,
         )
 
     # Prompt LLM with full context
@@ -277,6 +276,14 @@ INSTRUCTIONS:
 
     try:
         raw_response = provider.generate_content(rag_prompt)
+        duration_ms = round((time.time() - t0) * 1000, 2)
+        diagnostics = StageDiagnostics(
+            provider_used=getattr(provider, "model_name", settings.llm_provider),
+            fallback_used=False,
+            fallback_reason=None,
+            grounding_verified=True,
+            duration_ms=duration_ms,
+        )
         return VideoQAResponse(
             answer=raw_response.strip(),
             video_id=video_id,
@@ -284,6 +291,7 @@ INSTRUCTIONS:
             active_scene=scene_ref,
             citations=citations,
             suggested_questions=suggested_questions,
+            diagnostics=diagnostics,
         )
     except Exception as e:
         logger.error("LLM RAG generation failed: %s. Using deterministic fallback.", e)
@@ -293,4 +301,6 @@ INSTRUCTIONS:
             timestamp=timestamp,
             student_id=student_id,
             mock_mode=True,
+            fallback_reason=f"LLM RAG generation failed: {e}",
+            t0=t0,
         )

@@ -1,4 +1,4 @@
-﻿"""Tests for Step 2 Hardening Phase 3: LLM Provider Abstraction.
+"""Tests for Step 2 Hardening Phase 3: LLM Provider Abstraction.
 
 Tests:
 A. test_mock_provider_generates_question
@@ -162,8 +162,21 @@ def test_provider_selection_from_settings():
         settings.llm_provider = "gemini"
         p_gemini = get_default_provider()
         assert isinstance(p_gemini, GeminiProvider), f"Expected GeminiProvider, got {type(p_gemini)}"
+        assert p_gemini.model_name == "gemini-3.5-flash", f"Expected gemini-3.5-flash, got {p_gemini.model_name}"
 
-        print("   [PASS] Provider factory properly selects MockProvider, OllamaProvider, and GeminiProvider from settings.")
+        import app.services.assessment.providers as prov_mod
+        settings.llm_provider = "omniroute"
+        p_omni = get_default_provider()
+        assert isinstance(p_omni, prov_mod.OmniRouteProvider), f"Expected OmniRouteProvider, got {type(p_omni)}"
+
+        settings.llm_provider = "unsupported_provider_xyz"
+        try:
+            get_default_provider()
+            assert False, "Should raise RuntimeError on unsupported provider"
+        except RuntimeError:
+            pass
+
+        print("   [PASS] Provider factory properly selects MockProvider, OllamaProvider, GeminiProvider, and OmniRouteProvider explicitly, failing on unknown.")
     finally:
         settings.llm_provider = orig_prov
 
@@ -199,7 +212,8 @@ def test_ollama_provider_if_implemented():
         assert q is not None, "Ollama provider must produce valid Question"
         assert q.stem == "What is momentum in Newtonian mechanics?"
         assert len(q.options) == 4
-        assert q.correct_index == 0
+        assert 0 <= q.correct_index < len(q.options)
+        assert "product of the mass and velocity" in q.options[q.correct_index].text.lower()
         assert mock_urlopen.called, "urllib.request.urlopen should have been called"
 
     print("   [PASS] OllamaProvider successfully communicated with adapter endpoint and generated question.")

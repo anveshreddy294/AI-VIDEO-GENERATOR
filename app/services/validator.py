@@ -4,10 +4,13 @@ Verifies File, ContentUnit, Chunk, Concept, and Storage levels before
 marking a source status as READY.
 """
 
+import logging
 from pathlib import Path
 from typing import Any
 
 from .schemas import ContentUnit, KnowledgeGraph, RichChunk, SourceRecord
+
+logger = logging.getLogger(__name__)
 
 
 class ValidationFailed(Exception):
@@ -66,7 +69,7 @@ def validate_ingestion_quality(
         if not concept.concept_id or not concept.name:
             raise ValidationFailed(f"Concept level failure: Concept node {cid} missing ID or name.")
         if not concept.source_content_ids:
-            print(f"[warn] Concept {concept.name} ({cid}) has no source_content_ids mapping.")
+            logger.warning("[validator] Concept %s (%s) has no source_content_ids mapping.", concept.name, cid)
     report["checks"]["concept_level"] = f"PASSED ({len(kg.concepts)} Concepts)"
 
     # 5. Storage Level Validation

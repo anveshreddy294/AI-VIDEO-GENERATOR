@@ -7,7 +7,7 @@ and smooth animated progress bars.
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np
@@ -15,8 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 from ...core.config import settings
 from ...services.registry import get_content_units
-from ...services.schemas import ContentUnit
-from .schemas import VideoScene, VideoScript
+from .schemas import VideoScene
 
 logger = logging.getLogger(__name__)
 
@@ -39,11 +38,20 @@ COLOR_ACCENT_GREEN = (16, 185, 129)  # #10B981
 
 
 def _get_font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load a clean system font (Segoe UI or Arial) with safe default fallback."""
+    """Load a clean modern system font across macOS, Linux, and Windows with safe fallback."""
     font_candidates = [
+        # macOS Fonts
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/System/Library/Fonts/Helvetica.ttc",
+        "/Library/Fonts/Arial.ttf",
+        "/System/Library/Fonts/SFPro.ttf",
+        # Windows Fonts
         "C:/Windows/Fonts/segoeuib.ttf" if bold else "C:/Windows/Fonts/segoeui.ttf",
         "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
         "C:/Windows/Fonts/calibrib.ttf" if bold else "C:/Windows/Fonts/calibri.ttf",
+        # Linux Fonts
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ]
     for p in font_candidates:
         if Path(p).exists():
@@ -68,8 +76,8 @@ def _draw_rounded_rectangle(
 
 def _resolve_diagram_path(source_id: str, diagram_cu_id: Optional[str]) -> Optional[Path]:
     """Find the local disk path of an embedded diagram or uploaded image."""
+    units = get_content_units(source_id)
     if diagram_cu_id:
-        units = get_content_units(source_id)
         for u in units:
             if u.content_id == diagram_cu_id:
                 img_path = getattr(u, "image_path", None)
@@ -77,11 +85,20 @@ def _resolve_diagram_path(source_id: str, diagram_cu_id: Optional[str]) -> Optio
                     return Path(img_path)
                 break
 
-    # Look for uploaded source files (e.g. original.png, diagram.jpg)
+    # Look for any ContentUnit with a valid image_path
+    for u in units:
+        img_path = getattr(u, "image_path", None)
+        if img_path and Path(img_path).exists():
+            return Path(img_path)
+
+    # Look for uploaded source files or extracted diagrams on disk
     from ...core.config import BASE_DIR
     search_dirs = [
+        settings.upload_dir / source_id / "images",
         settings.upload_dir / source_id,
+        settings.runtime_dir / "uploads" / source_id / "images",
         settings.runtime_dir / "uploads" / source_id,
+        BASE_DIR / "storage" / "uploads" / source_id / "images",
         BASE_DIR / "storage" / "uploads" / source_id,
         BASE_DIR / "storage" / "runtime" / "registry" / source_id,
         BASE_DIR / "storage" / "registry" / source_id,
@@ -89,7 +106,7 @@ def _resolve_diagram_path(source_id: str, diagram_cu_id: Optional[str]) -> Optio
     for s_dir in search_dirs:
         if s_dir.exists():
             for ext in ("*.png", "*.jpg", "*.jpeg"):
-                matches = list(s_dir.glob(ext))
+                matches = sorted(s_dir.glob(ext))
                 if matches:
                     return matches[0]
 
@@ -104,8 +121,9 @@ def render_scene_frame(
     total_scenes: int,
     source_id: str,
     progress_ratio: float = 0.0,
+    scene_fraction: float = 1.0,
 ) -> Image.Image:
-    """Render a 1080p still frame for a given scene with high-contrast typography."""
+    """Render a 1080p frame for a given scene with kinetic animations and high-contrast typography."""
     img = Image.new("RGB", (WIDTH, HEIGHT), COLOR_BG_DARK)
     draw = ImageDraw.Draw(img)
 
@@ -117,7 +135,7 @@ def render_scene_frame(
         b = int(COLOR_ACCENT_INDIGO[2] * (1 - interp) + COLOR_ACCENT_CYAN[2] * interp)
         draw.line([(0, y), (WIDTH, y)], fill=(r, g, b))
 
-    # 2. Header Badges
+    # 2. Header Badges & Typography
     font_badge = _get_font(20, bold=True)
     font_title = _get_font(44, bold=True)
     font_body = _get_font(28, bold=False)
@@ -128,10 +146,11 @@ def render_scene_frame(
     _draw_rounded_rectangle(draw, (80, 45, 80 + len(badge_text) * 12 + 30, 85), radius=8, fill=(30, 58, 138), outline=COLOR_ACCENT_BLUE)
     draw.text((95, 52), badge_text, font=font_badge, fill=COLOR_ACCENT_CYAN)
 
-    # Concept Label & Scene Title
+    # Concept Label
     concept_label = f"Concept: {concept_name}"
     draw.text((WIDTH - 80 - len(concept_label) * 13, 52), concept_label, font=font_badge, fill=COLOR_TEXT_MUTED)
 
+    # Title
     draw.text((80, 110), scene.title, font=font_title, fill=COLOR_TEXT_PRIMARY)
 
     # 3. Check for diagram asset
@@ -153,61 +172,86 @@ def render_scene_frame(
         width=2,
     )
 
-    # 5. Render Bullet Points inside Card
+    # 5. Render Bullet Points inside Card with kinetic progressive reveal
+    num_bullets = len(scene.onscreen_bullets)
     bullet_y = card_top + 45
     for i, bullet in enumerate(scene.onscreen_bullets):
         if bullet_y > card_bottom - 220:
             break
+
+        # Kinetic reveal timing: stagger bullet points
+        t_enter = 0.04 + (i * 0.14)
+        if scene_fraction < t_enter:
+            # Not yet visible
+            bullet_y += 65
+            continue
+
+        # Eased slide-in progress
+        anim_p = min(1.0, (scene_fraction - t_enter) / 0.10)
+        offset_x = int((1.0 - anim_p) * -30)
+
+        # Interpolate bullet text color for smooth entrance
+        text_color = (
+            int(100 + (COLOR_TEXT_PRIMARY[0] - 100) * anim_p),
+            int(116 + (COLOR_TEXT_PRIMARY[1] - 116) * anim_p),
+            int(139 + (COLOR_TEXT_PRIMARY[2] - 139) * anim_p),
+        )
+
         # Bullet indicator icon (circle)
-        draw.ellipse([(120, bullet_y + 8), (136, bullet_y + 24)], fill=COLOR_ACCENT_BLUE)
+        draw.ellipse([(120 + offset_x, bullet_y + 8), (136 + offset_x, bullet_y + 24)], fill=COLOR_ACCENT_BLUE)
         # Bullet text
-        draw.text((155, bullet_y), bullet, font=font_body, fill=COLOR_TEXT_PRIMARY)
+        draw.text((155 + offset_x, bullet_y), bullet, font=font_body, fill=text_color)
         bullet_y += 65
 
     # 6. Emphasized Highlight Card / Formula Callout
     if scene.highlight_text:
-        # Sanitize highlight text from any accidental leaked tags
-        clean_highlight = (
-            scene.highlight_text
-            .replace("[IMAGE:", "")
-            .replace("[No description returned by vision API]", "")
-            .strip()
-        )
-        if not clean_highlight or clean_highlight.startswith("[") or "no description" in clean_highlight.lower():
-            clean_highlight = f"Mastery Rule: Always verify governing conditions for {concept_name}."
+        # Show after bullets have started appearing (at fraction >= 0.40)
+        show_hl = scene_fraction >= 0.40
+        if show_hl:
+            hl_anim = min(1.0, (scene_fraction - 0.40) / 0.12)
+            hl_offset_y = int((1.0 - hl_anim) * 15)
 
-        callout_top = max(bullet_y + 25, card_bottom - 210)
-        callout_bottom = card_bottom - 35
-        _draw_rounded_rectangle(
-            draw,
-            (115, callout_top, 80 + content_width - 35, callout_bottom),
-            radius=12,
-            fill=(24, 38, 66),
-            outline=COLOR_ACCENT_INDIGO,
-            width=2,
-        )
-        # Accent left line
-        draw.line([(120, callout_top + 10), (120, callout_bottom - 10)], fill=COLOR_ACCENT_CYAN, width=4)
-        draw.text((140, callout_top + 15), "KEY MASTERY RULE:", font=font_small, fill=COLOR_ACCENT_AMBER)
+            clean_highlight = (
+                scene.highlight_text
+                .replace("[IMAGE:", "")
+                .replace("[No description returned by vision API]", "")
+                .strip()
+            )
+            if not clean_highlight or clean_highlight.startswith("[") or "no description" in clean_highlight.lower():
+                clean_highlight = f"Mastery Rule: Always verify governing conditions for {concept_name}."
 
-        # Word-wrap highlight text to fit comfortably
-        words = clean_highlight.split()
-        lines = []
-        cur_line = []
-        max_chars = 45 if has_diagram else 80
-        for w in words:
-            if len(" ".join(cur_line + [w])) <= max_chars:
-                cur_line.append(w)
-            else:
+            callout_top = max(bullet_y + 25, card_bottom - 210) + hl_offset_y
+            callout_bottom = card_bottom - 35 + hl_offset_y
+            _draw_rounded_rectangle(
+                draw,
+                (115, callout_top, 80 + content_width - 35, callout_bottom),
+                radius=12,
+                fill=(24, 38, 66),
+                outline=COLOR_ACCENT_INDIGO,
+                width=2,
+            )
+            # Accent left line with glowing cyan
+            draw.line([(120, callout_top + 10), (120, callout_bottom - 10)], fill=COLOR_ACCENT_CYAN, width=4)
+            draw.text((140, callout_top + 15), "KEY MASTERY RULE:", font=font_small, fill=COLOR_ACCENT_AMBER)
+
+            # Word-wrap highlight text to fit comfortably
+            words = clean_highlight.split()
+            lines = []
+            cur_line = []
+            max_chars = 45 if has_diagram else 80
+            for w in words:
+                if len(" ".join(cur_line + [w])) <= max_chars:
+                    cur_line.append(w)
+                else:
+                    lines.append(" ".join(cur_line))
+                    cur_line = [w]
+            if cur_line:
                 lines.append(" ".join(cur_line))
-                cur_line = [w]
-        if cur_line:
-            lines.append(" ".join(cur_line))
 
-        curr_y = callout_top + 45
-        for h_line in lines[:2]:
-            draw.text((140, curr_y), h_line, font=font_highlight, fill=COLOR_TEXT_PRIMARY)
-            curr_y += 38
+            curr_y = callout_top + 45
+            for h_line in lines[:2]:
+                draw.text((140, curr_y), h_line, font=font_highlight, fill=COLOR_TEXT_PRIMARY)
+                curr_y += 38
 
     # 7. Diagram Column (Right Column if present)
     if has_diagram:
@@ -235,13 +279,15 @@ def render_scene_frame(
         except Exception as err:
             logger.warning(f"[visual_renderer] Failed embedding diagram: {err}")
 
-    # 8. Bottom Progress Bar
+    # 8. Bottom Animated Progress Bar
     bar_y = HEIGHT - 20
     bar_height = 8
     draw.rectangle([(0, bar_y), (WIDTH, bar_y + bar_height)], fill=(30, 41, 59))
     active_width = int(WIDTH * max(0.0, min(1.0, progress_ratio)))
     if active_width > 0:
         draw.rectangle([(0, bar_y), (active_width, bar_y + bar_height)], fill=COLOR_ACCENT_CYAN)
+        # Leading edge bright indicator dot
+        draw.ellipse([(active_width - 5, bar_y - 3), (active_width + 5, bar_y + bar_height + 3)], fill=(186, 230, 253))
 
     return img
 
@@ -259,32 +305,25 @@ def render_scene_to_video_clip(
     end_progress: float,
     fps: int = FPS,
 ) -> Path:
-    """Render an MP4 video clip for a single scene with animated progress bar and fade-in."""
+    """Render an MP4 video clip for a single scene with animated bullet reveals and smooth progress."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     total_frames = max(1, int(duration_seconds * fps))
-
-    # Pre-render start and end keyframes
-    start_frame = render_scene_frame(
-        scene=scene,
-        concept_name=concept_name,
-        difficulty=difficulty,
-        scene_idx=scene_idx,
-        total_scenes=total_scenes,
-        source_id=source_id,
-        progress_ratio=start_progress,
-    )
-    base_frame_bgr = cv2.cvtColor(np.array(start_frame), cv2.COLOR_RGB2BGR)
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(str(output_path), fourcc, fps, (WIDTH, HEIGHT))
 
     fade_frames = min(fps // 2, total_frames // 4)
 
-    for i in range(total_frames):
-        current_progress = start_progress + (end_progress - start_progress) * (i / max(1, total_frames - 1))
+    # To optimize rendering speed while preserving smooth 30fps animation,
+    # we render key animation states and re-draw every 2 frames
+    step_frames = 2
+    cached_bgr = None
 
-        # Re-render frame every few ticks to update progress bar smoothly
-        if i % (fps // 2) == 0:
+    for i in range(total_frames):
+        scene_frac = i / max(1, total_frames - 1)
+        current_progress = start_progress + (end_progress - start_progress) * scene_frac
+
+        if i % step_frames == 0 or cached_bgr is None:
             frame_pil = render_scene_frame(
                 scene=scene,
                 concept_name=concept_name,
@@ -293,12 +332,13 @@ def render_scene_to_video_clip(
                 total_scenes=total_scenes,
                 source_id=source_id,
                 progress_ratio=current_progress,
+                scene_fraction=scene_frac,
             )
-            base_frame_bgr = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
+            cached_bgr = cv2.cvtColor(np.array(frame_pil), cv2.COLOR_RGB2BGR)
 
-        frame = base_frame_bgr.copy()
+        frame = cached_bgr.copy()
 
-        # Fade in transition for first half second
+        # Fade in transition for first half second of subsequent scenes
         if i < fade_frames and scene_idx > 1:
             alpha = float(i) / fade_frames
             frame = (frame * alpha).astype(np.uint8)

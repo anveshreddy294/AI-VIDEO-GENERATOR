@@ -3,6 +3,8 @@
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
+from ..schemas import StageDiagnostics
+
 
 class SourceCitation(BaseModel):
     """Source grounding reference from authoritative study material."""
@@ -36,3 +38,4 @@ class VideoQAResponse(BaseModel):
     active_scene: Optional[SceneReference] = Field(default=None, description="Active video scene at requested timestamp")
     citations: List[SourceCitation] = Field(default_factory=list, description="Authoritative grounding citations")
     suggested_questions: List[str] = Field(default_factory=list, description="Recommended follow-up questions")
+    diagnostics: Optional[StageDiagnostics] = Field(default=None, description="Execution diagnostics envelope")

@@ -12,10 +12,7 @@ Executes the complete Step 1 sequence:
 """
 
 import logging
-import mimetypes
 import os
-import shutil
-import traceback
 from pathlib import Path
 from uuid import uuid4
 
@@ -155,8 +152,7 @@ async def upload_file(
             update_source_status(source_id, "FAILED", error_message=str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
-            tb = traceback.format_exc()
-            print(f"[upload] Extraction failed for {filename}: {tb}")
+            logger.exception("[upload] Extraction failed for %s", filename)
             update_source_status(source_id, "FAILED", error_message=str(exc))
             raise HTTPException(
                 status_code=500, detail=f"Extraction failed for '{filename}': {exc}"
@@ -218,7 +214,7 @@ async def upload_file(
                 )
                 assessment_resp = assessment_session if isinstance(assessment_session, dict) else assessment_session.model_dump()
             except Exception as exc:
-                print(f"[upload] auto_start_assessment failed: {exc}")
+                logger.warning("[upload] auto_start_assessment failed: %s", exc)
                 assessment_resp = {"error": f"Assessment could not be auto-started: {exc}"}
 
         resp = {

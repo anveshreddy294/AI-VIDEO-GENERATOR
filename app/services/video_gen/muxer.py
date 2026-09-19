@@ -7,9 +7,22 @@ Combines rendered visual clips and synthesized voiceovers into standard MP4 file
 import logging
 import subprocess
 from pathlib import Path
-from typing import List, Tuple
+try:
+    import imageio_ffmpeg
+except ImportError:
+    imageio_ffmpeg = None
 
-import imageio_ffmpeg
+
+def get_ffmpeg_exe() -> str:
+    """Safely obtain ffmpeg binary path from imageio_ffmpeg, system PATH, or fallback."""
+    if imageio_ffmpeg is not None:
+        try:
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            pass
+    import shutil
+    return shutil.which("ffmpeg") or "ffmpeg"
+
 
 from .schemas import VideoScene, VideoScript
 
@@ -58,7 +71,7 @@ def concatenate_video_clips(clip_paths: List[Path], output_path: Path) -> Path:
         raise ValueError("No video clips provided for concatenation.")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_exe = get_ffmpeg_exe()
 
     # Create a concat list file
     concat_list_file = output_path.parent / "concat_list.txt"
@@ -90,6 +103,34 @@ def concatenate_video_clips(clip_paths: List[Path], output_path: Path) -> Path:
     return output_path
 
 
+def probe_media_duration(file_path: Path) -> float:
+    """Probe exact media file duration using ffmpeg/ffprobe or wav header."""
+    if not file_path.exists():
+        return 0.0
+    if file_path.suffix.lower() == ".wav":
+        try:
+            import wave
+            with wave.open(str(file_path), "rb") as wf:
+                frames = wf.getnframes()
+                rate = wf.getframerate()
+                return round(frames / float(rate), 3)
+        except Exception:
+            return 0.0
+
+    try:
+        ffmpeg_exe = get_ffmpeg_exe()
+        cmd = [ffmpeg_exe, "-i", str(file_path)]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        for line in result.stderr.splitlines():
+            if "Duration:" in line:
+                parts = line.split("Duration:")[1].split(",")[0].strip()
+                h, m, s = parts.split(":")
+                return round(int(h) * 3600 + int(m) * 60 + float(s), 3)
+    except Exception as e:
+        logger.warning(f"[muxer] Failed to probe duration for {file_path}: {e}")
+    return 0.0
+
+
 def mux_audio_and_video(
     video_path: Path,
     audio_path: Path,
@@ -97,7 +138,7 @@ def mux_audio_and_video(
 ) -> Path:
     """Mux a video stream and audio track into a standard H.264/AAC MP4 file."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_exe = get_ffmpeg_exe()
 
     cmd = [
         ffmpeg_exe,
@@ -118,7 +159,6 @@ def mux_audio_and_video(
         "aac",
         "-b:a",
         "192k",
-        "-shortest",
         str(output_path),
     ]
 
@@ -128,3 +168,4 @@ def mux_audio_and_video(
         raise RuntimeError(f"FFmpeg muxing failed: {result.stderr[:200]}")
 
     return output_path
+

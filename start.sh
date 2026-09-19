@@ -66,5 +66,4 @@ echo "[INFO] Swagger UI:     http://localhost:8000/docs"
 echo "[INFO] Health Check:   http://localhost:8000/health"
 echo "[INFO] Press CTRL+C to stop."
 echo ""
-
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+python run.py

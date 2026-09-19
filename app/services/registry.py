@@ -10,6 +10,7 @@ Handles:
 
 import hashlib
 import json
+import logging
 import mimetypes
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,8 @@ from pydantic import BaseModel
 
 from ..core.config import BASE_DIR, settings
 from .schemas import ContentUnit, KnowledgeGraph, SourceRecord
+
+logger = logging.getLogger(__name__)
 
 # Known magic bytes / signatures for allowed file types
 MAGIC_SIGNATURES = {
@@ -59,7 +62,7 @@ def _load_sources_index() -> dict[str, dict[str, Any]]:
         try:
             fixtures_index = json.loads(fixtures_file.read_text(encoding="utf-8"))
         except Exception as exc:
-            print(f"[registry] Notice: Could not read fixtures sources_index: {exc}")
+            logger.debug("[registry] Could not read fixtures sources_index: %s", exc)
 
     runtime_file = get_registry_dir() / "sources_index.json"
     if not runtime_file.exists():
@@ -69,7 +72,7 @@ def _load_sources_index() -> dict[str, dict[str, Any]]:
         runtime_index = json.loads(runtime_file.read_text(encoding="utf-8"))
         return {**fixtures_index, **runtime_index}
     except Exception as exc:
-        print(f"[registry] Notice: Could not read runtime sources_index: {exc}")
+        logger.debug("[registry] Could not read runtime sources_index: %s", exc)
         return fixtures_index
 
 
@@ -270,7 +273,7 @@ def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
         data = json.loads(kg_file.read_text(encoding="utf-8"))
         return KnowledgeGraph.model_validate(data)
     except Exception as exc:
-        print(f"[registry] Failed to load knowledge graph for {source_id}: {exc}")
+        logger.warning("[registry] Failed to load knowledge graph for %s: %s", source_id, exc)
         return None
 
 
@@ -282,5 +285,6 @@ def get_source_record(source_id: str) -> SourceRecord | None:
         return None
     try:
         return SourceRecord.model_validate(record_data)
-    except Exception:
+    except Exception as exc:
+        logger.warning("[registry] Failed to validate source record for %s: %s", source_id, exc)
         return None

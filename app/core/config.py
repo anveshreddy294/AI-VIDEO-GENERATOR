@@ -16,11 +16,16 @@ class Settings:
         self.qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
         self.qdrant_path: Path = BASE_DIR / os.getenv("QDRANT_PATH", "storage/runtime/qdrant")
-        self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a")
+        self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_gemini_v1")
 
         # --- Models ---
         self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
         self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-3.5-flash")
+
+        # --- Optional Alternative Providers (e.g. OmniRoute) ---
+        self.omniroute_api_key: str = os.getenv("OMNIROUTE_API_KEY", "")
+        self.omniroute_base_url: str = os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1")
+        self.omniroute_model: str = os.getenv("OMNIROUTE_MODEL", "static-best-reasoning")
 
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
         self.storage_dir: Path = BASE_DIR / os.getenv("STORAGE_DIR", "storage")
@@ -71,15 +76,11 @@ class Settings:
         self.max_question_retries: int = int(os.getenv("MAX_QUESTION_RETRIES", "2"))
         self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
         self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
-        self.llm_provider: str = os.getenv("LLM_PROVIDER", "omniroute" if os.getenv("OMNIROUTE_API_KEY") else "gemini")
-        self.ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2")
-
-        # --- OmniRoute Gateway (OpenAI-compatible) ---
-        self.omniroute_api_key: str = os.getenv("OMNIROUTE_API_KEY", "")
-        self.omniroute_base_url: str = os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1").rstrip("/")
-        self.omniroute_model: str = os.getenv("OMNIROUTE_MODEL", "static-best-reasoning")
-        self.omniroute_timeout: float = float(os.getenv("OMNIROUTE_TIMEOUT", "120.0"))
+        self.llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
+        self.ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        self.ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+        self.ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
@@ -87,17 +88,10 @@ class Settings:
         return ext in self.allowed_extensions
 
     def require_gemini(self) -> None:
-        """Ensure LLM credentials exist (OmniRoute or Gemini)."""
-        if self.llm_provider == "omniroute":
-            if not self.omniroute_api_key:
-                raise RuntimeError(
-                    "OMNIROUTE_API_KEY is not set. Please set OMNIROUTE_API_KEY in your .env file."
-                )
-            return
-
+        """Ensure Gemini API credentials exist."""
         if not self.gemini_api_key:
             raise RuntimeError(
-                "Neither GEMINI_API_KEY nor OMNIROUTE_API_KEY is set. Please set one in your .env file."
+                "GEMINI_API_KEY is not set. Please set GEMINI_API_KEY in your .env file."
             )
 
 

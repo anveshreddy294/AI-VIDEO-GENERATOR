@@ -8,19 +8,16 @@ for instructors to override or reset mastery statuses.
 import json
 import logging
 from collections import defaultdict
-from pathlib import Path
 from typing import Dict, List, Optional, Set
 
-from ...core.config import settings
 from ...services.assessment.profile import PROFILES_DIR, get_or_create_profile, save_profile
-from ...services.assessment.schemas import ConceptMastery, StudentLearningProfile
+from ...services.assessment.schemas import StudentLearningProfile
 from ...services.assessment.video_target import load_video_matrix, save_video_matrix
 from ...services.registry import load_knowledge_graph
 from .schemas import (
     CohortOverview,
     ConceptAnalytics,
     HumanInterventionAlert,
-    ResetMasteryRequest,
     ResetMasteryResponse,
 )
 

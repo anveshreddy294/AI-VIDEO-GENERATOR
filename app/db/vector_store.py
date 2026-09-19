@@ -21,6 +21,7 @@ Every chunk carries layer: "A" and full provenance payload metadata:
 """
 
 import logging
+import time
 import uuid
 from typing import Any
 
@@ -29,11 +30,26 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from ..core.config import settings
-from ..services.schemas import AuthoritativeSourceChunk, AuthoritativeVideoChunk, LayerAChunk, RichChunk
+from ..services.schemas import (
+    AuthoritativeSourceChunk,
+    AuthoritativeVideoChunk,
+    LayerAChunk,
+    RichChunk,
+    StageDiagnostics,
+)
 
 logger = logging.getLogger(__name__)
 
 _client_instance: QdrantClient | None = None
+_last_embed_diagnostics: StageDiagnostics | None = None
+
+
+_active_embedding_dim: int = 3072 if "gemini-embedding-2" in getattr(settings, "embedding_model", "") else 768
+
+
+def get_last_embed_diagnostics() -> StageDiagnostics | None:
+    """Retrieve execution diagnostics for the most recent embedding pass."""
+    return _last_embed_diagnostics
 
 
 def get_client() -> QdrantClient:
@@ -65,17 +81,27 @@ def get_client() -> QdrantClient:
             )
 
     settings.qdrant_path.mkdir(parents=True, exist_ok=True)
-    _client_instance = QdrantClient(path=str(settings.qdrant_path))
+    try:
+        _client_instance = QdrantClient(path=str(settings.qdrant_path))
+    except Exception as lock_err:
+        logger.warning(
+            "[vector_store] Local disk Qdrant storage at %s locked by another process or reloader (%s). "
+            "Using isolated in-memory Qdrant instance.",
+            settings.qdrant_path,
+            lock_err,
+        )
+        _client_instance = QdrantClient(":memory:")
     return _client_instance
 
 
-def _deterministic_embedding(text: str, dim: int = 768) -> list[float]:
+def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     """Generate a deterministic normalized vector representation for offline/fallback mode."""
     import hashlib
-    vec = [0.0] * dim
+    target_dim = dim or _active_embedding_dim
+    vec = [0.0] * target_dim
     for word in text.lower().split():
         h = int(hashlib.md5(word.encode("utf-8")).hexdigest(), 16)
-        idx = h % dim
+        idx = h % target_dim
         vec[idx] += 1.0
     norm = sum(x * x for x in vec) ** 0.5
     if norm > 0:
@@ -84,30 +110,11 @@ def _deterministic_embedding(text: str, dim: int = 768) -> list[float]:
 
 
 def _embed(texts: list[str]) -> list[list[float]]:
-    """Embed texts using OmniRoute, Gemini, or deterministic fallback."""
-    # 1. Try OmniRoute embeddings if configured
-    if settings.llm_provider == "omniroute" and settings.omniroute_api_key:
-        try:
-            import json
-            import urllib.request
-            url = f"{settings.omniroute_base_url}/embeddings"
-            payload = json.dumps({
-                "model": "text-embedding-3-small",
-                "input": texts,
-            }).encode("utf-8")
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {settings.omniroute_api_key}",
-            }
-            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=10.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                if "data" in data and isinstance(data["data"], list):
-                    return [item["embedding"] for item in data["data"]]
-        except Exception as exc:
-            logger.info(f"[vector_store] OmniRoute embedding endpoint not used: {exc}")
+    """Embed texts using Gemini embeddings or deterministic fallback, recording observable diagnostics."""
+    global _last_embed_diagnostics, _active_embedding_dim
+    t0 = time.time()
 
-    # 2. Try Gemini API if key is set
+    # 1. Try Gemini API if key is set
     if settings.gemini_api_key:
         try:
             genai.configure(api_key=settings.gemini_api_key)
@@ -116,27 +123,75 @@ def _embed(texts: list[str]) -> list[list[float]]:
                 content=texts,
                 task_type="retrieval_document",
             )
+            dur_ms = int((time.time() - t0) * 1000)
+            if result.get("embedding") and len(result["embedding"]) > 0:
+                _active_embedding_dim = len(result["embedding"][0])
+            _last_embed_diagnostics = StageDiagnostics(
+                provider_used="gemini",
+                fallback_used=False,
+                grounding_verified=True,
+                duration_ms=dur_ms,
+            )
             return result["embedding"]
         except Exception as exc:
-            logger.warning(f"[vector_store] Gemini embed failed: {exc}. Using fallback.")
+            dur_ms = int((time.time() - t0) * 1000)
+            logger.warning("[vector_store] Gemini embed failed: %s. Using deterministic fallback.", exc)
+            _last_embed_diagnostics = StageDiagnostics(
+                provider_used="deterministic_hash_fallback",
+                fallback_used=True,
+                fallback_reason=str(exc),
+                error_code="GEMINI_EMBED_FAILED",
+                grounding_verified=False,
+                duration_ms=dur_ms,
+            )
+    else:
+        _last_embed_diagnostics = StageDiagnostics(
+            provider_used="deterministic_hash_fallback",
+            fallback_used=True,
+            fallback_reason="No GEMINI_API_KEY configured",
+            error_code="UNCONFIGURED_EMBEDDING_PROVIDER",
+            grounding_verified=False,
+            duration_ms=0,
+        )
 
-    # 3. Deterministic normalized embedding fallback
-    return [_deterministic_embedding(t) for t in texts]
+    # 2. Deterministic normalized embedding fallback matching active dimension
+    return [_deterministic_embedding(t, dim=_active_embedding_dim) for t in texts]
 
 
 def ensure_collection(client: QdrantClient) -> None:
+    """Ensure collection exists and strictly validates that vector dimensions match active embedding model."""
     existing = [c.name for c in client.get_collections().collections]
-    if settings.collection_name in existing:
-        return
-
     probe = _embed(["dimension probe"])
+    expected_dim = len(probe[0])
+
+    if settings.collection_name in existing:
+        try:
+            coll_info = client.get_collection(collection_name=settings.collection_name)
+            params = coll_info.config.params.vectors
+            current_dim = getattr(params, "size", None) if not isinstance(params, dict) else params.get("size")
+            if current_dim and current_dim != expected_dim:
+                logger.warning(
+                    "[vector_store] Collection '%s' dimension mismatch: existing has %s, but active model requires %s. "
+                    "Recreating collection to avoid vector corruption.",
+                    settings.collection_name,
+                    current_dim,
+                    expected_dim,
+                )
+                client.delete_collection(collection_name=settings.collection_name)
+            else:
+                return
+        except Exception as exc:
+            logger.warning("[vector_store] Could not inspect collection parameters: %s. Continuing.", exc)
+            return
+
     client.create_collection(
         collection_name=settings.collection_name,
         vectors_config=qmodels.VectorParams(
-            size=len(probe[0]),
+            size=expected_dim,
             distance=qmodels.Distance.COSINE,
         ),
     )
+    logger.info("[vector_store] Validated/Created collection '%s' with dimension %d", settings.collection_name, expected_dim)
 
 
 def _point_id(chunk: LayerAChunk) -> str:
@@ -172,38 +227,61 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
         return 0
 
     client = get_client()
-    ensure_collection(client)
-
-    texts = [c.text for c in chunks]
-    vectors = _embed(texts)
-
-    points = [
-        qmodels.PointStruct(
-            id=_point_id(chunk),
-            vector=vector,
-            payload=_payload(chunk),
+    try:
+        ensure_collection(client)
+        texts = [c.text for c in chunks]
+        vectors = _embed(texts)
+        points = [
+            qmodels.PointStruct(
+                id=_point_id(chunk),
+                vector=vector,
+                payload=_payload(chunk),
+            )
+            for chunk, vector in zip(chunks, vectors)
+        ]
+        if points:
+            client.upsert(collection_name=settings.collection_name, points=points)
+        return len(points)
+    except Exception as exc:
+        logger.warning(
+            "[vector_store] Primary Qdrant client upsert failed (%s). Retrying with isolated fallback client...",
+            exc,
         )
-        for chunk, vector in zip(chunks, vectors)
-    ]
-
-    if points:
-        client.upsert(collection_name=settings.collection_name, points=points)
-    return len(points)
+        global _client_instance
+        _client_instance = QdrantClient(":memory:")
+        ensure_collection(_client_instance)
+        texts = [c.text for c in chunks]
+        vectors = _embed(texts)
+        points = [
+            qmodels.PointStruct(
+                id=_point_id(chunk),
+                vector=vector,
+                payload=_payload(chunk),
+            )
+            for chunk, vector in zip(chunks, vectors)
+        ]
+        if points:
+            _client_instance.upsert(collection_name=settings.collection_name, points=points)
+        return len(points)
 
 
 def search_layer_a(query: str, limit: int = 5, source_id: str | None = None) -> list[dict[str, Any]]:
     client = get_client()
-    vector = _embed([query])[0]
-    must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
-    if source_id:
-        must_conditions.append(qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)))
-    hits = client.search(
-        collection_name=settings.collection_name,
-        query_vector=vector,
-        limit=limit,
-        query_filter=qmodels.Filter(must=must_conditions),
-    )
-    return [hit.payload for hit in hits]
+    try:
+        vector = _embed([query])[0]
+        must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
+        if source_id:
+            must_conditions.append(qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)))
+        hits = client.search(
+            collection_name=settings.collection_name,
+            query_vector=vector,
+            limit=limit,
+            query_filter=qmodels.Filter(must=must_conditions),
+        )
+        return [h.payload for h in hits]
+    except Exception as exc:
+        logger.warning("[vector_store] search_layer_a query failed: %s", exc)
+        return []
 
 
 def retrieve_exact_chunks(

@@ -4,10 +4,13 @@ File-based storage for active and completed assessment sessions.
 """
 
 import json
+import logging
 from pathlib import Path
 
 from ...core.config import BASE_DIR, settings
 from .schemas import AssessmentSession
+
+logger = logging.getLogger(__name__)
 
 SESSIONS_DIR = getattr(settings, "assessment_dir", BASE_DIR / "storage" / "runtime" / "assessment_sessions")
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
@@ -35,5 +38,5 @@ def load_session(session_id: str) -> AssessmentSession | None:
         data = json.loads(path.read_text(encoding="utf-8"))
         return AssessmentSession.model_validate(data)
     except Exception as exc:
-        print(f"[session_store] Failed to load session {session_id}: {exc}")
+        logger.warning("[session_store] Failed to load session %s: %s", session_id, exc)
         return None

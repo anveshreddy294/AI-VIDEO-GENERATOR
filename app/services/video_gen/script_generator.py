@@ -56,66 +56,77 @@ def _clean_source_text(raw_text: str) -> str:
 
 
 def _extract_source_context(source_id: str, target: VideoTarget) -> tuple[str, Optional[str]]:
-    """Retrieve grounded text snippets and identify any diagram ContentUnit ID."""
-    all_units: List[ContentUnit] = get_content_units(source_id)
+    """Retrieve grounded text snippets strictly from exact chunk/content provenance.
+
+    Strict Grounding Protocol:
+    1. Query exact chunks from Qdrant via target.chunk_ids
+    2. Fall back to target.source_content_ids only if exact chunks are absent
+    3. If neither produces authoritative text, fail with GROUNDING_NOT_FOUND
+    Never substitutes arbitrary document chunks.
+    """
     grounded_texts: List[str] = []
     diagram_cu_id: Optional[str] = None
 
+    # Step 1: Exact chunk provenance from vector store
+    if target.chunk_ids:
+        try:
+            from ...db.vector_store import retrieve_exact_chunks
+            exact_chunks = retrieve_exact_chunks(source_id=source_id, chunk_ids=target.chunk_ids)
+            for ch in exact_chunks:
+                text = ch.get("text", "")
+                cleaned = _clean_source_text(text)
+                if cleaned:
+                    grounded_texts.append(cleaned)
+        except Exception as exc:
+            logger.warning("[script_generator] Exact chunk retrieval error: %s", exc)
+
+    # Step 2: Exact ContentUnits provenance lookup via source_content_ids
+    all_units: List[ContentUnit] = get_content_units(source_id)
     target_cu_ids = set(target.source_content_ids or [])
 
+    if not grounded_texts and target_cu_ids:
+        for unit in all_units:
+            if unit.content_id in target_cu_ids:
+                cleaned = _clean_source_text(unit.text)
+                if cleaned and cleaned not in grounded_texts:
+                    grounded_texts.append(cleaned)
+
+    # Diagram identification from matched provenance
     for unit in all_units:
-        # Match either explicit CU ID or if concept name is strongly present
-        is_relevant = (
-            unit.content_id in target_cu_ids
-            or (target.concept_name.lower() in unit.text.lower())
-        )
-        if is_relevant:
-            cleaned = _clean_source_text(unit.text)
-            if cleaned:
-                grounded_texts.append(cleaned)
-            # Check if this unit is a diagram or visual
+        if unit.content_id in target_cu_ids or (target.concept_name.lower() in unit.text.lower()):
             if unit.modality in ["image", "video"] or getattr(unit, "image_path", None):
                 if not diagram_cu_id:
                     diagram_cu_id = unit.content_id
 
-    # Fallback to general units if no specific matches found
-    if not grounded_texts and all_units:
-        for u in all_units[:3]:
-            cleaned = _clean_source_text(u.text)
-            if cleaned:
-                grounded_texts.append(cleaned)
+    # Strict Grounding Gate: Never substitute unrelated content
+    if not grounded_texts:
+        raise ValueError(
+            f"GROUNDING_NOT_FOUND: No authoritative Layer A chunks found for concept '{target.concept_name}' "
+            f"(chunk_ids={target.chunk_ids}, content_ids={target.source_content_ids})."
+        )
 
     combined_text = "\n\n".join(grounded_texts[:5])
     return combined_text, diagram_cu_id
 
 
-def _get_domain_defaults(concept: str) -> tuple[str, str, str]:
-    """Provide clean, authoritative definitions and mastery rules if source lacks text."""
-    c_lower = concept.lower()
-    if "acceleration" in c_lower:
-        defn = "Acceleration is the rate of change of an object's velocity over time."
-        detail = "It occurs whenever an object speeds up, slows down, or changes its direction of travel."
-        rule = "a = Δv / Δt  (Rate of velocity change)"
-    elif "force" in c_lower:
-        defn = "Force is an interaction that alters the state of motion of an object."
-        detail = "Newton's Second Law establishes that net force directly equals mass times acceleration."
-        rule = "F = m · a  (Force = Mass × Acceleration)"
-    elif "inertia" in c_lower:
-        defn = "Inertia is the natural resistance of any physical object to changes in its state of motion."
-        detail = "An object at rest stays at rest, and an object in motion stays in uniform motion unless acted on."
-        rule = "Inertia is directly proportional to mass"
-    elif "momentum" in c_lower:
-        defn = "Momentum represents the quantity of motion possessed by a moving body."
-        detail = "In any closed or isolated system, total linear momentum is strictly conserved across interactions."
-        rule = "p = m · v  (Conservation of Momentum)"
-    elif "energy" in c_lower or "work" in c_lower:
-        defn = "Energy is the quantitative property transferred to an object to perform work or heat it."
-        detail = "Mechanical energy transitions continuously between kinetic energy of motion and stored potential energy."
-        rule = "E_total = K + U  (Conservation of Energy)"
-    else:
-        defn = f"{concept} represents a fundamental conceptual pillar governing relationships in this domain."
-        detail = f"Mastering how {concept} behaves under varying conditions is critical for accurate problem-solving."
-        rule = f"Core Mastery Principle: Check governing conditions for {concept}"
+def _extract_source_definitions(concept: str, source_text: str) -> tuple[str, str, str]:
+    """Extract clean definitions and rules strictly from authoritative source text.
+
+    Never invents physics or domain formulas not grounded in study material.
+    """
+    clean_text = _clean_source_text(source_text)
+    raw_sentences = [s.strip() for s in re.split(r"[.!?]\s+", clean_text) if len(s.strip()) > 15]
+    valid_sentences = [
+        s for s in raw_sentences
+        if not s.startswith("[") and "no description" not in s.lower() and "image:" not in s.lower()
+    ]
+
+    if not valid_sentences:
+        raise ValueError(f"INSUFFICIENT_GROUNDING: Source text for '{concept}' contains no valid pedagogical sentences.")
+
+    defn = valid_sentences[0]
+    detail = valid_sentences[1] if len(valid_sentences) > 1 else valid_sentences[0]
+    rule = f"Core Rule: {concept}"
     return defn, detail, rule
 
 
@@ -131,19 +142,7 @@ def _generate_deterministic_script(
     concept = target.concept_name
     difficulty = target.difficulty
 
-    # Extract clean sentences from source text
-    clean_text = _clean_source_text(source_text)
-    raw_sentences = [s.strip() for s in re.split(r"[.!?]\s+", clean_text) if len(s.strip()) > 15]
-    valid_sentences = [
-        s for s in raw_sentences
-        if not s.startswith("[") and "no description" not in s.lower() and "image:" not in s.lower()
-    ]
-
-    default_def, default_detail, default_rule = _get_domain_defaults(concept)
-
-    def_sentence = valid_sentences[0] if valid_sentences else default_def
-    detail_sentence = valid_sentences[1] if len(valid_sentences) > 1 else default_detail
-    highlight_rule = default_rule
+    def_sentence, detail_sentence, highlight_rule = _extract_source_definitions(concept, source_text)
 
     scenes: List[VideoScene] = []
 
@@ -307,6 +306,17 @@ def generate_video_script(
             provider = None
 
     if provider is not None and not getattr(provider, "is_mock", False):
+        misconception_block = ""
+        if target.question_stem or target.misconception:
+            misconception_block = f"""
+DIAGNOSTIC ASSESSMENT MISCONCEPTION TO DIRECTLY REMEDIATE:
+- Student's Failed Question: "{target.question_stem}"
+- Student Error & Gap: "{target.misconception or 'Misidentified core principle'}"
+- Authoritative Correction: "{target.explanation or 'See source text definition'}"
+
+CRITICAL INSTRUCTION: You MUST directly address this specific misconception in Act 2 (Breakdown scene)! State why the student's misunderstanding is incorrect and clearly demonstrate the authoritative principle from the text.
+"""
+
         prompt = f"""You are an expert educational video scriptwriter and instructional designer.
 Create a structured, multi-scene video script to remediate a student who failed a diagnostic quiz on '{target.concept_name}'.
 
@@ -316,14 +326,14 @@ TARGET CONSTRAINTS:
 - Total Target Duration: Exactly {target_seconds} seconds.
 - Total Word Budget: Approximately {max_words} words across all scenes (do NOT exceed {max_words + 15} words).
 - Speaking Speed: ~2.4 words per second.
-
+{misconception_block}
 AUTHORITATIVE SOURCE TEXT (Ground all explanations strictly in this text):
 \"\"\"{source_text[:2000]}\"\"\"
 
 PEDAGOGICAL STRUCTURE (3-Act Micro-Lesson):
 1. Act 1 (Hook/Context): Announce the concept clearly and state why it matters.
-2. Act 2 (Breakdown/Evidence): Explain the principle step-by-step from the source text.
-3. Act 3 (Takeaway): State the memorable rule or formula to prevent quiz mistakes.
+2. Act 2 (Breakdown/Evidence & Misconception): Explain the principle step-by-step from the source text and address the failed quiz concept.
+3. Act 3 (Takeaway): State the memorable rule or formula to prevent future quiz mistakes.
 
 Respond ONLY with a valid JSON object adhering to this exact schema:
 {{
@@ -366,7 +376,7 @@ Ensure the sum of all 'duration_seconds' exactly equals {target_seconds}.0 secon
             VALID_SCENE_TYPES = {
                 "title_hook", "concept_breakdown", "diagram_focus", "formula_derivation", "summary_takeaway"
             }
-            _, _, default_rule = _get_domain_defaults(target.concept_name)
+            default_rule = f"Core Principle: {target.concept_name}"
 
             for s in scenes_data:
                 raw_st = str(s.get("scene_type", "concept_breakdown")).strip().lower()
@@ -416,6 +426,12 @@ Ensure the sum of all 'duration_seconds' exactly equals {target_seconds}.0 secon
                     scenes=parsed_scenes,
                     estimated_word_count=total_words,
                     source_chunk_ids=target.chunk_ids or [],
+                    diagnostics={
+                        "stage": "video_script_generation",
+                        "provider_used": getattr(provider, "model_name", "gemini"),
+                        "fallback_used": False,
+                        "grounding_verified": True,
+                    },
                 )
         except Exception as err:
             logger.warning(
@@ -423,11 +439,19 @@ Ensure the sum of all 'duration_seconds' exactly equals {target_seconds}.0 secon
                 "Using deterministic grounded fallback."
             )
 
-    # Deterministic fallback
-    return _generate_deterministic_script(
+    # Deterministic fallback strictly grounded in source text
+    fallback_script = _generate_deterministic_script(
         target=target,
         student_id=student_id,
         source_id=source_id,
         source_text=source_text,
         diagram_cu_id=diagram_cu_id,
     )
+    fallback_script.diagnostics = {
+        "stage": "video_script_generation",
+        "provider_used": "deterministic_grounded_fallback",
+        "fallback_used": True,
+        "fallback_reason": "LLM generation unavailable or parse failed",
+        "grounding_verified": True,
+    }
+    return fallback_script

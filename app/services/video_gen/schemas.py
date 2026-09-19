@@ -70,6 +70,10 @@ class VideoScript(BaseModel):
         default_factory=list,
         description="Source RichChunk IDs used for factual grounding",
     )
+    diagnostics: Optional[dict] = Field(
+        default=None,
+        description="Structured stage diagnostics detailing provider, grounding, and fallback state",
+    )
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="Timestamp of script generation",
