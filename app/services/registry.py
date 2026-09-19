@@ -151,6 +151,13 @@ def find_existing_by_hash(file_hash: str) -> SourceRecord | None:
     return max(matches, key=lambda r: r.version) if matches else None
 
 
+def find_latest_by_filename(filename: str) -> SourceRecord | None:
+    """Check the latest version registered under the same filename."""
+    index = _load_sources_index()
+    matches = [SourceRecord.model_validate(r) for r in index.values() if r.get("filename") == filename]
+    return max(matches, key=lambda r: r.version) if matches else None
+
+
 
 @serialized
 def register_source(
@@ -161,13 +168,14 @@ def register_source(
     file_hash = calculate_sha256(temp_path)
     file_size = temp_path.stat().st_size
 
-    # Check existing versioning
-    existing_record = find_existing_by_hash(file_hash)
-    version = 1
-    parent_id = None
-    if existing_record:
-        version = existing_record.version + 1
-        parent_id = existing_record.source_id
+    # Check existing records by hash and filename for accurate versioning
+    existing_by_hash = find_existing_by_hash(file_hash)
+    existing_by_name = find_latest_by_filename(filename)
+
+    # Version resolves from latest registered record of this content or filename
+    latest_record = existing_by_name or existing_by_hash
+    version = (latest_record.version + 1) if latest_record else 1
+    parent_id = latest_record.source_id if latest_record else None
 
     record = SourceRecord(
         filename=filename,

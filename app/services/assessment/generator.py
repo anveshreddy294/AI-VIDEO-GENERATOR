@@ -98,7 +98,7 @@ def search_concept_chunks(
     if provided_chunks:
         matched = []
         for ch in provided_chunks:
-            if ch.get("source_id") != source_id or ch.get("layer", "A") != "A":
+            if (ch.get("source_id") and ch.get("source_id") != source_id) or ch.get("layer", "A") != "A":
                 continue
             c_ids = ch.get("concept_ids", [])
             cu_ids = ch.get("content_ids", [])

@@ -1,4 +1,4 @@
-﻿"""End-to-end verification script for Step 2 Master Execution Flow.
+"""End-to-end verification script for Step 2 Master Execution Flow.
 
 Tests all 6 steps:
 1. Ingesting Step 1 JSON payload & session integrity checks
@@ -294,6 +294,17 @@ def test_step2_flow():
     # 7. FastAPI Endpoint Integration Verification
     # -------------------------------------------------------------
     print("\n--- 7. FastAPI Endpoint Integration via TestClient ---")
+    from app.services.registry import save_knowledge_graph, _save_sources_index, _load_sources_index
+    idx = _load_sources_index()
+    idx[step1_json["source_id"]] = {
+        "source_id": step1_json["source_id"],
+        "filename": step1_json["filename"],
+        "status": "READY",
+        "created_at": "2026-09-20T00:00:00Z",
+    }
+    _save_sources_index(idx)
+    save_knowledge_graph(step1_json["source_id"], kg)
+
     client = TestClient(app)
 
     # Test POST /assessment/start with Step 1 JSON payload

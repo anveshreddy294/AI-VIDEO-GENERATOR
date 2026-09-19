@@ -27,7 +27,7 @@ def extract_from_pdf(
     images_dir = settings.upload_dir / source_id / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     vision_calls_count = 0
-    MAX_VISION_CALLS = 5
+    max_vision_budget = getattr(settings, "max_vision_calls", 25)
 
     for page_number, page in enumerate(doc, start=1):
         # 1. Text blocks extraction with bounding box provenance
@@ -72,7 +72,7 @@ def extract_from_pdf(
                     logger.warning("[extractor] Could not write image: %s", save_err)
 
                 description = ""
-                if vision_calls_count < MAX_VISION_CALLS:
+                if vision_calls_count < max_vision_budget:
                     try:
                         description = describe_image(
                             image_bytes, source=f"{pdf_path.name} p.{page_number}"
@@ -81,10 +81,12 @@ def extract_from_pdf(
                     except Exception as exc:
                         logger.warning("[extractor] Vision failed for image on page %s: %s", page_number, exc)
                 else:
-                    raise RuntimeError("PDF exceeds the configured vision budget; split the source into smaller files")
+                    logger.info("[extractor] Vision budget reached (%d calls); skipping description for page %s image", max_vision_budget, page_number)
+                    description = f"Educational diagram on page {page_number} (visual description skipped due to processing budget)"
 
                 if not description:
-                    raise RuntimeError(f"Could not extract diagram on page {page_number}")
+                    logger.warning("[extractor] Could not describe diagram on page %s, using fallback", page_number)
+                    description = f"Educational diagram on page {page_number}"
 
                 unit = ContentUnit(
                     source_id=source_id,

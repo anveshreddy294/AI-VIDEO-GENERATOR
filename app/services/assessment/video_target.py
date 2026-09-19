@@ -301,9 +301,17 @@ def build_video_target_matrix(
 
     directives = [v.directive for v in videos]
 
+    has_unmastered_profile_concepts = bool(profile.weak_concepts) or any(
+        m.status != "MASTERED" and m.status not in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
+        for m in profile.concept_masteries.values()
+    ) if profile.concept_masteries else False
+
     if not videos and not has_kill_switch:
         decision = "ALL_MASTERED"
-        summary = "All assessed concepts in this assessment have been successfully mastered. No AI videos needed."
+        if has_unmastered_profile_concepts:
+            summary = "All assessed concepts in this session were passed. Overall learning profile still contains unmastered curriculum concepts."
+        else:
+            summary = "All assessed concepts and curriculum learning objectives have been successfully mastered. No AI videos needed."
     elif not videos and has_kill_switch:
         decision = "HUMAN_INTERVENTION"
         summary = f"Persistent knowledge gaps require human instructor intervention for: {', '.join(human_intervention_concepts)}."

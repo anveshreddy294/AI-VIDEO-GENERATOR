@@ -84,8 +84,7 @@ def _cold_start_plan(
     """Cold start: no profile exists. Select a balanced mix of foundational and advanced concepts."""
     if has_key_concepts:
         # Explicit key concepts priority from source blueprint
-        selected = _apply_prerequisite_pairing(concepts[:max_questions], concepts)
-        return selected[:max_questions]
+        return _apply_prerequisite_pairing(concepts[:max_questions], concepts, max_questions=max_questions)
 
     foundational = [c for c in concepts if classify_difficulty(c) == "foundational"]
     intermediate = [c for c in concepts if classify_difficulty(c) == "intermediate"]
@@ -111,8 +110,7 @@ def _cold_start_plan(
         selected.extend(_safe_sample(remaining, max_questions - len(selected)))
 
     # Apply Prerequisite Pairing Rule
-    selected = _apply_prerequisite_pairing(selected, concepts)
-    return selected[:max_questions]
+    return _apply_prerequisite_pairing(selected, concepts, max_questions=max_questions)
 
 
 def _plan_with_profile(
@@ -125,17 +123,7 @@ def _plan_with_profile(
     selected: list[ConceptNode] = []
     selected_ids: set[str] = set()
 
-    # Priority 1: REQUIRES_HUMAN_FALLBACK concepts (flagged by kill switch)
-    for cid, mastery in profile.concept_masteries.items():
-        if (
-            mastery.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")
-            and cid in concept_map
-        ):
-            if cid not in selected_ids:
-                selected.append(concept_map[cid])
-                selected_ids.add(cid)
-
-    # Priority 2: LEARNING concepts (failed or unmastered)
+    # Priority 1: LEARNING concepts (failed or unmastered, not on kill switch)
     learning = [
         (cid, m)
         for cid, m in profile.concept_masteries.items()
@@ -147,7 +135,7 @@ def _plan_with_profile(
             selected.append(concept_map[cid])
             selected_ids.add(cid)
 
-    # Priority 3: NOT_ATTEMPTED concepts
+    # Priority 2: NOT_ATTEMPTED concepts
     unattempted = [
         c
         for c in concepts
@@ -162,7 +150,7 @@ def _plan_with_profile(
             selected.append(c)
             selected_ids.add(c.concept_id)
 
-    # Priority 4: Fill remaining with any unselected concepts
+    # Priority 3: Fill remaining with any unselected concepts
     remaining = [c for c in concepts if c.concept_id not in selected_ids]
     random.shuffle(remaining)
     for c in remaining:
@@ -171,20 +159,21 @@ def _plan_with_profile(
             selected_ids.add(c.concept_id)
 
     # Apply Prerequisite Pairing Rule
-    selected = _apply_prerequisite_pairing(selected, concepts)
-    return selected[:max_questions]
+    return _apply_prerequisite_pairing(selected, concepts, max_questions=max_questions)
 
 
 def _apply_prerequisite_pairing(
     selected: list[ConceptNode],
     all_concepts: list[ConceptNode],
+    max_questions: int | None = None,
 ) -> list[ConceptNode]:
     """Prerequisite Pairing Rule:
 
     For every advanced or dependent concept selected, automatically queue the
     foundational concept beneath it (e.g. if testing Machine Learning,
     automatically test Linear Regression first).
-    Ensures foundational concepts precede dependent concepts without duplicates.
+    Ensures foundational concepts precede dependent concepts without duplicates,
+    while guaranteeing that target advanced concepts are preserved when fitting to budget.
     """
     concept_map = {c.concept_id: c for c in all_concepts}
     ordered_result: list[ConceptNode] = []
@@ -208,6 +197,15 @@ def _apply_prerequisite_pairing(
 
     for item in selected:
         _add_with_prereqs(item)
+
+    if max_questions and len(ordered_result) > max_questions:
+        target_ids = {c.concept_id for c in selected}
+        prereqs_of_targets = {p for c in selected for p in c.prerequisite_concept_ids}
+        prioritized = [c for c in ordered_result if c.concept_id in target_ids or c.concept_id in prereqs_of_targets]
+        other = [c for c in ordered_result if c not in prioritized]
+        merged = prioritized + other
+        kept_ids = {c.concept_id for c in merged[:max_questions]}
+        return [c for c in ordered_result if c.concept_id in kept_ids]
 
     return ordered_result
 

@@ -251,7 +251,9 @@ def _fallback_outputs(
                 if name not in seen_names and len(seen_names) < 8:
                     seen_names.add(name)
                     cid_token = re.sub(r"[^A-Z0-9_]", "_", name.upper()).strip("_")
-                    cid = f"CONCEPT_{cid_token[:24]}"
+                    import hashlib
+                    cid_hash = hashlib.sha256(name.encode("utf-8")).hexdigest()[:6].upper()
+                    cid = f"CONCEPT_{cid_token[:18]}_{cid_hash}"
                     defn = line if len(line) > len(name) + 15 else text[:250]
                     concepts_dict[cid] = ConceptNode(
                         concept_id=cid,
@@ -273,7 +275,9 @@ def _fallback_outputs(
                 if term not in seen_names and len(term.split()) <= 4:
                     seen_names.add(term)
                     cid_token = re.sub(r"[^A-Z0-9_]", "_", term.upper()).strip("_")
-                    cid = f"CONCEPT_{cid_token[:24]}"
+                    import hashlib
+                    cid_hash = hashlib.sha256(term.encode("utf-8")).hexdigest()[:6].upper()
+                    cid = f"CONCEPT_{cid_token[:18]}_{cid_hash}"
                     concepts_dict[cid] = ConceptNode(
                         concept_id=cid,
                         name=term,
@@ -295,7 +299,9 @@ def _fallback_outputs(
                     if clean_hd.lower() not in ("parameter", "parameters", "notes", "summary", "overview", "introduction"):
                         seen_names.add(clean_hd)
                         cid_token = re.sub(r"[^A-Z0-9_]", "_", clean_hd.upper()).strip("_")
-                        cid = f"CONCEPT_{cid_token[:24]}"
+                        import hashlib
+                        cid_hash = hashlib.sha256(clean_hd.encode("utf-8")).hexdigest()[:6].upper()
+                        cid = f"CONCEPT_{cid_token[:18]}_{cid_hash}"
                         concepts_dict[cid] = ConceptNode(
                             concept_id=cid,
                             name=clean_hd,

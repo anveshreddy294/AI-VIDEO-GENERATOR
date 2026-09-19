@@ -38,18 +38,22 @@ from ..services.schemas import (
     StageDiagnostics,
 )
 
+import contextvars
+
 logger = logging.getLogger(__name__)
 
 _client_instance: QdrantClient | None = None
-_last_embed_diagnostics: StageDiagnostics | None = None
+_embed_diagnostics_var: contextvars.ContextVar[StageDiagnostics | None] = contextvars.ContextVar(
+    "embed_diagnostics", default=None
+)
 
 
 _active_embedding_dim: int = 3072 if "gemini-embedding-2" in getattr(settings, "embedding_model", "") else 768
 
 
 def get_last_embed_diagnostics() -> StageDiagnostics | None:
-    """Retrieve execution diagnostics for the most recent embedding pass."""
-    return _last_embed_diagnostics
+    """Retrieve execution diagnostics for the most recent embedding pass in current context."""
+    return _embed_diagnostics_var.get()
 
 
 def get_client() -> QdrantClient:
@@ -102,7 +106,7 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
 
 def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list[float]]:
     """Require genuine embeddings; never mix hash vectors into the collection."""
-    global _last_embed_diagnostics, _active_embedding_dim
+    global _active_embedding_dim
     import math
     if not texts:
         return []
@@ -116,7 +120,7 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
     if any(len(v) != dim or not all(math.isfinite(x) for x in v) or not any(v) for v in vectors):
         raise RuntimeError("Embedding provider returned invalid vectors")
     _active_embedding_dim = dim
-    _last_embed_diagnostics = StageDiagnostics(provider_used="gemini", fallback_used=False, grounding_verified=False)
+    _embed_diagnostics_var.set(StageDiagnostics(provider_used="gemini", fallback_used=False, grounding_verified=False))
     return vectors
 
 
@@ -179,18 +183,25 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     return len(points)
 
 
-def search_layer_a(query: str, limit: int = 5, source_id: str | None = None) -> list[dict[str, Any]]:
+def search_layer_a(
+    query: str,
+    limit: int = 5,
+    source_id: str | None = None,
+    score_threshold: float | None = None,
+) -> list[dict[str, Any]]:
     client = get_client()
     try:
         vector = _embed([query], task_type="retrieval_query")[0]
         must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
         if source_id:
             must_conditions.append(qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)))
+        threshold = score_threshold if score_threshold is not None else getattr(settings, "vector_similarity_threshold", 0.35)
         hits = client.search(
             collection_name=settings.collection_name,
             query_vector=vector,
             limit=limit,
             query_filter=qmodels.Filter(must=must_conditions),
+            score_threshold=threshold,
         )
         return [h.payload for h in hits]
     except Exception as exc:

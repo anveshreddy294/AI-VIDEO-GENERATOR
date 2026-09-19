@@ -588,10 +588,22 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
     )
 
     # Concept-level score breakdown (e.g. Concept A: 100%, Concept B: 0%)
+    # Disambiguate if two concepts in the session share the same name (#64)
+    session_cids = {q.concept_id for q in session.questions}
+    names_seen = set()
+    has_name_collision = False
+    for cid, m in profile.concept_masteries.items():
+        if cid in session_cids:
+            c_name = m.concept_name or cid
+            if c_name in names_seen:
+                has_name_collision = True
+                break
+            names_seen.add(c_name)
+
     concept_scores = {
-        m.concept_name or cid: round(m.last_score, 1)
+        (f"{m.concept_name} ({cid})" if has_name_collision else (m.concept_name or cid)): round(m.last_score, 1)
         for cid, m in profile.concept_masteries.items()
-        if cid in {q.concept_id for q in session.questions}
+        if cid in session_cids
     }
 
     profile_summary = ProfileSummary(

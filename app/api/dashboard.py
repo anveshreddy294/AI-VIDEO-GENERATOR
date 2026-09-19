@@ -1767,6 +1767,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
 
 @router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
+@router.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard():
     """VisualAI dashboard — Interactive test runner and complete pipeline documentation."""
     return HTMLResponse(content=DASHBOARD_HTML)
