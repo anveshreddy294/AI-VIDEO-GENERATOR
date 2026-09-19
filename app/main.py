@@ -102,12 +102,12 @@ def debug_qdrant(request: Request):
             content={"detail": "Debug endpoint disabled. Set VISUALAI_DEBUG=true to enable (development only)."},
         )
     from .db.vector_store import get_client, ensure_collection, _embed
-    from qdrant_client.http import models as qmodels
+    from .core.config import settings
 
     client = get_client()
     ensure_collection(client)
 
-    info = client.get_collection("visualai_layer_a")
+    info = client.get_collection(settings.collection_name)
     result = {
         "points_count": info.points_count,
         "vector_size": info.config.params.vectors.size if info.config.params.vectors else None,
@@ -118,7 +118,7 @@ def debug_qdrant(request: Request):
     try:
         vector = _embed(["test query"])[0]
         hits = client.search(
-            collection_name="visualai_layer_a",
+            collection_name=settings.collection_name,
             query_vector=vector,
             limit=3,
         )
@@ -136,3 +136,22 @@ def debug_qdrant(request: Request):
         result["search_error"] = str(exc)
 
     return result
+
+
+if __name__ == "__main__":
+    from pathlib import Path
+    import uvicorn
+
+    root_dir = Path(__file__).resolve().parent.parent
+    app_dir = root_dir / "app"
+    venv_dir = root_dir / ".venv"
+    storage_dir = root_dir / "storage"
+
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        reload_dirs=[str(app_dir)],
+        reload_excludes=[str(venv_dir), str(storage_dir)],
+    )

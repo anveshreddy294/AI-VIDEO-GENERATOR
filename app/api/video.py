@@ -8,10 +8,10 @@ Endpoints:
 - GET /video/list/{student_id}: List all rendered remediation videos for a student.
 """
 
-import asyncio
+from langchain_core.utils import uuid
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
@@ -118,7 +118,7 @@ async def generate_video_endpoint(
         # Pick first available video target
         target = matrix.videos[0]
 
-    job_id = f"JOB_VGEN_{target.concept_id[:8]}_{req.student_id[:6]}"
+    job_id = f"JOB_VGEN_{target.concept_id[:8]}_{uuid.uuid4().hex[:6]}"
 
     # 3. Create placeholder job in cache
     job = VideoRenderJob(
@@ -142,6 +142,7 @@ async def generate_video_endpoint(
                 student_id=req.student_id,
                 source_id=req.source_id,
                 job_id=job_id,
+                video_id=job.video_id,
                 mock_mode=req.mock_mode,
             )
             ACTIVE_JOBS[job_id] = completed_job
@@ -238,3 +239,28 @@ async def list_student_videos(student_id: str):
     idx = load_videos_index()
     results = [meta for meta in idx.values() if meta.get("student_id") == student_id]
     return {"student_id": student_id, "videos": results}
+
+
+@router.get("/{video_id}/download")
+async def download_video(video_id: str):
+    """Download MP4 video file with Content-Disposition attachment."""
+    import re
+    idx = load_videos_index()
+    meta = idx.get(video_id)
+    if not meta:
+        raise HTTPException(status_code=404, detail=f"Video '{video_id}' not found.")
+
+    video_path = _safe_path(meta["video_file_path"])
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="Video file not found on disk.")
+
+    raw_name = meta.get("concept_name") or "remedial_lesson"
+    clean_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_name)
+    download_filename = f"{clean_name}.mp4"
+
+    return FileResponse(
+        path=str(video_path),
+        media_type="video/mp4",
+        filename=download_filename,
+        headers={"Content-Disposition": f'attachment; filename="{download_filename}"'},
+    )

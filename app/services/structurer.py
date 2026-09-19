@@ -8,14 +8,15 @@ Analyzes normalized ContentUnits to:
 """
 
 import json
+import logging
 import re
+import time
 from typing import Any
 
-import google.generativeai as genai
-from pydantic import BaseModel
-
 from ..core.config import settings
-from .schemas import ConceptNode, ContentUnit, KnowledgeGraph, TopicBlueprint
+from .schemas import ConceptNode, ContentUnit, KnowledgeGraph, StageDiagnostics, TopicBlueprint
+
+logger = logging.getLogger(__name__)
 
 _STRUCTURE_AND_CONCEPT_PROMPT = """You are an expert curriculum and knowledge graph analyst.
 Analyze the provided study material content units and extract:
@@ -70,7 +71,7 @@ MATERIAL CONTENT UNITS:
 
 
 def _generate_with_llm(payload: str) -> str:
-    """Generate content using the active LLM provider (OmniRoute, Gemini, or Ollama)."""
+    """Generate content using the active LLM provider (Gemini or local adapter)."""
     from .assessment.providers import get_default_provider
     provider = get_default_provider()
     return provider.generate_content(payload)
@@ -101,26 +102,31 @@ def process_structure_and_concepts(
     material_text = "\n\n".join(prompt_blocks)[:60_000]
     payload = _STRUCTURE_AND_CONCEPT_PROMPT + material_text
 
-    raw_response = ""
+    start_t = time.time()
+    last_err: str | None = None
     for attempt in range(2):
         try:
             raw_response = _generate_with_llm(payload)
             data = _parse_json(raw_response)
-            return _assemble_outputs(data, units)
+            dur_ms = int((time.time() - start_t) * 1000)
+            return _assemble_outputs(data, units, duration_ms=dur_ms)
         except Exception as exc:
-            print(f"[structurer] Attempt {attempt + 1} failed: {exc}")
+            last_err = str(exc)
+            logger.warning("[structurer] Attempt %d failed: %s", attempt + 1, exc)
             payload = (
                 _STRUCTURE_AND_CONCEPT_PROMPT
                 + "Your previous response was invalid. Return STRICT JSON matching the schema.\nMATERIAL:\n"
                 + material_text
             )
 
+    dur_ms = int((time.time() - start_t) * 1000)
+    logger.warning("[structurer] LLM structure extraction failed after retries. Using heuristic fallback. Error: %s", last_err)
     # Fallback if LLM fails
-    return _fallback_outputs(units)
+    return _fallback_outputs(units, fallback_reason=last_err, duration_ms=dur_ms)
 
 
 def _assemble_outputs(
-    data: dict[str, Any], units: list[ContentUnit]
+    data: dict[str, Any], units: list[ContentUnit], duration_ms: int = 0
 ) -> tuple[list[ContentUnit], KnowledgeGraph, TopicBlueprint]:
     cu_map = {u.content_id: u for u in units}
 
@@ -164,6 +170,12 @@ def _assemble_outputs(
         asset_id=units[0].asset_id if units else None,
         content_unit_count=len(units),
         chunk_count=0,  # updated after chunking
+        diagnostics=StageDiagnostics(
+            provider_used=settings.llm_provider,
+            fallback_used=False,
+            grounding_verified=True,
+            duration_ms=duration_ms,
+        ),
     )
 
     return list(cu_map.values()), kg, blueprint
@@ -171,6 +183,8 @@ def _assemble_outputs(
 
 def _fallback_outputs(
     units: list[ContentUnit],
+    fallback_reason: str | None = None,
+    duration_ms: int = 0,
 ) -> tuple[list[ContentUnit], KnowledgeGraph, TopicBlueprint]:
     source_id = units[0].source_id if units else "SRC_UNKNOWN"
     asset_id = units[0].asset_id if units else "AST_UNKNOWN"
@@ -287,6 +301,14 @@ def _fallback_outputs(
         asset_id=asset_id,
         content_unit_count=len(units),
         chunk_count=0,
+        diagnostics=StageDiagnostics(
+            provider_used="heuristic_rule_fallback",
+            fallback_used=True,
+            fallback_reason=fallback_reason or "LLM structure extraction failed",
+            error_code="LLM_EXTRACTION_FALLBACK",
+            grounding_verified=False,
+            duration_ms=duration_ms,
+        ),
     )
     return units, kg, blueprint
 

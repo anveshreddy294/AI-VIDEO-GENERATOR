@@ -16,7 +16,7 @@ from ...core.config import settings
 from ...services.assessment.providers import LLMProvider
 from ...services.assessment.schemas import VideoTarget
 from .audio_synthesizer import synthesize_script_audio
-from .muxer import concatenate_video_clips, generate_webvtt_subtitles, mux_audio_and_video
+from .muxer import concatenate_video_clips, generate_webvtt_subtitles, mux_audio_and_video, probe_media_duration
 from .schemas import VideoRenderJob, VideoScript
 from .script_generator import generate_video_script
 from .visual_renderer import render_scene_to_video_clip
@@ -24,7 +24,7 @@ from .visual_renderer import render_scene_to_video_clip
 logger = logging.getLogger(__name__)
 
 # Base output directory
-VIDEOS_DIR = Path("storage/runtime/videos")
+VIDEOS_DIR = Path(settings.runtime_dir) / "videos"
 
 
 def _get_videos_index_path() -> Path:
@@ -45,9 +45,11 @@ def load_videos_index() -> Dict[str, dict]:
 
 
 def save_videos_index(index: Dict[str, dict]) -> None:
-    """Save updates to the master video index."""
+    """Save updates to the master video index atomically using a temporary file."""
     idx_path = _get_videos_index_path()
-    idx_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    temp_path = idx_path.with_suffix(".tmp")
+    temp_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    temp_path.replace(idx_path)
 
 
 def register_completed_video(job: VideoRenderJob, script: VideoScript) -> None:
@@ -75,6 +77,7 @@ async def execute_video_generation_pipeline(
     student_id: str,
     source_id: str,
     job_id: Optional[str] = None,
+    video_id: Optional[str] = None,
     mock_mode: bool = False,
     provider: Optional[LLMProvider] = None,
     progress_callback: Optional[Callable[[int, str], None]] = None,
@@ -91,9 +94,12 @@ async def execute_video_generation_pipeline(
     if not job_id:
         job_id = f"JOB_VGEN_{uuid.uuid4().hex[:10]}"
 
+    if not video_id:
+        video_id = f"VID_{uuid.uuid4().hex[:12]}"
+
     job = VideoRenderJob(
         job_id=job_id,
-        video_id=f"VID_{uuid.uuid4().hex[:12]}",
+        video_id=video_id,
         student_id=student_id,
         source_id=source_id,
         concept_id=target.concept_id,
@@ -214,7 +220,10 @@ async def execute_video_generation_pipeline(
         job.current_stage = "Remediation video ready"
         job.video_file_path = str(final_mp4_path)
         job.subtitles_file_path = str(subtitles_path)
-        job.duration_seconds = round(accumulated_time, 2)
+        probed_dur = probe_media_duration(final_mp4_path)
+        if probed_dur <= 0.0:
+            probed_dur = probe_media_duration(master_audio_path)
+        job.duration_seconds = round(probed_dur if probed_dur > 0.0 else accumulated_time, 2)
         job.completed_at = datetime.now(timezone.utc).isoformat()
 
         # Save job status

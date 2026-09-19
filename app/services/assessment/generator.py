@@ -12,6 +12,7 @@ Generates questions one concept at a time using:
 """
 
 import json
+import logging
 import re
 import time
 from typing import Any
@@ -20,10 +21,12 @@ from qdrant_client.http import models as qmodels
 
 from ...core.config import settings
 from ...db.vector_store import _embed, ensure_collection, get_client
-from ..schemas import ConceptNode
+from ..schemas import ConceptNode, StageDiagnostics
 from .planner import classify_difficulty
 from .providers import LLMProvider, get_default_provider
 from .schemas import AssessmentOption, Question
+
+logger = logging.getLogger(__name__)
 
 VARIANT_DIRECTIVES: dict[str, str] = {
     "definition": (
@@ -112,7 +115,7 @@ def search_concept_chunks(
         client = get_client()
         ensure_collection(client)
     except Exception as exc:
-        print(f"[generator] Vector client unavailable: {exc}")
+        logger.warning(f"[generator] Vector client unavailable: {exc}")
         return []
 
     query_text = f"{concept.name}: {concept.definition or ''}"
@@ -124,7 +127,7 @@ def search_concept_chunks(
             vector = _embed([query_text])[0]
             break
         except Exception as exc:
-            print(f"[generator] Embedding attempt {attempt+1}/3 failed: {exc}")
+            logger.warning(f"[generator] Embedding attempt {attempt+1}/3 failed: {exc}")
             if attempt < 2:
                 time.sleep(1.5 ** (attempt + 1))
 
@@ -145,7 +148,7 @@ def search_concept_chunks(
         )
         return [hit.payload for hit in hits] if hits else []
     except Exception as exc:
-        print(f"[generator] Qdrant search failed for '{concept.name}': {exc}")
+        logger.warning(f"[generator] Qdrant search failed for '{concept.name}': {exc}")
         return []
 
 
@@ -219,26 +222,56 @@ def generate_question(
         source_chunks=chunk_text,
     )
 
+    t0 = time.time()
+    last_error: str | None = None
+
     # Attempt LLM generation via provider
     for attempt in range(retries + 1):
         try:
             raw = provider.generate_content(prompt)
             data = _parse_json(raw)
 
+            raw_options = data.get("options", [])
+            if len(raw_options) != 4 or not data.get("question", "").strip():
+                continue
+
+            raw_corr = data.get("correct_index", 0)
+            try:
+                raw_corr_int = int(raw_corr)
+            except (ValueError, TypeError):
+                raw_corr_int = 0
+            if raw_corr_int < 0 or raw_corr_int >= len(raw_options):
+                raw_corr_int = 0
+
+            # Authoritative correct answer text before shuffling
+            correct_answer_text = raw_options[raw_corr_int].get("text", "").strip()
+
+            # Randomize option placement across 0-3 while strictly maintaining correct_index mapping
+            import random
+            texts = [opt.get("text", "").strip() for opt in raw_options]
+            random.shuffle(texts)
+            new_correct_index = texts.index(correct_answer_text) if correct_answer_text in texts else 0
+
             options = [
-                AssessmentOption(index=opt["index"], text=opt["text"])
-                for opt in data.get("options", [])
+                AssessmentOption(index=i, text=t)
+                for i, t in enumerate(texts)
             ]
 
-            if len(options) != 4 or not data.get("question", "").strip():
-                continue
+            duration_ms = round((time.time() - t0) * 1000, 2)
+            diagnostics = StageDiagnostics(
+                provider_used=getattr(provider, "model_name", settings.llm_provider),
+                fallback_used=False,
+                fallback_reason=None,
+                grounding_verified=True,
+                duration_ms=duration_ms,
+            )
 
             return Question(
                 concept_id=concept.concept_id,
                 concept_name=concept.name,
                 stem=data.get("question", "").strip(),
                 options=options,
-                correct_index=int(data.get("correct_index", 0)),
+                correct_index=new_correct_index,
                 explanation=data.get("explanation", f"Based on source definition of {concept.name}"),
                 chunk_ids=chunk_ids,
                 content_ids=content_ids,
@@ -249,13 +282,15 @@ def generate_question(
                 source_id=source_id,
                 difficulty=difficulty,
                 variant_type=variant_type,
+                diagnostics=diagnostics,
             )
 
         except Exception as exc:
             err = str(exc).lower()
-            print(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
+            last_error = str(exc)
+            logger.warning(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
             if "exceeded your current quota" in err or "quota_value" in err:
-                print(f"[generator] Quota reached, instantly switching to grounded fallback generator.")
+                logger.warning("[generator] Quota reached, instantly switching to grounded fallback generator.")
                 break
             if "not set" in err or "unconfigured" in err or "not found" in err:
                 break
@@ -263,6 +298,7 @@ def generate_question(
                 time.sleep(1.0)
 
     # Resilient grounded fallback generation (fast & deterministic)
+    duration_ms = round((time.time() - t0) * 1000, 2)
     return _generate_grounded_fallback(
         concept=concept,
         chunks=chunks,
@@ -275,6 +311,8 @@ def generate_question(
         source_id=source_id,
         difficulty=difficulty,
         variant_type=variant_type,
+        fallback_reason=last_error or "LLM generation unavailable or unparseable response",
+        duration_ms=duration_ms,
     )
 
 
@@ -290,6 +328,8 @@ def _generate_grounded_fallback(
     source_id: str,
     difficulty: str,
     variant_type: str = "definition",
+    fallback_reason: str | None = None,
+    duration_ms: float = 0.0,
 ) -> Question:
     """Deterministic, context-grounded fallback question builder with distinct variant stems, distractors, and answer indices."""
     import hashlib
@@ -378,13 +418,28 @@ def _generate_grounded_fallback(
         source_id=source_id,
         difficulty=difficulty,
         variant_type=variant_type,
+        diagnostics=StageDiagnostics(
+            provider_used="deterministic_grounded_fallback",
+            fallback_used=True,
+            fallback_reason=fallback_reason,
+            grounding_verified=True,
+            duration_ms=duration_ms,
+        ),
     )
 
 
 def _parse_json(raw: str) -> dict:
-    """Extract JSON from LLM output, tolerating markdown fences."""
-    without_fences = re.sub(r"```(?:json)?", "", raw).strip()
-    return json.loads(without_fences)
+    """Extract JSON from LLM output, tolerating markdown fences and conversational preambles."""
+    raw = raw.strip()
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", raw)
+    if match:
+        raw = match.group(1).strip()
+    else:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            raw = raw[start : end + 1]
+    return json.loads(raw)
 
 
 generate_question_for_concept = generate_question

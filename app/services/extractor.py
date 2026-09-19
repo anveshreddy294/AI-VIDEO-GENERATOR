@@ -4,13 +4,16 @@ Extracts text blocks and embedded image diagrams page-by-page, capturing
 page numbers, bounding boxes, visual descriptions, and confidence scores.
 """
 
+import logging
 from pathlib import Path
-from uuid import uuid4
 
 import pymupdf as fitz
 
+from ..core.config import settings
 from .schemas import ContentUnit
 from .vision import describe_image
+
+logger = logging.getLogger(__name__)
 
 
 def extract_from_pdf(
@@ -21,22 +24,30 @@ def extract_from_pdf(
     units: list[ContentUnit] = []
     seq_index = 0
 
+    images_dir = settings.upload_dir / source_id / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    vision_calls_count = 0
+    MAX_VISION_CALLS = 5
+
     for page_number, page in enumerate(doc, start=1):
         # 1. Text blocks extraction with bounding box provenance
-        text_page = page.get_text("blocks")  # list of (x0, y0, x1, y1, text, block_no, block_type)
-        page_text_combined = []
-
+        page_text_combined: list[str] = []
+        text_page = page.get_text("blocks")
         for block in text_page:
-            if len(block) >= 5 and block[4].strip():
+            # block format: (x0, y0, x1, y1, text, block_no, block_type)
+            # block_type == 0 is text; 1 is image
+            if block[6] == 0:
+                text = block[4].strip()
+                if not text:
+                    continue
                 bbox = [float(block[0]), float(block[1]), float(block[2]), float(block[3])]
-                block_text = block[4].strip()
-                page_text_combined.append(block_text)
+                page_text_combined.append(text)
 
                 unit = ContentUnit(
                     source_id=source_id,
                     asset_id=asset_id,
                     modality="pdf",
-                    text=block_text,
+                    text=text,
                     page_number=page_number,
                     sequence_index=seq_index,
                     bbox=bbox,
@@ -46,35 +57,48 @@ def extract_from_pdf(
                 units.append(unit)
                 seq_index += 1
 
-        # 2. Embedded images on page -> describe via Gemini Vision
+        # 2. Embedded images on page -> save asset and describe via Gemini Vision
         images_on_page = _extract_page_images_with_info(page, page_number)
         if images_on_page:
             for img_info in images_on_page:
                 image_bytes = img_info["bytes"]
                 bbox = img_info.get("bbox")
                 image_id = f"IMG_{page_number}_{img_info['xref']}"
+                saved_img_path = images_dir / f"diagram_{page_number}_{img_info['xref']}.png"
 
                 try:
-                    description = describe_image(
-                        image_bytes, source=f"{pdf_path.name} p.{page_number}"
-                    )
-                    unit = ContentUnit(
-                        source_id=source_id,
-                        asset_id=asset_id,
-                        modality="pdf",
-                        text=f"[DIAGRAM on page {page_number}]\n{description}",
-                        visual_description=description,
-                        page_number=page_number,
-                        sequence_index=seq_index,
-                        bbox=bbox,
-                        image_id=image_id,
-                        extraction_method="gemini_vision",
-                        confidence_score=0.95,
-                    )
-                    units.append(unit)
-                    seq_index += 1
-                except Exception as exc:
-                    print(f"[warn] vision failed for image on page {page_number}: {exc}")
+                    saved_img_path.write_bytes(image_bytes)
+                except Exception as save_err:
+                    logger.warning("[extractor] Could not write image: %s", save_err)
+
+                description = ""
+                if vision_calls_count < MAX_VISION_CALLS:
+                    try:
+                        description = describe_image(
+                            image_bytes, source=f"{pdf_path.name} p.{page_number}"
+                        )
+                        vision_calls_count += 1
+                    except Exception as exc:
+                        logger.warning("[extractor] Vision failed for image on page %s: %s", page_number, exc)
+                else:
+                    description = f"Technical visual model on page {page_number}."
+
+                unit = ContentUnit(
+                    source_id=source_id,
+                    asset_id=asset_id,
+                    modality="pdf",
+                    text=f"[DIAGRAM on page {page_number}]\n{description}",
+                    visual_description=description,
+                    page_number=page_number,
+                    sequence_index=seq_index,
+                    bbox=bbox,
+                    image_id=image_id,
+                    image_path=str(saved_img_path) if saved_img_path.exists() else None,
+                    extraction_method="gemini_vision" if description else "pymupdf_image",
+                    confidence_score=0.95,
+                )
+                units.append(unit)
+                seq_index += 1
         else:
             # Fallback for scanned/image-only pages
             has_text = bool("".join(page_text_combined).strip())
@@ -99,7 +123,7 @@ def extract_from_pdf(
                     units.append(unit)
                     seq_index += 1
                 except Exception as exc:
-                    print(f"[warn] scanned page render failed on page {page_number}: {exc}")
+                    logger.warning("[extractor] Scanned page render failed on page %s: %s", page_number, exc)
 
     doc.close()
 
@@ -140,8 +164,8 @@ def _extract_page_images_with_info(page: fitz.Page, page_number: int) -> list[di
                 if rects:
                     r = rects[0]
                     bbox = [float(r.x0), float(r.y0), float(r.x1), float(r.y1)]
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("[extractor] Could not get image rect for xref %s: %s", xref, exc)
 
             results.append({"xref": xref, "bytes": img_bytes, "bbox": bbox})
 
@@ -159,8 +183,8 @@ def _try_extract_image(page: fitz.Page, xref: int, page_number: int) -> bytes | 
             return None
         png = pix.tobytes("png")
         return png
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("[extractor] Could not extract pixmap for xref %s on page %s: %s", xref, page_number, exc)
     return None
 
 

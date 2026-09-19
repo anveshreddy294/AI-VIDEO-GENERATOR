@@ -186,13 +186,18 @@ async def _execute_upload_and_assess(
         save_content_units(source_id, enriched_units)
         save_knowledge_graph(source_id, knowledge_graph)
 
+        diag_meta = blueprint.diagnostics.model_dump() if (blueprint and getattr(blueprint, "diagnostics", None)) else {}
         await job_manager.emit_event(
             job_id=job_id,
             stage="extracting_concepts",
             status="completed",
             message=f"Extracted {len(knowledge_graph.concepts)} core concepts.",
             progress_percent=55,
-            metadata={"source_id": source_id, "concepts_count": len(knowledge_graph.concepts)},
+            metadata={
+                "source_id": source_id,
+                "concepts_count": len(knowledge_graph.concepts),
+                "diagnostics": diag_meta,
+            },
         )
 
         # Stage 4: Semantic Chunking
@@ -228,24 +233,63 @@ async def _execute_upload_and_assess(
         )
 
         synced_count = 0
-        qdrant_warning = None
+        sync_error = None
+        fallback_used = False
         try:
             from ..db.vector_store import upsert_chunks
             synced_count = upsert_chunks(rich_chunks)
         except Exception as exc:
-            qdrant_warning = f"Qdrant daemon unavailable; fell back to embedded storage: {exc}"
-            logger.warning("[pipeline_job] %s", qdrant_warning)
-            # When remote vector store is unavailable, allow fallback execution to proceed
-            synced_count = len(rich_chunks)
+            logger.warning("[pipeline_job] Initial Qdrant upsert failed: %s. Retrying explicitly with embedded storage...", exc)
+            try:
+                from ..db.vector_store import get_client, ensure_collection, _embed, _point_id, _payload
+                from qdrant_client import QdrantClient
+                from qdrant_client.http import models as qmodels
+                try:
+                    embedded_client = get_client()
+                except Exception:
+                    embedded_client = QdrantClient(":memory:")
+                ensure_collection(embedded_client)
+                texts = [c.text for c in rich_chunks]
+                vectors = _embed(texts)
+                points = [
+                    qmodels.PointStruct(id=_point_id(c), vector=v, payload=_payload(c))
+                    for c, v in zip(rich_chunks, vectors)
+                ]
+                if points:
+                    embedded_client.upsert(collection_name=settings.collection_name, points=points)
+                synced_count = len(points)
+                fallback_used = True
+                logger.info("[pipeline_job] Fallback storage successfully synchronized %d chunks.", synced_count)
+            except Exception as embedded_exc:
+                sync_error = f"VECTOR_SYNC_FAILED: Both primary and fallback Qdrant storage failed: {embedded_exc}"
+                logger.error("[pipeline_job] %s", sync_error)
+                synced_count = 0
 
-        if qdrant_warning:
+        from ..db.vector_store import get_last_embed_diagnostics
+        embed_diag = get_last_embed_diagnostics()
+        embed_diag_meta = embed_diag.model_dump() if embed_diag else {}
+
+        if sync_error:
+            await job_manager.fail_job(
+                job_id=job_id,
+                stage="syncing_qdrant",
+                error_message=sync_error,
+                metadata={"source_id": source_id, "error": sync_error, "embedding_diagnostics": embed_diag_meta},
+            )
+            return
+        elif fallback_used:
             await job_manager.emit_event(
                 job_id=job_id,
                 stage="syncing_qdrant",
                 status="warning",
-                message="Vector database running in local fallback mode.",
+                message=f"Synced {synced_count} chunks using fallback local storage (primary unreachable).",
                 progress_percent=80,
-                metadata={"source_id": source_id, "warning_reason": qdrant_warning[:150]},
+                metadata={
+                    "source_id": source_id,
+                    "fallback": True,
+                    "chunks_count": synced_count,
+                    "embedding_diagnostics": embed_diag_meta,
+                },
             )
         else:
             await job_manager.emit_event(
@@ -254,7 +298,12 @@ async def _execute_upload_and_assess(
                 status="completed",
                 message=f"Synced {synced_count} chunks into Qdrant vector index.",
                 progress_percent=82,
-                metadata={"source_id": source_id, "chunks_count": synced_count},
+                metadata={
+                    "source_id": source_id,
+                    "chunks_count": synced_count,
+                    "fallback": False,
+                    "embedding_diagnostics": embed_diag_meta,
+                },
             )
 
         # Stage 6: Quality Validation Gateway
@@ -311,6 +360,21 @@ async def _execute_upload_and_assess(
                 metadata={"source_id": source_id, "questions_requested": max_questions},
             )
 
+            chunks_payload = [
+                {
+                    "chunk_id": rc.chunk_id,
+                    "text": rc.text,
+                    "concept_ids": list(rc.concept_ids or []),
+                    "content_ids": list(rc.content_ids or []),
+                    "page_start": rc.page_start,
+                    "page_end": rc.page_end,
+                    "timestamp_start": rc.timestamp_start,
+                    "timestamp_end": rc.timestamp_end,
+                    "source_id": source_id,
+                }
+                for rc in rich_chunks
+            ]
+
             assessment_session = start_assessment(
                 student_id=student_id,
                 source_id=source_id,
@@ -318,6 +382,12 @@ async def _execute_upload_and_assess(
                     student_id=student_id,
                     source_id=source_id,
                     max_questions=max_questions,
+                    step1_output={
+                        "source_id": source_id,
+                        "student_id": student_id,
+                        "chunks": chunks_payload,
+                        "knowledge_graph": knowledge_graph.model_dump() if hasattr(knowledge_graph, "model_dump") else {},
+                    },
                 ),
             )
             assessment_resp = assessment_session.model_dump() if hasattr(assessment_session, "model_dump") else assessment_session
@@ -459,6 +529,23 @@ async def _execute_assess_existing(
             metadata={"source_id": source_id, "questions_requested": max_questions},
         )
 
+        from ..services.registry import load_content_units
+        existing_cus = load_content_units(source_id) or []
+        existing_chunks = [
+            {
+                "chunk_id": cu.content_id,
+                "text": cu.text,
+                "concept_ids": [],
+                "content_ids": [cu.content_id],
+                "page_start": cu.page_number,
+                "page_end": cu.page_number,
+                "timestamp_start": cu.timestamp_start,
+                "timestamp_end": cu.timestamp_end,
+                "source_id": source_id,
+            }
+            for cu in existing_cus if cu.text
+        ]
+
         assessment_session = start_assessment(
             student_id=student_id,
             source_id=source_id,
@@ -466,6 +553,12 @@ async def _execute_assess_existing(
                 student_id=student_id,
                 source_id=source_id,
                 max_questions=max_questions,
+                step1_output={
+                    "source_id": source_id,
+                    "student_id": student_id,
+                    "chunks": existing_chunks,
+                    "knowledge_graph": kg.model_dump() if hasattr(kg, "model_dump") else {},
+                },
             ),
         )
         assessment_resp = assessment_session.model_dump() if hasattr(assessment_session, "model_dump") else assessment_session

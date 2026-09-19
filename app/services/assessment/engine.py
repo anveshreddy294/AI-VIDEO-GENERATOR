@@ -94,6 +94,7 @@ def grade_submission(
             correct=correct,
             selected_index=selected,
             correct_index=question.correct_index,
+            explanation=question.explanation or "",
         )
         results.append(result)
         concept_scores.setdefault(question.concept_id, []).append(correct)

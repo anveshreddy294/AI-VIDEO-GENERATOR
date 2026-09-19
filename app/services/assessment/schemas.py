@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, BeforeValidator, Field, model_validator
 
-from ..schemas import ConceptNode, KnowledgeGraph
+from ..schemas import ConceptNode, KnowledgeGraph, StageDiagnostics
 
 
 def _normalize_mastery_status(v: Any) -> str:
@@ -60,6 +60,7 @@ class Question(BaseModel):
     source_id: str = Field(description="The source document this question came from")
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
     variant_type: str | None = Field(default=None, description="Pedagogical variant angle: definition, relationship, application, comparison, misconception")
+    diagnostics: StageDiagnostics | None = Field(default=None, description="Execution diagnostics envelope")
 
 
 class SafeQuestion(BaseModel):
@@ -163,6 +164,7 @@ class QuestionResult(BaseModel):
     correct: bool
     selected_index: int
     correct_index: int
+    explanation: str = ""
 
 
 class SubmissionResult(BaseModel):

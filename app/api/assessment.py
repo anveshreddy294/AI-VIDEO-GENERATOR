@@ -9,13 +9,14 @@ Endpoints:
 - GET  /assessment/video-target/{student_id}/{source_id} → Retrieve Step 3 Video Target Matrix
 """
 
-import inspect
+import logging
 import math
-import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query
+
+logger = logging.getLogger(__name__)
 
 from ..core.config import settings
 from ..services.assessment.engine import grade_submission
@@ -296,53 +297,103 @@ def start_assessment(
 
         if q is None:
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason=generation returned None")
+            logger.warning(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason=generation returned None")
             return False
 
         # Structural validation + source/provenance check
         is_valid, error = validate_question(q, allowed_source_id=req_source_id)
         if not is_valid:
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={error}")
+            logger.warning(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={error}")
             return False
 
         # Grounding validation
         grounding_ok, grounding_err = validate_grounding(q, context_text)
         if not grounding_ok:
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={grounding_err}")
+            logger.warning(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={grounding_err}")
             return False
 
         # Non-duplication check against existing questions
         if is_duplicate(q, questions):
             failed_concepts.append(concept.concept_id)
-            print(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason=duplicate question detected")
+            logger.warning(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason=duplicate question detected")
             return False
 
         # ACCEPT
         concept_question_counts[concept.concept_id] = concept_question_counts.get(concept.concept_id, 0) + 1
         concept_variants_used.setdefault(concept.concept_id, set()).add(variant)
         questions.append(q)
-        print(f"[assessment] Accepted question {len(questions)}/{target_questions}: {concept.name} (variant={variant})")
+        logger.info(f"[assessment] Accepted question {len(questions)}/{target_questions}: {concept.name} (variant={variant})")
         return True
 
-    # Pass 1: Primary candidates (1 question per concept, variant="definition")
-    for c in primary_candidates:
-        if len(questions) >= target_questions:
-            break
-        _try_generate_and_accept(c, "definition")
+    # Pass 1: Primary candidates (Parallel generation with ThreadPoolExecutor)
+    from concurrent.futures import ThreadPoolExecutor
 
-    # Pass 2: Reserve candidates (1 question per concept, variant="definition")
+    def _generate_candidate(c_node, v_type):
+        try:
+            q_res = _call_generate_question(
+                concept=c_node,
+                source_id=req_source_id,
+                provided_chunks=provided_chunks,
+                max_retries=MAX_RETRIES_PER_QUESTION,
+                variant_type=v_type,
+            )
+            return (c_node, v_type, q_res)
+        except Exception as exc:
+            logger.warning("[assessment] Parallel candidate generation failed for %s: %s", c_node.name, exc)
+            return (c_node, v_type, None)
+
+    candidates_to_run = primary_candidates[:target_questions]
+    if candidates_to_run:
+        with ThreadPoolExecutor(max_workers=min(len(candidates_to_run), 5)) as pool:
+            futures = [pool.submit(_generate_candidate, c, "definition") for c in candidates_to_run]
+            for f in futures:
+                if len(questions) >= target_questions:
+                    break
+                c, variant, q = f.result()
+                if q is None:
+                    if c.concept_id not in failed_concepts:
+                        failed_concepts.append(c.concept_id)
+                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason=generation returned None")
+                    continue
+
+                is_valid, err = validate_question(q, allowed_source_id=req_source_id)
+                if not is_valid:
+                    if c.concept_id not in failed_concepts:
+                        failed_concepts.append(c.concept_id)
+                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={err}")
+                    continue
+
+                grounding_ok, g_err = validate_grounding(q, context_text)
+                if not grounding_ok:
+                    if c.concept_id not in failed_concepts:
+                        failed_concepts.append(c.concept_id)
+                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={g_err}")
+                    continue
+
+                if is_duplicate(q, questions):
+                    if c.concept_id not in failed_concepts:
+                        failed_concepts.append(c.concept_id)
+                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason=duplicate question detected")
+                    continue
+
+                concept_question_counts[c.concept_id] = concept_question_counts.get(c.concept_id, 0) + 1
+                concept_variants_used.setdefault(c.concept_id, set()).add(variant)
+                questions.append(q)
+                logger.info(f"[assessment] Accepted parallel question {len(questions)}/{target_questions}: {c.name}")
+
+    # Pass 2: Reserve candidates if target not reached
     if len(questions) < target_questions:
         for c in reserve_candidates:
             if len(questions) >= target_questions:
                 break
-            print(f"[assessment] Backfilling with reserve concept: {c.name}")
+            logger.info(f"[assessment] Backfilling with reserve concept: {c.name}")
             _try_generate_and_accept(c, "definition")
 
     # Pass 3: Multi-question backfill with distinct question variants
     if len(questions) < target_questions:
-        print(f"[assessment] Initiating multi-question variant backfill: {len(questions)}/{target_questions} accepted")
+        logger.info(f"[assessment] Initiating multi-question variant backfill: {len(questions)}/{target_questions} accepted")
         remaining_variants = [v for v in VARIANTS if v != "definition"]
         candidate_pool = [c for c in primary_candidates if c.concept_id not in kill_switch_ids] + [
             c for c in reserve_candidates if c.concept_id not in kill_switch_ids
@@ -376,7 +427,7 @@ def start_assessment(
                 if not unused_variant:
                     continue
 
-                print(f"[assessment] Backfilling variant '{unused_variant}' for concept: {c.name}")
+                logger.info(f"[assessment] Backfilling variant '{unused_variant}' for concept: {c.name}")
                 accepted = _try_generate_and_accept(c, unused_variant)
                 if accepted:
                     progress_made = True
@@ -388,7 +439,7 @@ def start_assessment(
     # If candidates are exhausted before reaching target_questions
     shortfall = max(0, target_questions - len(questions))
     if shortfall > 0:
-        print(
+        logger.warning(
             f"[assessment] Candidates exhausted: requested={target_questions} "
             f"generated={len(questions)} shortfall={shortfall} "
             f"student='{req_student_id}' source='{req_source_id}'"
@@ -517,7 +568,7 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
     except ValueError as exc:
         raise HTTPException(status_code=410, detail=str(exc)) from exc
     except Exception as exc:
-        print(f"[assessment] Grading failed: {traceback.format_exc()}")
+        logger.exception("[assessment] Grading failed")
         raise HTTPException(status_code=500, detail=f"Grading failed: {exc}") from exc
 
     # Finalize session
@@ -568,6 +619,7 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
                 correct=r.correct,
                 selected_index=r.selected_index,
                 correct_index=r.correct_index,
+                explanation=r.explanation,
             )
             for r in result.results
         ],

@@ -16,6 +16,7 @@ Execution:
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +24,8 @@ from ...core.config import settings
 from ..schemas import KnowledgeGraph
 from .planner import classify_difficulty
 from .schemas import AssessmentSession, StudentLearningProfile, VideoTarget, VideoTargetMatrix
+
+logger = logging.getLogger(__name__)
 
 # Passing score threshold (percentage 0-100)
 PASS_THRESHOLD = 70.0
@@ -359,5 +362,5 @@ def load_video_matrix(student_id: str, source_id: str) -> VideoTargetMatrix | No
         data = json.loads(path.read_text(encoding="utf-8"))
         return VideoTargetMatrix.model_validate(data)
     except Exception as exc:
-        print(f"[video_target] Failed to load matrix at {path}: {exc}")
+        logger.warning("[video_target] Failed to load matrix at %s: %s", path, exc)
         return None

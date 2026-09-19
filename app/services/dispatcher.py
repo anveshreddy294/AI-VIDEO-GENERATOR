@@ -55,6 +55,7 @@ def dispatch(
             visual_description=description,
             sequence_index=0,
             image_id=f"IMG_{file_path.stem}",
+            image_path=str(file_path),
             extraction_method="gemini_vision",
             confidence_score=0.95,
         )

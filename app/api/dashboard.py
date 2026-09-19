@@ -1,461 +1,569 @@
-"""VisualAI Dashboard — Interactive Assessment Console & Pipeline Documentation."""
+"""VisualAI Dashboard — Interactive Assessment Console & Pipeline Documentation.
+
+Neomorphic Charcoal (#333333) & Peach Green (#32805b) theme on porcelain canvas (#f4f6fa)
+with live telemetry, transparent quiz grading, video player with downloads,
+Dual-Layer Video RAG, and Anti-Loop Kill Switch protection.
+"""
 
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
 router = APIRouter(tags=["dashboard"])
 
-DASHBOARD_HTML = """
-<!DOCTYPE html>
-<html lang="en">
+DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisualAI — Student Knowledge & Assessment Platform</title>
+    <title>VisualAI — Interactive Assessment Console | STUDY WITH YOUR VISION</title>
+    <!-- Google Fonts: Editorial Serif + Humanist Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            --font-display: 'Playfair Display', Georgia, serif;
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0f1117;
-            color: #e1e4e8;
-            min-height: 100vh;
+            --bg-page: #f4f6fa;
+            --bg-card: #f4f6fa;
+            --bg-surface: #ffffff;
+            --bg-subtle: #e9edf5;
+
+            --text-ink: #333333;
+            --text-body: #4b5563;
+            --text-muted: #6b7280;
+
+            /* 🌿 Peach Green & Botanical Color Palette */
+            --peach-green: #2e7d5e;
+            --peach-green-hover: #24664c;
+            --peach-green-soft: #edf6f2;
+            --peach-green-border: #9ecab4;
+            --peach-green-shadow: rgba(46, 125, 94, 0.32);
+
+            /* 🍑 Warm Peach Accents */
+            --peach: #df7456;
+            --peach-hover: #c96245;
+            --peach-soft: #fdf2ec;
+            --peach-border: #f8c8b6;
+
+            /* Compatibility aliases mapping gold directly to peach-green */
+            --gold: var(--peach-green);
+            --gold-hover: var(--peach-green-hover);
+            --gold-soft: var(--peach-green-soft);
+            --gold-border: var(--peach-green-border);
+            --charcoal: #333333;
+
+            --emerald: #059669;
+            --emerald-soft: #ecfdf5;
+            --emerald-border: #a7f3d0;
+
+            --rose: #dc2626;
+            --rose-soft: #fef2f2;
+            --rose-border: #fecaca;
+
+            --amber: #d97706;
+            --amber-soft: #fffbeb;
+            --amber-border: #fde68a;
+
+            --blue: #2563eb;
+            --blue-soft: #eff6ff;
+            --blue-border: #bfdbfe;
+
+            /* 🪨 Tactile Neomorphism Shadows (Light Mode) */
+            --neo-raised: 7px 7px 16px rgba(180, 192, 210, 0.45), -7px -7px 16px rgba(255, 255, 255, 0.95);
+            --neo-raised-sm: 4px 4px 10px rgba(180, 192, 210, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95);
+            --neo-raised-lg: 12px 12px 28px rgba(180, 192, 210, 0.5), -12px -12px 28px rgba(255, 255, 255, 0.95);
+            --neo-inset: inset 3px 3px 7px rgba(180, 192, 210, 0.4), inset -3px -3px 7px rgba(255, 255, 255, 0.95);
+            --neo-btn: 5px 5px 12px rgba(180, 192, 210, 0.45), -5px -5px 12px rgba(255, 255, 255, 0.9);
+            --neo-btn-active: inset 2px 2px 5px rgba(180, 192, 210, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+            --border-card: rgba(226, 232, 240, 0.6);
+
+            --radius-sm: 10px;
+            --radius-md: 16px;
+            --radius-lg: 24px;
         }
 
+        [data-theme="dark"] {
+            --bg-page: #18191e;
+            --bg-card: #22242c;
+            --bg-surface: #262832;
+            --bg-subtle: #1f2026;
+
+            --text-ink: #f3f4f6;
+            --text-body: #d1d5db;
+            --text-muted: #9ca3af;
+
+            /* 🌿 Peach Green & Botanical Color Palette (Dark Mode) */
+            --peach-green: #4ecb94;
+            --peach-green-hover: #3db882;
+            --peach-green-soft: rgba(78, 203, 148, 0.16);
+            --peach-green-border: rgba(78, 203, 148, 0.38);
+            --peach-green-shadow: rgba(78, 203, 148, 0.28);
+
+            /* 🍑 Warm Peach Accents (Dark Mode) */
+            --peach: #f09a80;
+            --peach-hover: #e28468;
+            --peach-soft: rgba(240, 154, 128, 0.16);
+            --peach-border: rgba(240, 154, 128, 0.38);
+
+            /* Compatibility aliases mapping gold directly to peach-green */
+            --gold: var(--peach-green);
+            --gold-hover: var(--peach-green-hover);
+            --gold-soft: var(--peach-green-soft);
+            --gold-border: var(--peach-green-border);
+
+            --emerald-soft: rgba(5, 150, 105, 0.15);
+            --emerald-border: rgba(5, 150, 105, 0.4);
+
+            --rose-soft: rgba(220, 38, 38, 0.15);
+            --rose-border: rgba(220, 38, 38, 0.4);
+
+            --amber-soft: rgba(217, 119, 6, 0.15);
+            --amber-border: rgba(217, 119, 6, 0.4);
+
+            --blue-soft: rgba(37, 99, 235, 0.15);
+            --blue-border: rgba(37, 99, 235, 0.4);
+
+            /* 🪨 Tactile Neomorphism Shadows (Dark Mode) */
+            --neo-raised: 6px 6px 15px #101114, -6px -6px 15px #2c2f3a;
+            --neo-raised-sm: 3px 3px 8px #101114, -3px -3px 8px #2c2f3a;
+            --neo-raised-lg: 12px 12px 28px #101114, -12px -12px 28px #2c2f3a;
+            --neo-inset: inset 3px 3px 6px #101114, inset -3px -3px 6px #2c2f3a;
+            --neo-btn: 4px 4px 10px #101114, -4px -4px 10px #2c2f3a;
+            --neo-btn-active: inset 2px 2px 5px #101114, inset -2px -2px 5px #2c2f3a;
+            --border-card: rgba(255, 255, 255, 0.06);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--bg-page);
+            color: var(--text-ink);
+            line-height: 1.6;
+            min-height: 100vh;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* 🌟 Fixed Top Navigation Bar */
         .header {
-            background: #161b22;
-            border-bottom: 1px solid #21262d;
-            padding: 16px 36px;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 50;
+            background: rgba(244, 246, 250, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-card);
+            padding: 14px 28px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            transition: background 0.3s ease;
         }
 
-        .header h1 {
-            font-size: 20px;
-            font-weight: 700;
-            color: #f0f6fc;
-            letter-spacing: -0.5px;
+        [data-theme="dark"] .header {
+            background: rgba(24, 25, 30, 0.85);
+        }
+
+        .header-brand {
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 14px;
         }
 
-        .header .version {
-            font-size: 12px;
-            color: #8b949e;
-            background: #21262d;
-            padding: 4px 10px;
+        .brand-monogram {
+            width: 42px;
+            height: 42px;
             border-radius: 12px;
+            background: var(--bg-card);
+            box-shadow: var(--neo-raised-sm);
+            border: 1px solid var(--peach-green-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--peach-green);
+            font-size: 20px;
+            font-weight: 800;
         }
 
-        .nav-links a {
-            color: #58a6ff;
+        .brand-title {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-ink);
+            letter-spacing: -0.3px;
+        }
+
+        .brand-title span {
+            color: var(--peach-green);
+        }
+
+        .brand-tagline {
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--peach);
+            display: block;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .neo-btn {
+            background: var(--bg-card);
+            color: var(--text-ink);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 9px 18px;
+            font-family: var(--font-sans);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: var(--neo-btn);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             text-decoration: none;
-            margin-left: 20px;
-            font-size: 14px;
-            font-weight: 500;
         }
 
-        .nav-links a:hover { color: #79c0ff; }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            padding: 36px 24px;
+        .neo-btn:hover {
+            transform: translateY(-1px);
+            color: var(--peach-green);
         }
 
-        /* Interactive Console */
-        .console-card {
-            background: #161b22;
-            border: 1px solid #30363d;
+        .neo-btn:active {
+            transform: translateY(0);
+            box-shadow: var(--neo-btn-active);
+        }
+
+        .neo-btn-gold, .neo-btn-peach-green {
+            background: linear-gradient(135deg, var(--peach-green), var(--peach-green-hover));
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 4px 14px var(--peach-green-shadow);
+        }
+
+        .neo-btn-gold:hover, .neo-btn-peach-green:hover {
+            color: #ffffff;
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px var(--peach-green-shadow);
+        }
+
+        .neo-btn-peach {
+            background: linear-gradient(135deg, var(--peach), var(--peach-hover));
+            color: #ffffff;
+            border: none;
+            box-shadow: 0 4px 14px rgba(223, 116, 86, 0.32);
+        }
+
+        .neo-btn-peach:hover {
+            color: #ffffff;
+            filter: brightness(1.08);
+            transform: translateY(-1px);
+        }
+
+        .neo-icon-btn {
+            width: 40px;
+            height: 40px;
             border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 48px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-        }
-
-        .console-title {
-            font-size: 20px;
-            font-weight: 700;
-            color: #f0f6fc;
-            margin-bottom: 6px;
+            background: var(--bg-card);
+            color: var(--text-ink);
+            border: 1px solid var(--border-card);
+            box-shadow: var(--neo-btn);
             display: flex;
             align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .neo-icon-btn:hover {
+            color: var(--peach-green);
+        }
+
+        .neo-icon-btn:active {
+            box-shadow: var(--neo-btn-active);
+        }
+
+        /* 🚀 Main Page Container */
+        .container {
+            max-width: 1140px;
+            margin: 0 auto;
+            padding: 104px 24px 60px;
+        }
+
+        /* 🏛 Hero Section & Animated Stat Counters */
+        .hero {
+            text-align: center;
+            padding: 30px 10px 40px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
             gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: var(--bg-card);
+            box-shadow: var(--neo-raised-sm);
+            border: 1px solid var(--peach-green-border);
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--peach-green);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 16px;
         }
 
-        .console-desc {
-            font-size: 14px;
-            color: #8b949e;
-            margin-bottom: 20px;
+        .hero-title {
+            font-family: var(--font-display);
+            font-size: clamp(32px, 5vw, 48px);
+            font-weight: 700;
+            color: var(--text-ink);
+            line-height: 1.15;
+            margin-bottom: 14px;
+            letter-spacing: -0.5px;
         }
 
-        .tabs {
+        .hero-subtitle {
+            font-size: 16px;
+            color: var(--text-muted);
+            max-width: 720px;
+            margin: 0 auto 36px;
+            line-height: 1.6;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-md);
+            padding: 22px;
+            box-shadow: var(--neo-raised);
+            text-align: center;
+            transition: transform 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+
+        .stat-number {
+            font-family: var(--font-display);
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--peach-green);
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+        }
+
+        /* 🪟 Neomorphic Main Console Card */
+        .console-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-lg);
+            padding: 36px;
+            box-shadow: var(--neo-raised-lg);
+            margin-bottom: 50px;
+        }
+
+        .console-header {
             display: flex;
-            gap: 8px;
-            border-bottom: 1px solid #30363d;
-            margin-bottom: 20px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .console-title-area h2 {
+            font-family: var(--font-display);
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-ink);
+        }
+
+        .console-title-area p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        /* 🎚 Neomorphic Tab Switcher */
+        .tab-switcher {
+            display: inline-flex;
+            background: var(--bg-card);
+            box-shadow: var(--neo-inset);
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
         }
 
         .tab-btn {
-            background: none;
+            background: transparent;
             border: none;
-            color: #8b949e;
-            font-size: 14px;
+            padding: 8px 18px;
+            border-radius: 10px;
+            font-family: var(--font-sans);
+            font-size: 13px;
             font-weight: 600;
-            padding: 8px 16px;
+            color: var(--text-muted);
             cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
         }
 
         .tab-btn.active {
-            color: #58a6ff;
-            border-bottom-color: #58a6ff;
+            background: var(--bg-surface);
+            color: var(--text-ink);
+            box-shadow: var(--neo-raised-sm);
         }
 
+        [data-theme="dark"] .tab-btn.active {
+            background: #2b2e38;
+            color: var(--peach-green);
+        }
+
+        /* 📥 Forms & Inset Inputs */
         .form-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            margin-bottom: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
         }
 
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
-        }
-
-        .form-group.full {
-            grid-column: 1 / -1;
+            gap: 8px;
         }
 
         .form-label {
             font-size: 12px;
-            font-weight: 600;
-            color: #c9d1d9;
+            font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            color: var(--text-ink);
         }
 
-        .form-input, .form-select {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 10px 14px;
+        .neo-input, .neo-select {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 12px 16px;
+            font-family: var(--font-sans);
             font-size: 14px;
-            color: #f0f6fc;
+            color: var(--text-ink);
+            box-shadow: var(--neo-inset);
             outline: none;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s ease;
+            width: 100%;
         }
 
-        .form-input:focus, .form-select:focus {
-            border-color: #58a6ff;
+        .neo-input:focus, .neo-select:focus {
+            border-color: var(--peach-green);
         }
 
-        .action-btn {
-            background: #238636;
-            color: #ffffff;
-            border: none;
-            border-radius: 6px;
-            padding: 12px 24px;
-            font-size: 15px;
-            font-weight: 600;
+        .dropzone-area {
+            border: 2px dashed var(--peach-green-border);
+            background: var(--bg-card);
+            box-shadow: var(--neo-inset);
+            border-radius: var(--radius-md);
+            padding: 36px 20px;
+            text-align: center;
             cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: background 0.2s, transform 0.1s;
+            transition: all 0.2s ease;
+            margin-bottom: 24px;
         }
 
-        .action-btn:hover {
-            background: #2ea043;
+        .dropzone-area:hover {
+            border-color: var(--peach-green);
+            background: var(--peach-green-soft);
         }
 
-        .action-btn:active {
-            transform: scale(0.99);
-        }
-
-        .action-btn:disabled {
-            background: #23863688;
-            cursor: not-allowed;
-        }
-
-        /* Status & Alert Banner */
-        .status-box {
-            display: none;
-            padding: 14px 18px;
-            border-radius: 8px;
-            margin-top: 18px;
-            font-size: 14px;
-            line-height: 1.5;
-        }
-
-        .status-loading {
-            background: #1f6feb22;
-            border: 1px solid #1f6feb66;
-            color: #79c0ff;
-            display: block;
-        }
-
-        .status-error {
-            background: #da363322;
-            border: 1px solid #da363366;
-            color: #f85149;
-            display: block;
-        }
-
-        .status-success {
-            background: #23863622;
-            border: 1px solid #23863666;
-            color: #56d364;
-            display: block;
-        }
-
-        .status-warning {
-            background: #d2992222;
-            border: 1px solid #d2992266;
-            color: #e3b341;
-            display: block;
-        }
-
-        /* Quiz Area */
-        .quiz-area {
-            display: none;
-            margin-top: 24px;
-            padding-top: 24px;
-            border-top: 1px solid #30363d;
-        }
-
-        .quiz-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 18px;
-        }
-
-        .badge {
-            font-size: 11px;
-            font-weight: 600;
-            padding: 4px 8px;
-            border-radius: 12px;
-            background: #21262d;
-            color: #8b949e;
-        }
-
-        .badge-blue { background: #1f6feb33; color: #58a6ff; }
-        .badge-green { background: #23863633; color: #3fb950; }
-        .badge-amber { background: #d2992233; color: #d29922; }
-
-        .question-card {
-            background: #0d1117;
-            border: 1px solid #21262d;
-            border-radius: 8px;
-            padding: 18px;
-            margin-bottom: 16px;
-        }
-
-        .question-meta {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 10px;
-        }
-
-        .question-stem {
-            font-size: 15px;
-            font-weight: 600;
-            color: #f0f6fc;
-            margin-bottom: 14px;
-            line-height: 1.5;
-        }
-
-        .options-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .option-item {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 10px 14px;
-            border-radius: 6px;
-            border: 1px solid #30363d;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .option-item:hover {
-            border-color: #58a6ff;
-            background: #161b22;
-        }
-
-        .option-item input[type="radio"] {
-            accent-color: #1f6feb;
-            width: 16px;
-            height: 16px;
-        }
-
-        .option-text {
-            font-size: 14px;
-            color: #c9d1d9;
-        }
-
-        /* Results Display */
-        .results-box {
-            display: none;
-            margin-top: 24px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 20px;
-        }
-
-        .score-banner {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 16px;
-            padding-bottom: 16px;
-            border-bottom: 1px solid #21262d;
-        }
-
-        .score-number {
+        .dropzone-icon {
             font-size: 32px;
-            font-weight: 800;
-            color: #3fb950;
+            margin-bottom: 8px;
         }
 
-        /* Workflow Documentation Section */
-        .flow-title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #f0f6fc;
-            margin-bottom: 6px;
-        }
-
-        .flow-subtitle {
-            font-size: 14px;
-            color: #8b949e;
-            margin-bottom: 36px;
-        }
-
-        .step {
-            display: flex;
-            gap: 20px;
-            padding-bottom: 28px;
-            position: relative;
-        }
-
-        .step-indicator {
-            flex-shrink: 0;
-            width: 42px;
-            height: 42px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: 700;
-        }
-
-        .step-1 .step-indicator { background: #1f6feb; color: #fff; }
-        .step-2 .step-indicator { background: #238636; color: #fff; }
-        .step-3 .step-indicator { background: #9e6a03; color: #fff; }
-
-        .step-content { flex: 1; }
-        .step-label { font-size: 11px; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
-        .step-1 .step-label { color: #58a6ff; }
-        .step-2 .step-label { color: #3fb950; }
-        .step-3 .step-label { color: #d29922; }
-
-        .step-name { font-size: 17px; font-weight: 600; color: #f0f6fc; margin-bottom: 6px; }
-        .step-desc { font-size: 13px; color: #8b949e; line-height: 1.6; margin-bottom: 10px; }
-
-        .step-endpoint {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: #161b22;
-            border: 1px solid #21262d;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-family: monospace;
-            font-size: 12px;
-        }
-
-        .method { font-weight: 700; font-size: 10px; padding: 2px 5px; border-radius: 3px; }
-        .method-post { background: #238636; color: #fff; }
-        .method-get { background: #1f6feb; color: #fff; }
-
-        .links-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-top: 24px;
-        }
-
-        .link-card {
-            background: #161b22;
-            border: 1px solid #21262d;
-            border-radius: 8px;
-            padding: 14px;
-            text-decoration: none;
-            transition: border-color 0.2s;
-        }
-
-        .link-card:hover { border-color: #388bfd; }
-        .link-title { font-size: 14px; font-weight: 600; color: #f0f6fc; }
-        .link-desc { font-size: 12px; color: #8b949e; margin-top: 4px; }
-
-        /* Observable Pipeline Timeline */
+        /* 🚀 Live Pipeline Telemetry Timeline Card */
         .timeline-card {
-            background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 16px;
-            margin-top: 20px;
-            margin-bottom: 20px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 28px 0;
+            box-shadow: var(--neo-raised);
+            animation: fadeIn 0.3s ease-out;
         }
 
         .timeline-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin-bottom: 12px;
-        }
-
-        .timeline-pulse-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #58a6ff;
-            display: inline-block;
-            box-shadow: 0 0 8px #58a6ff;
-            animation: pulse-ring 1.5s infinite;
-        }
-
-        @keyframes pulse-ring {
-            0% { transform: scale(0.95); opacity: 0.8; }
-            50% { transform: scale(1.3); opacity: 1; }
-            100% { transform: scale(0.95); opacity: 0.8; }
-        }
-
-        .progress-bar-bg {
-            background: #21262d;
-            height: 6px;
-            border-radius: 3px;
-            overflow: hidden;
             margin-bottom: 16px;
         }
 
+        .timeline-title-area {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .timeline-pulse-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--peach-green);
+            box-shadow: 0 0 0 0 var(--peach-green-shadow);
+            animation: pulse-ring 1.8s infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 var(--peach-green-shadow); }
+            70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(46, 125, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 var(--peach-green-shadow); }
+        }
+
+        .progress-bar-bg {
+            background: var(--bg-card);
+            box-shadow: var(--neo-inset);
+            border-radius: 999px;
+            height: 10px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
         .progress-bar-fill {
-            background: linear-gradient(90deg, #1f6feb, #238636);
+            background: linear-gradient(90deg, var(--peach-green), #4ecb94);
             height: 100%;
-            transition: width 0.3s ease;
+            border-radius: 999px;
+            transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .timeline-stages-list {
@@ -468,381 +576,804 @@ DASHBOARD_HTML = """
             display: flex;
             align-items: flex-start;
             gap: 12px;
+            padding: 12px 14px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-surface);
+            box-shadow: var(--neo-raised-sm);
             font-size: 13px;
-            color: #8b949e;
-            transition: all 0.2s ease;
-        }
-
-        .stage-item.status-running {
-            color: #f0f6fc;
-            font-weight: 600;
-        }
-
-        .stage-item.status-completed {
-            color: #c9d1d9;
-        }
-
-        .stage-item.status-warning {
-            color: #d29922;
-        }
-
-        .stage-item.status-failed {
-            color: #f85149;
-            font-weight: 600;
         }
 
         .stage-icon {
             flex-shrink: 0;
-            width: 20px;
-            height: 20px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            font-weight: 700;
+            font-size: 12px;
+        }
+
+        .status-running .stage-icon { background: var(--amber-soft); color: var(--amber); }
+        .status-completed .stage-icon { background: var(--emerald-soft); color: var(--emerald); }
+        .status-failed .stage-icon { background: var(--rose-soft); color: var(--rose); }
+
+        /* 📋 Diagnostic Assessment Quiz Section */
+        .quiz-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-md);
+            padding: 28px;
+            box-shadow: var(--neo-raised);
+            margin-top: 28px;
+        }
+
+        .quiz-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-card);
+        }
+
+        .question-stem {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-ink);
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+
+        .options-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .option-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: var(--radius-sm);
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            box-shadow: var(--neo-raised-sm);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .option-item:hover {
+            transform: translateX(2px);
+            border-color: var(--peach-green);
+        }
+
+        .option-item input[type="radio"] {
+            margin-top: 4px;
+            accent-color: var(--peach-green);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 999px;
             font-size: 11px;
-            margin-top: 1px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .status-pending .stage-icon { background: #21262d; color: #484f58; }
-        .status-running .stage-icon { background: #1f6feb; color: #fff; animation: spin 1s linear infinite; }
-        .status-completed .stage-icon { background: #238636; color: #fff; }
-        .status-warning .stage-icon { background: #9e6a03; color: #fff; }
-        .status-failed .stage-icon { background: #da3633; color: #fff; }
+        .badge-peach-green, .badge-gold { background: var(--peach-green-soft); color: var(--peach-green); border: 1px solid var(--peach-green-border); }
+        .badge-peach { background: var(--peach-soft); color: var(--peach); border: 1px solid var(--peach-border); }
+        .badge-green { background: var(--emerald-soft); color: var(--emerald); border: 1px solid var(--emerald-border); }
+        .badge-rose { background: var(--rose-soft); color: var(--rose); border: 1px solid var(--rose-border); }
+        .badge-amber { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border); }
+        .badge-blue { background: var(--blue-soft); color: var(--blue); border: 1px solid var(--blue-border); }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        /* 🔍 Transparent Question Review Cards */
+        .review-card {
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            margin-bottom: 16px;
+            background: var(--bg-card);
+            box-shadow: var(--neo-raised-sm);
+            border: 1px solid var(--border-card);
         }
 
-        .stage-details { flex: 1; }
-        .stage-title { font-weight: 600; margin-bottom: 2px; }
-        .stage-message { font-size: 12px; color: #8b949e; }
-        .stage-meta {
+        .review-correct { border-left: 5px solid var(--emerald); }
+        .review-incorrect { border-left: 5px solid var(--rose); }
+
+        /* 🎥 Video Target Matrix Cards */
+        .target-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            box-shadow: var(--neo-raised-sm);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        /* 🎥 Video Modal Overlay */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal-card {
+            background: var(--bg-page);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-lg);
+            width: 100%;
+            max-width: 860px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            padding: 28px;
+        }
+
+        .meta-chip {
+            background: var(--bg-card);
+            box-shadow: var(--neo-raised-sm);
+            border: 1px solid var(--border-card);
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 11px;
+            color: var(--text-body);
+        }
+
+        /* 🗺 Flow Architecture Documentation */
+        .flow-section {
+            margin-top: 60px;
+        }
+
+        .flow-title {
+            font-family: var(--font-display);
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-ink);
+            margin-bottom: 6px;
+        }
+
+        .step-card {
+            display: flex;
+            gap: 24px;
+            padding: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-md);
+            margin-bottom: 16px;
+            box-shadow: var(--neo-raised);
+        }
+
+        .step-num {
+            flex-shrink: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: var(--bg-card);
+            box-shadow: var(--neo-raised-sm);
+            border: 1px solid var(--peach-green-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--peach-green);
+        }
+
+        /* ❓ FAQ Accordion */
+        .faq-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            margin-bottom: 12px;
+            box-shadow: var(--neo-raised-sm);
+            overflow: hidden;
+        }
+
+        .faq-btn {
+            width: 100%;
+            padding: 16px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: transparent;
+            border: none;
+            font-family: var(--font-sans);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-ink);
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .faq-btn:hover {
+            color: var(--peach-green);
+        }
+
+        .faq-content {
+            display: none;
+            padding: 0 20px 16px;
+            font-size: 14px;
+            color: var(--text-body);
+            line-height: 1.6;
+        }
+
+        /* 🏛 Multi-Column Luxury Footer */
+        .footer {
+            margin-top: 80px;
+            padding-top: 40px;
+            border-top: 1px solid var(--border-card);
             display: flex;
             flex-wrap: wrap;
-            gap: 6px;
-            margin-top: 4px;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            font-size: 13px;
+            color: var(--text-muted);
         }
-        .meta-chip {
-            background: #21262d;
-            color: #8b949e;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-family: monospace;
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>
-            <span>🎓 VisualAI</span>
-            <span class="version">v0.4.0</span>
-        </h1>
-        <nav class="nav-links">
-            <a href="/instructor" target="_blank" style="color:#f0883e;font-weight:600;">👩‍🏫 Instructor Portal</a>
-            <a href="/docs" target="_blank">Swagger API</a>
-            <a href="/redoc" target="_blank">ReDoc</a>
-            <a href="/health" target="_blank">Health Check</a>
-        </nav>
-    </div>
 
-    <div class="container">
-        <!-- ⚡ INTERACTIVE AUTOMATED CONSOLE -->
-        <div class="console-card">
-            <div class="console-title">🚀 Automated Learning & Assessment Console</div>
-            <div class="console-desc">
-                Upload your lecture PDF, notes, or select an existing document. Step 1 will extract the Knowledge Graph and immediately hand off to Step 2 to generate your personalized quiz questions!
+    <!-- 🌟 Fixed Top Navigation Bar -->
+    <header class="header">
+        <div class="header-brand">
+            <div class="brand-monogram">V</div>
+            <div>
+                <span class="brand-title">Visual<span>AI</span></span>
+                <span class="brand-tagline">STUDY WITH YOUR VISION</span>
+            </div>
+        </div>
+        <div class="nav-actions">
+            <button id="themeToggleBtn" class="neo-icon-btn" onclick="toggleTheme()" title="Toggle Theme (Light / Dark)">
+                <span id="themeIcon">🌓</span>
+            </button>
+            <a href="/instructor" target="_blank" class="neo-btn">
+                <span>👩‍🏫 Instructor Portal</span>
+            </a>
+            <a href="/docs" target="_blank" class="neo-btn">
+                <span>API Docs</span>
+            </a>
+            <a href="/health" target="_blank" class="neo-btn">
+                <span>System Health</span>
+            </a>
+        </div>
+    </header>
+
+    <main class="container">
+
+        <!-- 🏛 Hero Overview -->
+        <section class="hero">
+            <div class="hero-badge">Adaptive Pedagogical Pipeline</div>
+            <h1 class="hero-title">Study With Your Vision</h1>
+            <p class="hero-subtitle">
+                Transform static study materials into programmatic, personalized visual lessons grounded strictly in authoritative textbooks without hallucination loops.
+            </p>
+
+            <!-- 📊 Animated Statistics Counters -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" data-target="4">0</div>
+                    <div class="stat-label">Adaptive Pipeline Phases</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" data-target="60" data-prefix="< " data-suffix="s">0</div>
+                    <div class="stat-label">Diagnostic Latency</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" data-target="100" data-suffix="%">0</div>
+                    <div class="stat-label">Layer A Ground Truth</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" data-target="0" data-suffix="%">0</div>
+                    <div class="stat-label">Hallucination Propagation</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 🪟 Neomorphic Main Console Card -->
+        <section class="console-card">
+            <div class="console-header">
+                <div class="console-title-area">
+                    <h2>Interactive Assessment Control</h2>
+                    <p>Execute end-to-end multimodal ingestion, diagnostic profiling, and video synthesis</p>
+                </div>
+                <div class="tab-switcher">
+                    <button class="tab-btn active" id="tabUpload" onclick="switchTab('upload')">📁 Ingest New Material</button>
+                    <button class="tab-btn" id="tabExisting" onclick="switchTab('existing')">📚 Existing Course</button>
+                </div>
             </div>
 
-            <div class="tabs">
-                <button class="tab-btn active" id="tabUpload" onclick="switchTab('upload')">📤 Upload & Auto-Assess</button>
-                <button class="tab-btn" id="tabExisting" onclick="switchTab('existing')">📚 Assess Existing Material</button>
-            </div>
-
-            <!-- Tab 1: Upload & Auto-Assess -->
+            <!-- Pane 1: Upload Material -->
             <div id="paneUpload">
+                <div class="dropzone-area" onclick="document.getElementById('fileInput').click()">
+                    <div class="dropzone-icon">📄</div>
+                    <div style="font-weight:700;font-size:15px;color:var(--text-ink);margin-bottom:4px;">
+                        Drop Course PDF, Notes, Images, or Video Here
+                    </div>
+                    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;">
+                        Supports PDF, PNG, JPG, TXT, and MP4 (Up to 100MB)
+                    </div>
+                    <button type="button" class="neo-btn" style="pointer-events:none;">
+                        <span>Browse Files</span>
+                    </button>
+                    <input type="file" id="fileInput" style="display:none;" onchange="handleFileSelected()" />
+                </div>
+                <div id="selectedFileInfo" style="display:none;margin-bottom:16px;font-size:13px;font-weight:600;color:var(--peach-green);"></div>
+
                 <div class="form-grid">
-                    <div class="form-group full">
-                        <label class="form-label">Study Material File (PDF, TXT, Image, Video)</label>
-                        <input type="file" id="fileInput" class="form-input" accept=".pdf,.txt,.jpeg,.jpg,.png,.mp4,.mov,.mkv" />
+                    <div class="form-group">
+                        <label class="form-label" for="studentId">Student Identifier</label>
+                        <input type="text" id="studentId" class="neo-input" value="student_1" placeholder="e.g. student_1" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Student ID</label>
-                        <input type="text" id="studentIdUpload" class="form-input" value="student_1" placeholder="e.g. student_1" />
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Max Questions</label>
-                        <input type="number" id="maxQuestionsUpload" class="form-input" value="5" min="1" max="15" />
+                        <label class="form-label" for="maxQuestions">Diagnostic Questions</label>
+                        <input type="number" id="maxQuestions" class="neo-input" value="5" min="1" max="15" />
                     </div>
                 </div>
-                <button class="action-btn" id="btnUpload" onclick="runUploadAndAssess()">
-                    <span>⚡ Upload & Generate Quiz</span>
+                <button class="neo-btn neo-btn-peach-green" id="btnUpload" onclick="runUpload()" style="width:100%;justify-content:center;padding:14px;">
+                    <span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>
                 </button>
             </div>
 
-            <!-- Tab 2: Assess Existing Material -->
+            <!-- Pane 2: Select Existing Course -->
             <div id="paneExisting" style="display:none;">
                 <div class="form-grid">
-                    <div class="form-group full">
-                        <label class="form-label">Select Ingested Material</label>
-                        <select id="sourceSelect" class="form-select">
-                            <option value="">Loading sources...</option>
+                    <div class="form-group" style="grid-column:1/-1;">
+                        <label class="form-label" for="sourceSelect">Select Ingested Material</label>
+                        <select id="sourceSelect" class="neo-select">
+                            <option value="">Loading course catalog...</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Student ID</label>
-                        <input type="text" id="studentIdExisting" class="form-input" value="student_1" placeholder="e.g. student_1" />
+                        <label class="form-label" for="studentIdExisting">Student Identifier</label>
+                        <input type="text" id="studentIdExisting" class="neo-input" value="student_1" />
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Max Questions</label>
-                        <input type="number" id="maxQuestionsExisting" class="form-input" value="5" min="1" max="15" />
+                        <label class="form-label" for="maxQuestionsExisting">Diagnostic Questions</label>
+                        <input type="number" id="maxQuestionsExisting" class="neo-input" value="5" min="1" max="15" />
                     </div>
                 </div>
-                <button class="action-btn" id="btnAssessExisting" onclick="runExistingAssess()">
-                    <span>⚡ Generate Quiz Questions</span>
+                <button class="neo-btn neo-btn-peach-green" id="btnAssessExisting" onclick="runExistingAssess()" style="width:100%;justify-content:center;padding:14px;">
+                    <span>⚡ Generate Diagnostic Quiz from Material</span>
                 </button>
             </div>
 
-            <!-- Observable Activity Telemetry Timeline Card -->
+            <!-- 🚀 Live Pipeline Telemetry Timeline Card -->
             <div id="timelineCard" class="timeline-card" style="display:none;">
                 <div class="timeline-header">
-                    <div style="display:flex;align-items:center;gap:8px;">
+                    <div class="timeline-title-area">
                         <span class="timeline-pulse-dot" id="timelinePulse"></span>
-                        <span style="font-weight:700;font-size:14px;color:#f0f6fc;">Pipeline Execution Telemetry</span>
+                        <span style="font-weight:700;font-size:15px;">Pipeline Execution Telemetry</span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:12px;">
-                        <span id="timelineTimer" style="font-size:12px;color:#8b949e;font-variant-numeric:tabular-nums;">0.0s</span>
-                        <span id="timelinePercent" style="font-size:12px;font-weight:600;color:#58a6ff;">0%</span>
+                    <div style="font-weight:700;font-size:14px;color:var(--peach-green);">
+                        <span id="timelineTimer">0.0s</span> &middot; <span id="timelinePercent">0%</span>
                     </div>
                 </div>
                 <div class="progress-bar-bg">
-                    <div id="timelineProgressBar" class="progress-bar-fill" style="width: 0%;"></div>
+                    <div id="timelineProgressBar" class="progress-bar-fill" style="width:0%;"></div>
                 </div>
                 <div id="timelineStagesList" class="timeline-stages-list"></div>
             </div>
 
-            <!-- Status Banner -->
-            <div id="statusBox" class="status-box"></div>
+            <!-- Status Box -->
+            <div id="statusBox" style="display:none;padding:14px;border-radius:var(--radius-sm);margin:20px 0;font-size:14px;font-weight:600;"></div>
 
-            <!-- Quiz Runner Card -->
-            <div id="quizArea" class="quiz-area">
+            <!-- 📋 Diagnostic Assessment Quiz Section -->
+            <div id="quizSection" class="quiz-card" style="display:none;">
                 <div class="quiz-header">
                     <div>
-                        <span class="badge badge-blue" id="lblSession">Session</span>
-                        <span class="badge badge-green" id="lblSource">Source</span>
-                        <span class="badge badge-amber" id="lblStudent">Student</span>
+                        <span class="badge badge-peach-green" id="lblConceptBadge">CONCEPT</span>
+                        <span style="font-size:13px;color:var(--text-muted);margin-left:8px;" id="lblQuestionCounter">Question 1 of 5</span>
                     </div>
-                    <span style="font-size:13px;color:#8b949e;" id="lblCount">0 Questions</span>
+                    <span class="badge badge-blue">PHASE 2 DIAGNOSTIC</span>
                 </div>
-
-                <div id="questionsContainer"></div>
-
-                <button class="action-btn" style="background:#1f6feb;margin-top:12px;" id="btnSubmitQuiz" onclick="submitQuiz()">
-                    <span>📝 Submit Answers & Grade Quiz</span>
-                </button>
+                <div class="question-stem" id="lblQuestionStem"></div>
+                <div class="options-list" id="optionsContainer"></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <span style="font-size:12px;color:var(--text-muted);">Options shuffled via Fisher-Yates</span>
+                    <button class="neo-btn neo-btn-peach-green" id="btnNextQuestion" onclick="submitCurrentAnswer()">
+                        <span>Next Question ➔</span>
+                    </button>
+                </div>
             </div>
 
-            <!-- Results & Step 3 Directive Card -->
-            <div id="resultsBox" class="results-box">
-                <div class="score-banner">
-                    <div>
-                        <div style="font-size:13px;color:#8b949e;text-transform:uppercase;font-weight:600;">Assessment Score</div>
-                        <div class="score-number" id="lblScore">0.0%</div>
-                        <div id="lblFraction" style="font-size:13px;color:#8b949e;margin-top:4px;">0 / 0 correct</div>
+            <!-- 🔍 Detailed Question Review Section -->
+            <div id="quizReviewSection" style="display:none;margin-top:28px;">
+                <div style="font-family:var(--font-display);font-size:22px;font-weight:700;margin-bottom:6px;">Diagnostic Assessment Review</div>
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">Inspect your submissions against authoritative textbook ground truth.</p>
+                <div id="quizReviewContainer"></div>
+            </div>
+
+            <!-- 🎯 Diagnostic Score & Profile Summary -->
+            <div id="resultsBox" class="quiz-card" style="display:none;margin-top:28px;">
+                <div class="quiz-header">
+                    <span style="font-weight:700;font-size:16px;">Student Learning Profile &amp; Knowledge Summary</span>
+                    <div id="lblGradeStatus"></div>
+                </div>
+                <div class="form-grid" style="margin-bottom:16px;">
+                    <div class="stat-card" style="padding:16px;">
+                        <div class="stat-number" id="lblScore">0.0%</div>
+                        <div class="stat-label" id="lblFraction">Score</div>
                     </div>
-                    <div style="display:flex;align-items:center;gap:20px;">
-                        <div style="text-align:right;">
-                            <div style="font-size:12px;color:#8b949e;text-transform:uppercase;font-weight:600;">Overall Profile Score</div>
-                            <div id="lblProfileScore" style="font-size:24px;font-weight:700;color:#58a6ff;">0.0%</div>
-                        </div>
-                        <div id="lblGradeStatus"></div>
+                    <div class="stat-card" style="padding:16px;">
+                        <div class="stat-number" id="lblProfileScore">0.0%</div>
+                        <div class="stat-label">Cumulative Mastery</div>
                     </div>
                 </div>
-
                 <div style="margin-bottom:14px;">
-                    <div style="font-size:12px;font-weight:600;color:#8b949e;text-transform:uppercase;margin-bottom:6px;">Mastery Breakdown</div>
-                    <div id="lblMasteries" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);margin-bottom:8px;">Concept Mastery Breakdown</div>
+                    <div id="lblMasteries" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
                 </div>
-
-                <div id="boxPrereqs" style="margin-bottom:14px;display:none;">
-                    <div style="font-size:12px;font-weight:600;color:#f85149;text-transform:uppercase;margin-bottom:6px;">Prerequisite Gaps Detected</div>
-                    <div id="lblPrereqs" style="font-size:13px;color:#f85149;"></div>
+                <div id="boxPrereqs" style="display:none;background:var(--amber-soft);border:1px solid var(--amber-border);border-radius:var(--radius-sm);padding:14px;margin-top:14px;color:var(--amber);">
+                    <div style="font-weight:700;font-size:13px;margin-bottom:4px;">⚠ Prerequisite Gaps Identified</div>
+                    <div id="lblPrereqs" style="font-size:13px;"></div>
                 </div>
+            </div>
 
-                <div style="background:#161b22;border:1px solid #21262d;border-radius:6px;padding:14px;margin-top:12px;">
-                    <div style="font-size:12px;font-weight:600;color:#58a6ff;text-transform:uppercase;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
-                        <span>Step 3 Handoff — Video Target Matrix</span>
-                        <span id="lblVideoCountBadge" class="badge badge-blue"></span>
+            <!-- 🎬 Video Remediation Section -->
+            <div id="remediationTargetsSection" style="display:none;margin-top:32px;">
+                <div style="font-family:var(--font-display);font-size:22px;font-weight:700;margin-bottom:6px;">Phase 3: Video Target Matrix</div>
+                <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Targeted micro-lessons generated to remediate diagnosed misconceptions.</p>
+                <div id="videoTargetsList"></div>
+            </div>
+        </section>
+
+        <!-- 🎥 Video Player Modal -->
+        <div id="videoModal" class="modal-overlay">
+            <div class="modal-card">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+                    <div>
+                        <h3 id="modalVideoTitle" style="font-family:var(--font-display);font-size:20px;font-weight:700;">Remediation Lesson</h3>
+                        <p id="modalVideoSub" style="font-size:13px;color:var(--text-muted);">Targeted Pedagogical Micro-Lesson</p>
                     </div>
-                    <div id="lblVideoDirective" style="font-size:13px;color:#c9d1d9;line-height:1.5;"></div>
-                    <div id="lblVideoQueue" style="margin-top:10px;display:flex;flex-direction:column;gap:8px;"></div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <a id="btnDownloadVideo" href="#" download class="neo-btn" style="display:none;">
+                            <span>⬇ Download Video (.mp4)</span>
+                        </a>
+                        <button onclick="closeVideoModal()" class="neo-btn">✕ Close</button>
+                    </div>
                 </div>
 
-                <!-- Video Player Modal -->
-                <div id="videoModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;backdrop-filter:blur(4px);justify-content:center;align-items:center;">
-                    <div style="background:#161b22;border:1px solid #30363d;border-radius:12px;width:90%;max-width:860px;padding:24px;box-shadow:0 16px 40px rgba(0,0,0,0.6);position:relative;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <div id="modalVideoLoader" style="display:none;padding:48px;text-align:center;">
+                    <div style="display:inline-block;width:40px;height:40px;border:3px solid var(--border-card);border-top-color:var(--peach-green);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px;"></div>
+                    <div id="modalProgressText" style="font-weight:700;font-size:16px;">Synthesizing Remediation Video...</div>
+                    <div id="modalProgressSub" style="font-size:13px;color:var(--text-muted);margin-top:6px;">Generating script, TTS voiceover, and motion visuals</div>
+                </div>
+
+                <div id="modalVideoWrapper" style="display:none;">
+                    <video id="html5VideoPlayer" controls style="width:100%;max-height:440px;border-radius:var(--radius-sm);background:#000;outline:none;" preload="auto">
+                        <source id="videoSource" src="" type="video/mp4">
+                        <track id="videoTrack" label="English" kind="subtitles" srclang="en" src="" default>
+                        Your browser does not support HTML5 video playback.
+                    </video>
+
+                    <!-- 💬 Dual-Traceable Video RAG Assistant -->
+                    <div id="videoRagSection" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-card);">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <span style="font-weight:700;font-size:15px;">💬 Dual-Traceable Video RAG</span>
+                                <span id="lblVideoTimestampBadge" class="badge badge-peach-green">⏱ Syncing Playhead...</span>
+                                <span class="badge badge-green">Layer A Grounded</span>
+                            </div>
+                            <button onclick="toggleRagPanel()" id="btnToggleRag" class="neo-btn" style="padding:4px 10px;font-size:12px;">Hide</button>
+                        </div>
+
+                        <div id="videoRagContent">
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+                                <button onclick="askQuickQuestion('Explain what is happening in this scene.')" class="meta-chip" style="cursor:pointer;">💡 Explain Scene</button>
+                                <button onclick="askQuickQuestion('Can you give an intuitive real-world example of this concept?')" class="meta-chip" style="cursor:pointer;">🌍 Real-World Example</button>
+                                <button onclick="askQuickQuestion('What is the core rule or formula to prevent quiz mistakes?')" class="meta-chip" style="cursor:pointer;">⚖ Core Mastery Rule</button>
+                            </div>
+
+                            <div id="ragChatLog" style="max-height:220px;overflow-y:auto;background:var(--bg-card);box-shadow:var(--neo-inset);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:12px;margin-bottom:12px;font-size:14px;">
+                                <div style="color:var(--text-muted);font-size:13px;font-style:italic;">
+                                    Ask questions about this video clip. The assistant responds strictly grounded in Layer A textbook content.
+                                </div>
+                            </div>
+
+                            <div style="display:flex;gap:10px;">
+                                <input type="text" id="ragInput" class="neo-input" placeholder="Ask a question about this video or concept..." style="flex:1;" onkeydown="if(event.key==='Enter') sendRagQuestion();" />
+                                <button id="btnSendRag" onclick="sendRagQuestion()" class="neo-btn neo-btn-peach-green">
+                                    <span>Ask ➔</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 🎯 Phase 4 Verification Re-Testing Action -->
+                    <div id="remediationActionArea" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-card);">
+                        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
                             <div>
-                                <h3 id="modalVideoTitle" style="color:#f0f6fc;font-size:18px;font-weight:700;">Remediation Video</h3>
-                                <p id="modalVideoSub" style="color:#8b949e;font-size:13px;">Targeted Micro-Lesson</p>
+                                <div style="font-weight:700;font-size:15px;">Phase 4: Comprehension Verification Check</div>
+                                <div style="font-size:13px;color:var(--text-muted);">Watched the video? Complete a 1-question verification to resolve the misconception.</div>
                             </div>
-                            <button onclick="closeVideoModal()" style="background:#21262d;border:1px solid #30363d;color:#c9d1d9;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;">✕ Close</button>
+                            <button id="btnVerifyMastery" onclick="launchRemediationCheck()" class="neo-btn neo-btn-peach-green" style="background:#059669;">
+                                <span>🎯 Verify Mastery (Re-Test)</span>
+                            </button>
                         </div>
-                        <div id="modalVideoLoader" style="display:none;padding:40px;text-align:center;">
-                            <div style="display:inline-block;width:36px;height:36px;border:3px solid #30363d;border-top-color:#58a6ff;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:14px;"></div>
-                            <div id="modalProgressText" style="color:#f0f6fc;font-weight:600;font-size:15px;">Synthesizing Lesson Video...</div>
-                            <div id="modalProgressSub" style="color:#8b949e;font-size:12px;margin-top:6px;">Generating timed script, voiceover, and visual cards</div>
-                        </div>
-                        <div id="modalVideoWrapper" style="display:none;text-align:center;">
-                            <video id="html5VideoPlayer" controls style="width:100%;max-height:420px;border-radius:8px;background:#000;outline:none;" preload="auto">
-                                <source id="videoSource" src="" type="video/mp4">
-                                <track id="videoTrack" label="English" kind="subtitles" srclang="en" src="" default>
-                                Your browser does not support the video tag.
-                            </video>
 
-                            <!-- Video RAG & Timestamp Q&A Assistant -->
-                            <div id="videoRagSection" style="margin-top:16px;padding-top:14px;border-top:1px solid #30363d;text-align:left;width:100%;box-sizing:border-box;">
-                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                                    <div style="display:flex;align-items:center;gap:8px;">
-                                        <span style="font-weight:700;color:#f0f6fc;font-size:14px;">💬 Video Q&A Assistant</span>
-                                        <span id="lblVideoTimestampBadge" class="badge badge-blue" style="font-size:11px;">⏱ Syncing Playhead...</span>
-                                    </div>
-                                    <button onclick="toggleRagPanel()" id="btnToggleRag" style="background:#21262d;border:1px solid #30363d;color:#8b949e;border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;">Hide / Show</button>
-                                </div>
-
-                                <div id="videoRagContent" style="display:block;">
-                                    <!-- Quick Prompt Pills -->
-                                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
-                                        <button onclick="askQuickQuestion('Explain what just happened in this scene.')" class="meta-chip" style="cursor:pointer;border:1px solid #30363d;background:#161b22;color:#58a6ff;font-size:12px;padding:4px 8px;">💡 Explain Current Scene</button>
-                                        <button onclick="askQuickQuestion('Can you give a concrete real-world example of this concept?')" class="meta-chip" style="cursor:pointer;border:1px solid #30363d;background:#161b22;color:#58a6ff;font-size:12px;padding:4px 8px;">🌍 Real-World Example</button>
-                                        <button onclick="askQuickQuestion('What are the critical governing principles behind this?')" class="meta-chip" style="cursor:pointer;border:1px solid #30363d;background:#161b22;color:#58a6ff;font-size:12px;padding:4px 8px;">⚖ Core Principle</button>
-                                    </div>
-
-                                    <!-- Chat Messages Stream -->
-                                    <div id="ragChatLog" style="max-height:220px;overflow-y:auto;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px;margin-bottom:10px;font-size:13px;box-sizing:border-box;">
-                                        <div style="color:#8b949e;font-size:12px;font-style:italic;">Ask any question about this video or click a quick prompt above. The assistant answers grounded in the current scene timestamp and course textbook.</div>
-                                    </div>
-
-                                    <!-- Input Row -->
-                                    <div style="display:flex;gap:8px;">
-                                        <input type="text" id="ragInput" class="form-input" placeholder="Ask a question about this video or concept..." style="margin-bottom:0;" onkeydown="if(event.key==='Enter') sendRagQuestion();" />
-                                        <button id="btnSendRag" onclick="sendRagQuestion()" class="action-btn" style="width:auto;padding:8px 16px;font-size:13px;white-space:nowrap;">
-                                            <span>Send ➔</span>
-                                        </button>
-                                    </div>
-                                </div>
+                        <div id="remediationCard" style="display:none;width:100%;background:var(--bg-card);box-shadow:var(--neo-raised-sm);border-radius:var(--radius-sm);padding:18px;margin-top:16px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                                <span class="badge badge-blue" id="lblRemediationVariant">APPLICATION CHECK</span>
+                                <span class="badge badge-amber" id="lblRemediationDifficulty">TARGETED</span>
                             </div>
-
-                            <!-- Verification Re-Testing Action -->
-                            <div id="remediationActionArea" style="margin-top:16px;padding-top:14px;border-top:1px solid #30363d;display:flex;flex-direction:column;gap:12px;align-items:center;">
-                                <div style="display:flex;align-items:center;justify-content:space-between;width:100%;">
-                                    <div style="text-align:left;">
-                                        <div style="font-weight:600;color:#f0f6fc;font-size:14px;">Mastery Verification</div>
-                                        <div style="font-size:12px;color:#8b949e;">Completed this video? Prove your comprehension to earn mastery.</div>
-                                    </div>
-                                    <button id="btnVerifyMastery" onclick="launchRemediationCheck()" class="action-btn" style="width:auto;padding:8px 18px;font-size:13px;display:flex;align-items:center;gap:6px;background:#238636;color:#fff;">
-                                        <span>🎯 Verify Mastery (Re-Test)</span>
-                                    </button>
-                                </div>
-
-                                <!-- Remediation Question Card -->
-                                <div id="remediationCard" style="display:none;width:100%;text-align:left;background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:16px;box-sizing:border-box;">
-                                    <div id="remediationCardHeader" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                                        <span class="badge badge-blue" id="lblRemediationVariant">APPLICATION CHECK</span>
-                                        <span class="badge badge-amber" id="lblRemediationDifficulty">TARGETED</span>
-                                    </div>
-                                    <div id="remediationStem" style="color:#f0f6fc;font-weight:600;font-size:14px;line-height:1.4;margin-bottom:12px;"></div>
-                                    <div id="remediationOptions" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
-                                    <button id="btnSubmitRemediation" onclick="submitRemediationCheck()" class="action-btn" style="width:100%;padding:10px;font-size:14px;">
-                                        <span>Submit Verification</span>
-                                    </button>
-                                </div>
-
-                                <!-- Remediation Result Feedback -->
-                                <div id="remediationFeedback" style="display:none;width:100%;text-align:left;border-radius:8px;padding:14px;box-sizing:border-box;"></div>
-                            </div>
+                            <div id="remediationStem" style="font-weight:600;font-size:15px;line-height:1.5;margin-bottom:14px;"></div>
+                            <div id="remediationOptions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+                            <button id="btnSubmitRemediation" onclick="submitRemediationCheck()" class="neo-btn neo-btn-peach-green" style="width:100%;justify-content:center;">
+                                <span>Submit Verification Answer</span>
+                            </button>
                         </div>
+
+                        <div id="remediationFeedback" style="display:none;width:100%;border-radius:var(--radius-sm);padding:16px;margin-top:16px;"></div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- PIPELINE FLOW DOCUMENTATION -->
-        <h2 class="flow-title">Pipeline Architecture</h2>
-        <p class="flow-subtitle">Deterministic knowledge extraction, adaptive quiz evaluation, and AI video target handoff</p>
+        <!-- 🗺 Architectural Pipeline Flow Documentation -->
+        <section class="flow-section">
+            <div style="margin-bottom:8px;">
+                <h2 class="flow-title">The Four-Phase Adaptive Pipeline</h2>
+                <p style="font-size:15px;color:var(--text-muted);">Modular, loosely coupled architecture transforming raw study materials into personalized programmatic lessons</p>
+            </div>
 
-        <div class="step step-1">
-            <div class="step-indicator">1</div>
-            <div class="step-content">
-                <div class="step-label">Step 1 — Ingestion</div>
-                <div class="step-name">Multimodal Knowledge Extraction</div>
-                <div class="step-desc">Upload study material. System extracts content, constructs a Knowledge Graph, and syncs chunks to Qdrant.</div>
-                <div class="step-endpoint">
-                    <span class="method method-post">POST</span>
-                    <span class="endpoint-path">/upload?auto_start_assessment=true</span>
+            <div class="step-card" style="margin-top:24px;">
+                <div class="step-num">1</div>
+                <div>
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--peach-green);margin-bottom:4px;">
+                        Phase 1 — Multimodal Ingestion &amp; Ground Truth Engine
+                    </div>
+                    <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
+                        Separated Ingestion Pipelines &amp; Layer A Vectorization
+                    </div>
+                    <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+                        Normalizes study materials into an immutable ground-truth repository. Digital text via PyMuPDF; handwritten notes &amp; scans via OpenCV/EasyOCR; diagrams via Gemini Vision; lectures via FFmpeg and Faster-Whisper. Embedded in Qdrant as <strong>Layer A (Authoritative Source)</strong> with strict provenance.
+                    </div>
+                    <div class="meta-chip">POST /upload?auto_start_assessment=true &middot; Layer A Locked</div>
                 </div>
             </div>
-        </div>
 
-        <div class="step step-2">
-            <div class="step-indicator">2</div>
-            <div class="step-content">
-                <div class="step-label">Step 2 — Assessment</div>
-                <div class="step-name">Adaptive Testing & Mastery Profiling</div>
-                <div class="step-desc">Generates grounded questions from source chunks. Grades submissions, detects prerequisite gaps, and builds the Video Target Matrix.</div>
-                <div class="step-endpoint">
-                    <span class="method method-post">POST</span>
-                    <span class="endpoint-path">/assessment/start &amp; /assessment/submit</span>
+            <div class="step-card">
+                <div class="step-num">2</div>
+                <div>
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:4px;">
+                        Phase 2 — Diagnostic Assessment &amp; Knowledge Profiling
+                    </div>
+                    <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
+                        Prerequisite Concept Pairing &amp; Sequential Grounded Generation
+                    </div>
+                    <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+                        Constructs the KnowledgeGraph prerequisite dependency tree. Generates strict JSON multiple-choice questions sequentially from Layer A chunks using negative prompting. Utilizes Fisher-Yates balanced option shuffling with dynamic explanation tracking to detect Prerequisite Gaps.
+                    </div>
+                    <div class="meta-chip">POST /assessment/start &amp; /assessment/submit &middot; StudentLearningProfile</div>
                 </div>
             </div>
-        </div>
 
-        <div class="step step-3">
-            <div class="step-indicator">3</div>
-            <div class="step-content">
-                <div class="step-label">Step 3 — Video Generation</div>
-                <div class="step-name">Targeted Visual Remediation</div>
-                <div class="step-desc">Consumes VideoTargetMatrix to produce 30s/45s/60s remedial video lessons for concepts needing reinforcement.</div>
-                <div class="step-endpoint">
-                    <span class="method method-get">GET</span>
-                    <span class="endpoint-path">/assessment/video-target/{student_id}/{source_id}</span>
+            <div class="step-card">
+                <div class="step-num">3</div>
+                <div>
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--amber);margin-bottom:4px;">
+                        Phase 3 — The Learning Agent &amp; Targeted Video Matrix
+                    </div>
+                    <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
+                        Programmatic Assembly &amp; Layer B Vectorization
+                    </div>
+                    <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+                        Isolates exact conceptual weaknesses into the VideoTargetMatrix. Generates targeted 30s/45s/60s scripts breaking down student misconceptions in Act 2, accompanied by Manim math animations and authentic diagrams. Vectorizes into Qdrant as <strong>Layer B (Generated Artifacts)</strong> hard-linked to Layer A.
+                    </div>
+                    <div class="meta-chip">GET /assessment/video-target/{student_id}/{source_id} &middot; Layer B Linked</div>
                 </div>
             </div>
-        </div>
 
-        <div class="step step-4">
-            <div class="step-indicator">4</div>
-            <div class="step-content">
-                <div class="step-label">Step 4 — Remediation Verification</div>
-                <div class="step-name">Comprehension Re-Testing Loop</div>
-                <div class="step-desc">Administers grounded 1-2 question checks after remedial videos, transitions mastery to MASTERED, and resolves the target matrix.</div>
-                <div class="step-endpoint">
-                    <span class="method method-post">POST</span>
-                    <span class="endpoint-path">/remediation/start &amp; /remediation/submit</span>
+            <div class="step-card">
+                <div class="step-num">4</div>
+                <div>
+                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--emerald);margin-bottom:4px;">
+                        Phase 4 — Dual-Traceable RAG &amp; The Kill Switch Loop
+                    </div>
+                    <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
+                        In-Video Timestamp Grounding &amp; Anti-Loop Kill Switch
+                    </div>
+                    <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
+                        Students ask questions synced with playback timestamps. The system queries Layer B, traces back to Layer A textbook context, and responds with zero hallucination. Post-video, administers a 1-question verification re-test. If the student fails 3 times, the Anti-Loop Kill Switch engages (<code>REQUIRES_HUMAN_FALLBACK</code>).
+                    </div>
+                    <div class="meta-chip">POST /video/rag/ask &amp; /remediation/submit &middot; Kill Switch Limit: 3 Attempts</div>
                 </div>
             </div>
-        </div>
 
-        <div class="links-grid">
-            <a href="/docs" class="link-card">
-                <div class="link-title">Swagger UI</div>
-                <div class="link-desc">Interactive endpoint testing</div>
-            </a>
-            <a href="/sources" class="link-card" target="_blank">
-                <div class="link-title">Available Sources</div>
-                <div class="link-desc">Inspect all registered materials</div>
-            </a>
-            <a href="/health" class="link-card">
-                <div class="link-title">System Health</div>
-                <div class="link-desc">Operational status check</div>
-            </a>
-        </div>
-    </div>
+            <!-- 🛡 Solving the Three Generative AI Project Killers Table -->
+            <div style="background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-md);padding:24px;margin-top:24px;box-shadow:var(--neo-raised);">
+                <div style="font-weight:700;font-size:16px;color:var(--text-ink);margin-bottom:4px;">Solving the Three Generative AI "Project Killers"</div>
+                <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">Core architectural safeguards engineered into VisualAI</div>
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:left;">
+                        <thead>
+                            <tr style="border-bottom:2px solid var(--border-card);color:var(--text-ink);">
+                                <th style="padding:10px 12px;font-weight:700;">The Failure Point</th>
+                                <th style="padding:10px 12px;font-weight:700;color:var(--peach-green);">The VisualAI Solution</th>
+                                <th style="padding:10px 12px;font-weight:700;color:var(--emerald);">Cognitive &amp; System Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr style="border-bottom:1px solid var(--border-card);">
+                                <td style="padding:12px;font-weight:600;color:var(--rose);">1. Hallucination Loops</td>
+                                <td style="padding:12px;"><strong>Dual-Layer RAG:</strong> Generated video scripts (Layer B) are never ground truth. Q&amp;A routes strictly back to the textbook (Layer A).</td>
+                                <td style="padding:12px;color:var(--emerald);font-weight:600;">The AI cannot teach an invented fact; errors cannot propagate.</td>
+                            </tr>
+                            <tr style="border-bottom:1px solid var(--border-card);">
+                                <td style="padding:12px;font-weight:600;color:var(--rose);">2. Context Window Overflow</td>
+                                <td style="padding:12px;"><strong>Sequential Concept Generation:</strong> Loops through atomic Knowledge Graph concepts sequentially instead of chapter dumps.</td>
+                                <td style="padding:12px;color:var(--emerald);font-weight:600;">Eliminates "lost in the middle" memory degradation; ensures strict JSON schemas.</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:12px;font-weight:600;color:var(--rose);">3. False Mastery (Guessing)</td>
+                                <td style="padding:12px;"><strong>Prerequisite Pairing &amp; The Kill Switch:</strong> Correct attempts require verification. After 3 fails, the Kill Switch stops AI loops and alerts human instructors.</td>
+                                <td style="padding:12px;color:var(--emerald);font-weight:600;">Prevents students from clicking blindly; proves verified conceptual comprehension.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ❓ FAQ Accordion Section -->
+            <div style="margin-top:40px;">
+                <h3 style="font-family:var(--font-display);font-size:22px;font-weight:700;margin-bottom:16px;">Frequently Asked Questions</h3>
+
+                <div class="faq-item">
+                    <button class="faq-btn" onclick="toggleFaq(this)">
+                        <span>How does VisualAI prevent AI hallucinations from propagating?</span>
+                        <span>▼</span>
+                    </button>
+                    <div class="faq-content">
+                        VisualAI implements a Dual-Layer RAG architecture. Generated video scripts, animations, and transcripts are indexed into Layer B as generated artifacts. When a student asks a question during playback, the system looks up the scene timestamp in Layer B, follows the foreign key back to Layer A (the uploaded textbook chunk), and synthesizes the answer using strictly ground-truth textbook citations.
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <button class="faq-btn" onclick="toggleFaq(this)">
+                        <span>Why are quiz questions generated in under one minute?</span>
+                        <span>▼</span>
+                    </button>
+                    <div class="faq-content">
+                        By passing parsed in-memory content units directly between ingestion and assessment handoff, we eliminate redundant vector lookups. Furthermore, question synthesis runs with a parallel ThreadPoolExecutor against atomic KnowledgeGraph concepts, drastically reducing end-to-end latency from 3–4 minutes to under 60 seconds.
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <button class="faq-btn" onclick="toggleFaq(this)">
+                        <span>What is the Anti-Loop Kill Switch?</span>
+                        <span>▼</span>
+                    </button>
+                    <div class="faq-content">
+                        If a student fails verification re-tests for the same concept 3 times, the system marks the concept as <code>REQUIRES_HUMAN_FALLBACK</code>. Automated AI video loops are suspended to avoid cognitive fatigue, and an alert is dispatched to the Instructor Intervention Portal.
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 🏛 Footer -->
+        <footer class="footer">
+            <div>
+                <strong style="color:var(--text-ink);">VisualAI</strong> &middot; <span style="color:var(--peach);font-weight:700;">STUDY WITH YOUR VISION</span> &middot; &copy; 2026 VisualAI Technologies Inc.
+            </div>
+            <div style="display:flex;gap:16px;">
+                <a href="/instructor" target="_blank" style="color:var(--text-muted);text-decoration:none;">👩‍🏫 Instructor Portal</a>
+                <a href="/docs" target="_blank" style="color:var(--text-muted);text-decoration:none;">API Docs</a>
+                <a href="/health" target="_blank" style="color:var(--text-muted);text-decoration:none;">System Health</a>
+                <a href="/sources" target="_blank" style="color:var(--text-muted);text-decoration:none;">Sources Index</a>
+            </div>
+        </footer>
+    </main>
 
     <script>
         let currentSession = null;
         let activeQuestions = [];
+        let currentQuestionIdx = 0;
+        let userAnswers = {};
+        let activeEventSource = null;
+        let timelineStartTime = 0;
+        let timelineTimerInterval = null;
+        let activeVideoId = null;
+        let activeRemediationSession = null;
+
+        const STAGE_LABELS = {
+            'uploading': 'Phase 1: Ingestion — Uploading Course Material',
+            'extracting': 'Phase 1: Extraction — Text Blocks & Embedded Diagrams',
+            'knowledge_graph': 'Phase 1: Ground Truth — Constructing Concept Knowledge Graph',
+            'indexing': 'Phase 1: Ground Truth — Vectorizing Layer A (Authoritative Source)',
+            'planning_assessment': 'Phase 2: Diagnostic — Prerequisite Graph Concept Pairing',
+            'generating_questions': 'Phase 2: Knowledge Profiling — Sequential Grounded Questions',
+            'validating_questions': 'Phase 2: Validation — Negative Distractors & Fisher-Yates Shuffling',
+            'assessment_ready': 'Phase 2: Diagnostic Ready — Commencing Knowledge Profiling'
+        };
+
+        function escapeHtml(str) {
+            if (str === null || str === undefined) return '';
+            return String(str)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+
+        // 🌓 Theme Toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme') || 'light';
+            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('visualai_theme', newTheme);
+            document.getElementById('themeIcon').textContent = newTheme === 'dark' ? '☀️' : '🌓';
+        }
+
+        // Initialize Theme
+        const savedTheme = localStorage.getItem('visualai_theme') || 'light';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+
+        // 📊 Animated Statistics Counters
+        function initCounters() {
+            const counters = document.querySelectorAll('.stat-number');
+            counters.forEach(counter => {
+                const target = parseFloat(counter.getAttribute('data-target') || '0');
+                const prefix = counter.getAttribute('data-prefix') || '';
+                const suffix = counter.getAttribute('data-suffix') || '';
+                const duration = 1200;
+                const start = performance.now();
+
+                function update(now) {
+                    const elapsed = now - start;
+                    const progress = Math.min(elapsed / duration, 1);
+                    const currentVal = Math.floor(progress * target);
+                    counter.textContent = `${prefix}${currentVal}${suffix}`;
+                    if (progress < 1) {
+                        requestAnimationFrame(update);
+                    } else {
+                        counter.textContent = `${prefix}${target}${suffix}`;
+                    }
+                }
+                requestAnimationFrame(update);
+            });
+        }
+
+        // ❓ FAQ Accordion Toggle
+        function toggleFaq(btn) {
+            const content = btn.nextElementSibling;
+            const isOpen = content.style.display === 'block';
+            document.querySelectorAll('.faq-content').forEach(c => c.style.display = 'none');
+            document.querySelectorAll('.faq-btn span:last-child').forEach(s => s.textContent = '▼');
+            if (!isOpen) {
+                content.style.display = 'block';
+                btn.querySelector('span:last-child').textContent = '▲';
+            }
+        }
 
         function switchTab(tab) {
             document.getElementById('tabUpload').classList.toggle('active', tab === 'upload');
@@ -851,47 +1382,35 @@ DASHBOARD_HTML = """
             document.getElementById('paneExisting').style.display = tab === 'existing' ? 'block' : 'none';
         }
 
+        function handleFileSelected() {
+            const file = document.getElementById('fileInput').files[0];
+            const info = document.getElementById('selectedFileInfo');
+            if (file) {
+                info.style.display = 'block';
+                info.textContent = `✓ Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            }
+        }
+
         async function loadSources() {
             try {
                 const res = await fetch('/sources');
                 const data = await res.json();
-                const sel = document.getElementById('sourceSelect');
-                sel.innerHTML = '';
-                const readySources = (data.sources || []).filter(s => s.status === 'READY');
-                if (readySources.length === 0) {
-                    sel.innerHTML = '<option value="">No ready sources found. Upload a file above!</option>';
-                    return;
+                const select = document.getElementById('sourceSelect');
+                select.innerHTML = '';
+                if (data.sources && data.sources.length > 0) {
+                    data.sources.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.source_id;
+                        opt.textContent = `${s.filename} (${s.modality || s.source_type || 'material'})`;
+                        select.appendChild(opt);
+                    });
+                } else {
+                    select.innerHTML = '<option value="">No ingested materials yet. Upload one above!</option>';
                 }
-                readySources.forEach(s => {
-                    const opt = document.createElement('option');
-                    opt.value = s.source_id;
-                    opt.textContent = `${s.filename} (${s.source_id}) — ${s.concepts_count} concepts`;
-                    sel.appendChild(opt);
-                });
             } catch (err) {
                 console.error('Failed to load sources:', err);
             }
         }
-
-        let activeEventSource = null;
-        let timelineTimerInterval = null;
-        let timelineStartTime = 0;
-
-        const STAGE_LABELS = {
-            'validating_source': 'Validating Source & Hash',
-            'extracting_content': 'Extracting Multimodal Content',
-            'normalizing_units': 'Building ContentUnits',
-            'analyzing_structure': 'Analyzing Document Structure',
-            'extracting_concepts': 'Extracting Key Concepts',
-            'building_knowledge_graph': 'Building Knowledge Graph',
-            'creating_chunks': 'Creating Semantic Chunks',
-            'syncing_qdrant': 'Syncing Vector Database',
-            'quality_validation': 'Quality Validation Gateway',
-            'planning_assessment': 'Planning Adaptive Assessment',
-            'generating_questions': 'Generating Grounded Questions',
-            'validating_questions': 'Validating Questions & Answer Key',
-            'assessment_ready': 'Assessment Ready'
-        };
 
         function resetTimeline() {
             if (activeEventSource) {
@@ -908,8 +1427,6 @@ DASHBOARD_HTML = """
             document.getElementById('timelinePercent').textContent = '0%';
             document.getElementById('timelineTimer').textContent = '0.0s';
             document.getElementById('timelineStagesList').innerHTML = '';
-            document.getElementById('timelinePulse').className = 'timeline-pulse-dot';
-            document.getElementById('timelinePulse').style.background = '#58a6ff';
 
             timelineStartTime = Date.now();
             timelineTimerInterval = setInterval(() => {
@@ -919,8 +1436,9 @@ DASHBOARD_HTML = """
         }
 
         function updateTimelineEvent(ev) {
-            document.getElementById('timelineProgressBar').style.width = `${ev.progress_percent}%`;
-            document.getElementById('timelinePercent').textContent = `${ev.progress_percent}%`;
+            const pct = Math.max(0, Math.min(100, ev.progress_percent || 0));
+            document.getElementById('timelineProgressBar').style.width = `${pct}%`;
+            document.getElementById('timelinePercent').textContent = `${pct}%`;
 
             const list = document.getElementById('timelineStagesList');
             let stageElem = document.getElementById(`stage-${ev.stage}`);
@@ -932,7 +1450,6 @@ DASHBOARD_HTML = """
             }
 
             stageElem.className = `stage-item status-${ev.status}`;
-
             let iconHtml = '○';
             if (ev.status === 'running') iconHtml = '⏳';
             else if (ev.status === 'completed') iconHtml = '✓';
@@ -942,27 +1459,20 @@ DASHBOARD_HTML = """
             let metaChips = '';
             if (ev.metadata) {
                 for (const [k, v] of Object.entries(ev.metadata)) {
-                    metaChips += `<span class="meta-chip">${k}: ${v}</span>`;
+                    const valStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                    metaChips += `<span class="meta-chip">${escapeHtml(k)}: ${escapeHtml(valStr)}</span>`;
                 }
             }
 
             const label = STAGE_LABELS[ev.stage] || ev.stage;
             stageElem.innerHTML = `
                 <div class="stage-icon">${iconHtml}</div>
-                <div class="stage-details">
-                    <div class="stage-title">${label}</div>
-                    <div class="stage-message">${ev.message}</div>
-                    ${metaChips ? `<div class="stage-meta">${metaChips}</div>` : ''}
+                <div style="flex:1;">
+                    <div style="font-weight:700;color:var(--text-ink);">${escapeHtml(label)}</div>
+                    <div style="font-size:12px;color:var(--text-muted);">${escapeHtml(ev.message || '')}</div>
+                    ${metaChips ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">${metaChips}</div>` : ''}
                 </div>
             `;
-
-            if (ev.status === 'failed') {
-                document.getElementById('timelinePulse').style.background = '#da3633';
-            } else if (ev.status === 'completed' && ev.stage === 'assessment_ready') {
-                document.getElementById('timelinePulse').style.background = '#238636';
-            } else if (ev.status === 'warning') {
-                document.getElementById('timelinePulse').style.background = '#d29922';
-            }
         }
 
         function trackJobSSE(jobId, onComplete, onError) {
@@ -975,263 +1485,248 @@ DASHBOARD_HTML = """
                     const ev = JSON.parse(event.data);
                     updateTimelineEvent(ev);
 
-                    if (ev.status === 'completed' && ev.stage === 'assessment_ready') {
-                        if (activeEventSource) activeEventSource.close();
-                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
-                        onComplete(jobId);
+                    if (ev.stage === 'assessment_ready' && ev.status === 'completed') {
+                        if (activeEventSource) {
+                            activeEventSource.close();
+                            activeEventSource = null;
+                        }
+                        if (timelineTimerInterval) {
+                            clearInterval(timelineTimerInterval);
+                            timelineTimerInterval = null;
+                        }
+                        if (onComplete) onComplete(ev);
                     } else if (ev.status === 'failed') {
-                        if (activeEventSource) activeEventSource.close();
-                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
-                        onError(ev.message);
-                    }
-                } catch (err) {
-                    console.error('Error parsing SSE event:', err);
-                }
-            };
-
-            activeEventSource.onerror = async () => {
-                // Fallback polling if SSE drops
-                if (activeEventSource) activeEventSource.close();
-                try {
-                    const res = await fetch(`/pipeline/jobs/${jobId}`);
-                    const job = await res.json();
-                    if (job.events) {
-                        job.events.forEach(updateTimelineEvent);
-                    }
-                    if (job.status === 'completed') {
-                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
-                        onComplete(jobId);
-                    } else if (job.status === 'failed') {
-                        if (timelineTimerInterval) clearInterval(timelineTimerInterval);
-                        onError(job.error || 'Pipeline execution failed.');
+                        if (activeEventSource) {
+                            activeEventSource.close();
+                            activeEventSource = null;
+                        }
+                        if (timelineTimerInterval) {
+                            clearInterval(timelineTimerInterval);
+                            timelineTimerInterval = null;
+                        }
+                        if (onError) onError(new Error(ev.message || 'Pipeline stage failed.'));
                     }
                 } catch (e) {
-                    console.error('Polling fallback failed:', e);
+                    console.error('Error parsing SSE event:', e);
                 }
+            };
+
+            activeEventSource.onerror = () => {
+                if (activeEventSource) {
+                    activeEventSource.close();
+                    activeEventSource = null;
+                }
+                if (timelineTimerInterval) {
+                    clearInterval(timelineTimerInterval);
+                    timelineTimerInterval = null;
+                }
+                fetch(`/pipeline/jobs/${jobId}/status`)
+                    .then(r => r.json())
+                    .then(statusData => {
+                        if (statusData.status === 'completed') {
+                            if (onComplete) onComplete({ stage: 'assessment_ready', status: 'completed' });
+                        } else if (statusData.status === 'failed') {
+                            if (onError) onError(new Error(statusData.error || 'Job failed'));
+                        }
+                    })
+                    .catch(() => {});
             };
         }
 
-        function setStatus(msg, type) {
-            const box = document.getElementById('statusBox');
-            if (!msg) {
-                box.style.display = 'none';
-                return;
-            }
-            box.className = `status-box status-${type}`;
-            box.innerHTML = msg;
-            box.style.display = 'block';
-        }
-
-        async function runUploadAndAssess() {
+        async function runUpload() {
             const fileInput = document.getElementById('fileInput');
             if (!fileInput.files || fileInput.files.length === 0) {
-                setStatus('Please choose a file to upload.', 'error');
+                alert('Please select a course file to upload.');
                 return;
             }
-            const file = fileInput.files[0];
-            const studentId = document.getElementById('studentIdUpload').value.trim() || 'student_1';
-            const maxQ = document.getElementById('maxQuestionsUpload').value || '5';
+
+            const studentId = document.getElementById('studentId').value.trim() || 'student_1';
+            const maxQ = parseInt(document.getElementById('maxQuestions').value, 10) || 5;
 
             const btn = document.getElementById('btnUpload');
             btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Uploading &amp; Ingesting...</span>';
             resetTimeline();
-            setStatus('', 'loading');
 
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', fileInput.files[0]);
 
             try {
-                const url = `/pipeline/upload-and-assess?student_id=${encodeURIComponent(studentId)}&max_questions=${maxQ}`;
-                const res = await fetch(url, { method: 'POST', body: formData });
-                const data = await res.json();
-
-                if (!res.ok) {
-                    throw new Error(data.detail || JSON.stringify(data));
-                }
-
-                trackJobSSE(data.job_id, async (jid) => {
-                    btn.disabled = false;
-                    const jobRes = await fetch(`/pipeline/jobs/${jid}`);
-                    const jobData = await jobRes.json();
-                    if (jobData.result && jobData.result.assessment) {
-                        loadSources();
-                        renderQuiz(jobData.result.assessment);
-                    }
-                }, (errMsg) => {
-                    btn.disabled = false;
-                    setStatus(`❌ Pipeline error: ${errMsg}`, 'error');
+                const res = await fetch(`/upload?auto_start_assessment=true&student_id=${encodeURIComponent(studentId)}&max_questions=${maxQ}`, {
+                    method: 'POST',
+                    body: formData
                 });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                if (data.job_id) {
+                    trackJobSSE(data.job_id, async () => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                        if (data.session_id) {
+                            const sessRes = await fetch(`/assessment/session/${data.session_id}`);
+                            const sessData = await sessRes.json();
+                            startQuiz(sessData);
+                        }
+                    }, (err) => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                        alert(`Pipeline Error: ${err.message}`);
+                    });
+                }
             } catch (err) {
                 btn.disabled = false;
-                setStatus(`❌ Upload error: ${err.message}`, 'error');
+                btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                alert(`Upload failed: ${err.message}`);
             }
         }
 
         async function runExistingAssess() {
-            const sourceId = document.getElementById('sourceSelect').value;
+            const select = document.getElementById('sourceSelect');
+            const sourceId = select.value;
             if (!sourceId) {
-                setStatus('Please select a valid study material source.', 'error');
+                alert('Please select an ingested course material.');
                 return;
             }
+
             const studentId = document.getElementById('studentIdExisting').value.trim() || 'student_1';
-            const maxQ = parseInt(document.getElementById('maxQuestionsExisting').value || '5', 10);
+            const maxQ = parseInt(document.getElementById('maxQuestionsExisting').value, 10) || 5;
 
             const btn = document.getElementById('btnAssessExisting');
             btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Generating Diagnostic Questions...</span>';
             resetTimeline();
-            setStatus('', 'loading');
 
             try {
-                const res = await fetch('/pipeline/assess-existing', {
+                const res = await fetch('/assessment/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        student_id: studentId,
                         source_id: sourceId,
+                        student_id: studentId,
                         max_questions: maxQ
                     })
                 });
+
                 const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
 
-                if (!res.ok) {
-                    throw new Error(data.detail || JSON.stringify(data));
-                }
-
-                trackJobSSE(data.job_id, async (jid) => {
-                    btn.disabled = false;
-                    const jobRes = await fetch(`/pipeline/jobs/${jid}`);
-                    const jobData = await jobRes.json();
-                    if (jobData.result && jobData.result.assessment) {
-                        renderQuiz(jobData.result.assessment);
-                    }
-                }, (errMsg) => {
-                    btn.disabled = false;
-                    setStatus(`❌ Assessment error: ${errMsg}`, 'error');
-                });
+                btn.disabled = false;
+                btn.innerHTML = '<span>⚡ Generate Diagnostic Quiz from Material</span>';
+                startQuiz(data);
             } catch (err) {
                 btn.disabled = false;
-                setStatus(`❌ Assessment error: ${err.message}`, 'error');
+                btn.innerHTML = '<span>⚡ Generate Diagnostic Quiz from Material</span>';
+                alert(`Assessment generation failed: ${err.message}`);
             }
         }
 
-        function renderQuiz(session) {
+        function startQuiz(session) {
             currentSession = session;
             activeQuestions = session.questions || [];
+            currentQuestionIdx = 0;
+            userAnswers = {};
 
-            const requested = session.requested_questions || activeQuestions.length;
-            const generated = session.generated_questions !== undefined ? session.generated_questions : activeQuestions.length;
-            const shortfall = session.shortfall || 0;
+            document.getElementById('quizSection').style.display = 'block';
+            document.getElementById('resultsBox').style.display = 'none';
+            document.getElementById('quizReviewSection').style.display = 'none';
+            document.getElementById('remediationTargetsSection').style.display = 'none';
 
-            document.getElementById('lblSession').textContent = `Session: ${session.session_id}`;
-            document.getElementById('lblSource').textContent = `Source: ${session.source_id}`;
-            document.getElementById('lblStudent').textContent = `Student: ${session.student_id}`;
+            renderCurrentQuestion();
+        }
 
-            if (shortfall > 0) {
-                document.getElementById('lblCount').textContent = `${generated} of ${requested} grounded questions generated`;
-            } else {
-                document.getElementById('lblCount').textContent = `${activeQuestions.length} Questions`;
+        function renderCurrentQuestion() {
+            if (currentQuestionIdx >= activeQuestions.length) {
+                submitQuiz();
+                return;
             }
 
-            const container = document.getElementById('questionsContainer');
+            const q = activeQuestions[currentQuestionIdx];
+            document.getElementById('lblConceptBadge').textContent = q.concept_name || 'DIAGNOSTIC';
+            document.getElementById('lblQuestionCounter').textContent = `Question ${currentQuestionIdx + 1} of ${activeQuestions.length}`;
+            document.getElementById('lblQuestionStem').textContent = q.stem;
+
+            const container = document.getElementById('optionsContainer');
             container.innerHTML = '';
 
-            if (shortfall > 0) {
-                const noticeCard = document.createElement('div');
-                noticeCard.style.cssText = 'background: rgba(210, 153, 34, 0.15); border: 1px solid #d29922; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #f0f6fc;';
-                noticeCard.innerHTML = `
-                    <div style="font-weight:600; color:#e3b341; margin-bottom:4px;">⚠️ ${generated} of ${requested} grounded questions generated</div>
-                    <div style="color:#c9d1d9; font-size:12px;">The authoritative study source contained insufficient distinct grounded evidence to generate all ${requested} requested questions without duplicating concepts or compromising strict evidentiary grounding.</div>
-                `;
-                container.appendChild(noticeCard);
-            }
+            (q.options || []).forEach((opt, idx) => {
+                const optId = `opt_${currentQuestionIdx}_${idx}`;
+                const isSelected = userAnswers[q.question_id] === idx;
 
-            activeQuestions.forEach((q, qIdx) => {
-                const qCard = document.createElement('div');
-                qCard.className = 'question-card';
+                const label = document.createElement('label');
+                label.className = 'option-item';
+                label.htmlFor = optId;
 
-                const meta = document.createElement('div');
-                meta.className = 'question-meta';
-                meta.innerHTML = `
-                    <span class="badge badge-blue">Concept: ${q.concept_name}</span>
-                    <span class="badge badge-amber">${q.difficulty}</span>
-                    ${q.page_start ? `<span class="badge">Page ${q.page_start}${q.page_end && q.page_end !== q.page_start ? `-${q.page_end}` : ''}</span>` : ''}
-                `;
-                qCard.appendChild(meta);
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'quiz_choice';
+                input.id = optId;
+                input.value = idx;
+                if (isSelected) input.checked = true;
+                input.addEventListener('change', () => selectOption(idx));
 
-                const stem = document.createElement('div');
-                stem.className = 'question-stem';
-                stem.textContent = `${qIdx + 1}. ${q.stem}`;
-                qCard.appendChild(stem);
+                const span = document.createElement('span');
+                span.style.fontWeight = '600';
+                const strong = document.createElement('strong');
+                strong.textContent = `${String.fromCharCode(65 + idx)}. `;
+                span.appendChild(strong);
+                span.appendChild(document.createTextNode(opt || ''));
 
-                const optList = document.createElement('div');
-                optList.className = 'options-list';
-
-                q.options.forEach(opt => {
-                    const label = document.createElement('label');
-                    label.className = 'option-item';
-                    label.innerHTML = `
-                        <input type="radio" name="q_${q.question_id}" value="${opt.index}" />
-                        <span class="option-text">${opt.text}</span>
-                    `;
-                    optList.appendChild(label);
-                });
-
-                qCard.appendChild(optList);
-                container.appendChild(qCard);
+                label.appendChild(input);
+                label.appendChild(span);
+                container.appendChild(label);
             });
 
-            document.getElementById('quizArea').style.display = 'block';
-            document.getElementById('resultsBox').style.display = 'none';
+            const nextBtn = document.getElementById('btnNextQuestion');
+            nextBtn.innerHTML = currentQuestionIdx === activeQuestions.length - 1
+                ? '<span>Submit Diagnostic Assessment ✓</span>'
+                : '<span>Next Question ➔</span>';
+        }
+
+        function selectOption(idx) {
+            const q = activeQuestions[currentQuestionIdx];
+            userAnswers[q.question_id] = idx;
+        }
+
+        function submitCurrentAnswer() {
+            const q = activeQuestions[currentQuestionIdx];
+            if (userAnswers[q.question_id] === undefined) {
+                alert('Please select an option before proceeding.');
+                return;
+            }
+            currentQuestionIdx++;
+            renderCurrentQuestion();
         }
 
         async function submitQuiz() {
-            if (!currentSession) return;
-
-            const answers = [];
-            let unassigned = 0;
-
-            activeQuestions.forEach(q => {
-                const selected = document.querySelector(`input[name="q_${q.question_id}"]:checked`);
-                if (selected) {
-                    answers.push({
-                        question_id: q.question_id,
-                        selected_index: parseInt(selected.value, 10)
-                    });
-                } else {
-                    unassigned++;
-                }
-            });
-
-            if (unassigned > 0) {
-                if (!confirm(`You have ${unassigned} unanswered question(s). Submit anyway?`)) {
-                    return;
-                }
-            }
-
-            const btn = document.getElementById('btnSubmitQuiz');
+            const btn = document.getElementById('btnNextQuestion');
             btn.disabled = true;
-            setStatus('⏳ Grading assessment & calculating mastery profile...', 'loading');
+            btn.innerHTML = '<span>Grading Diagnostic Assessment...</span>';
+
+            const payload = {
+                session_id: currentSession.session_id,
+                answers: Object.entries(userAnswers).map(([qid, idx]) => ({
+                    question_id: qid,
+                    selected_index: idx
+                }))
+            };
 
             try {
                 const res = await fetch('/assessment/submit', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: currentSession.session_id,
-                        answers: answers
-                    })
+                    body: JSON.stringify(payload)
                 });
+
                 const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
 
-                if (!res.ok) {
-                    throw new Error(data.detail || JSON.stringify(data));
-                }
-
-                setStatus('✅ Assessment graded! See your profile and Step 3 targets below.', 'success');
+                document.getElementById('quizSection').style.display = 'none';
                 displayResults(data);
+                loadVideoTargets(currentSession.student_id, currentSession.source_id);
             } catch (err) {
-                setStatus(`❌ Grading error: ${err.message}`, 'error');
-            } finally {
+                alert(`Quiz grading error: ${err.message}`);
                 btn.disabled = false;
             }
         }
@@ -1240,142 +1735,260 @@ DASHBOARD_HTML = """
             const resultsBox = document.getElementById('resultsBox');
             resultsBox.style.display = 'block';
 
-            // Contract Validation: Ensure required backend fields exist
-            if (typeof data.percentage !== 'number' || typeof data.score !== 'number' || typeof data.total !== 'number') {
-                setStatus('❌ Contract Error: Missing authoritative assessment score fields (percentage, score, total) in backend response.', 'error');
-                console.error('Invalid submit response schema:', data);
-                return;
-            }
-
-            const profileSummary = data.profile_summary;
-            if (!profileSummary || typeof profileSummary.overall_score !== 'number') {
-                setStatus('❌ Contract Error: Missing profile_summary.overall_score in backend response.', 'error');
-                console.error('Invalid profile_summary schema:', data);
-                return;
-            }
-
-            // 1. Assessment Score (THIS submission) - Authoritative backend percentage
-            const assessmentPercentage = data.percentage;
+            const scorePct = data.percentage || 0;
             const scoreEl = document.getElementById('lblScore');
-            scoreEl.textContent = `${assessmentPercentage.toFixed(1)}%`;
-            scoreEl.style.color = assessmentPercentage >= 70 ? '#3fb950' : (assessmentPercentage >= 50 ? '#d29922' : '#f85149');
+            scoreEl.textContent = `${scorePct.toFixed(1)}%`;
+            scoreEl.style.color = scorePct >= 70 ? 'var(--emerald)' : (scorePct >= 50 ? 'var(--amber)' : 'var(--rose)');
 
-            const fractionEl = document.getElementById('lblFraction');
-            if (fractionEl) {
-                fractionEl.textContent = `${data.score} / ${data.total} correct`;
+            document.getElementById('lblFraction').textContent = `${data.score} / ${data.total} correct`;
+
+            const profileSummary = data.profile_summary || {};
+            if (profileSummary.overall_score !== undefined) {
+                document.getElementById('lblProfileScore').textContent = `${profileSummary.overall_score.toFixed(1)}%`;
             }
 
-            // 2. Overall Profile Score (Historical aggregate)
-            const profileScoreEl = document.getElementById('lblProfileScore');
-            if (profileScoreEl) {
-                profileScoreEl.textContent = `${profileSummary.overall_score.toFixed(1)}%`;
-            }
-
-            // 3. Status Badge
             const statusEl = document.getElementById('lblGradeStatus');
-            statusEl.innerHTML = assessmentPercentage >= 70
-                ? '<span class="badge badge-green" style="font-size:14px;padding:6px 12px;">PASSED</span>'
-                : '<span class="badge badge-amber" style="font-size:14px;padding:6px 12px;">REVISION RECOMMENDED</span>';
+            statusEl.innerHTML = scorePct >= 70
+                ? '<span class="badge badge-green">MASTERY DEMONSTRATED</span>'
+                : '<span class="badge badge-amber">REMEDIAL VIDEO TARGETED</span>';
 
-            // 4. Mastery Breakdown from profile_summary
             const masteriesEl = document.getElementById('lblMasteries');
             masteriesEl.innerHTML = '';
-            const strong = profileSummary.strong_concepts || [];
-            const weak = profileSummary.weak_concepts || [];
+            (profileSummary.strong_concepts || []).forEach(c => {
+                const s = document.createElement('span');
+                s.className = 'badge badge-green';
+                s.textContent = `✔ ${c} (Strong)`;
+                masteriesEl.appendChild(s);
+            });
+            (profileSummary.weak_concepts || []).forEach(c => {
+                const s = document.createElement('span');
+                s.className = 'badge badge-amber';
+                s.textContent = `⚠ ${c} (Needs Review)`;
+                masteriesEl.appendChild(s);
+            });
 
-            if (strong.length === 0 && weak.length === 0) {
-                masteriesEl.innerHTML = '<span style="font-size:13px;color:#8b949e;">No concept mastery data recorded.</span>';
-            } else {
-                strong.forEach(c => {
-                    masteriesEl.innerHTML += `<span class="badge badge-green">✔ ${c} (Strong)</span>`;
-                });
-                weak.forEach(c => {
-                    masteriesEl.innerHTML += `<span class="badge badge-amber">⚠ ${c} (Needs Review)</span>`;
-                });
-            }
-
-            // 5. Prerequisite Gaps
             const prereqsBox = document.getElementById('boxPrereqs');
-            const prereqsEl = document.getElementById('lblPrereqs');
             if (data.prerequisite_gaps && data.prerequisite_gaps.length > 0) {
                 prereqsBox.style.display = 'block';
-                prereqsEl.innerHTML = data.prerequisite_gaps.map(g => `• ${g}`).join('<br>');
+                const prereqEl = document.getElementById('lblPrereqs');
+                prereqEl.innerHTML = '';
+                data.prerequisite_gaps.forEach(g => {
+                    const row = document.createElement('div');
+                    row.textContent = `• ${g}`;
+                    prereqEl.appendChild(row);
+                });
             } else {
                 prereqsBox.style.display = 'none';
             }
 
-            // 6. Step 3 Video Target Matrix
-            const matrix = data.video_target_matrix || {};
-            document.getElementById('lblVideoDirective').textContent = matrix.summary || 'All tested concepts mastered! No video generation needed.';
+            // Question-by-Question Review
+            const reviewSection = document.getElementById('quizReviewSection');
+            const reviewContainer = document.getElementById('quizReviewContainer');
+            reviewContainer.innerHTML = '';
 
-            const queueEl = document.getElementById('lblVideoQueue');
-            queueEl.innerHTML = '';
-            const videos = matrix.videos || [];
-            const badgeEl = document.getElementById('lblVideoCountBadge');
-            if (badgeEl) {
-                badgeEl.textContent = `${videos.length} Targets`;
+            if (data.question_results && data.question_results.length > 0) {
+                reviewSection.style.display = 'block';
+                data.question_results.forEach((qr, idx) => {
+                    const originalQ = activeQuestions.find(q => q.question_id === qr.question_id) || {};
+                    const isCorrect = qr.correct;
+
+                    const reviewCard = document.createElement('div');
+                    reviewCard.className = `review-card ${isCorrect ? 'review-correct' : 'review-incorrect'}`;
+
+                    const headerRow = document.createElement('div');
+                    headerRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;';
+
+                    const qTitle = document.createElement('span');
+                    qTitle.style.cssText = 'font-weight:700;font-size:14px;';
+                    qTitle.textContent = `Question ${idx + 1}: ${originalQ.concept_name || 'Concept'}`;
+
+                    const badge = document.createElement('span');
+                    badge.className = `badge ${isCorrect ? 'badge-green' : 'badge-rose'}`;
+                    badge.textContent = isCorrect ? 'CORRECT' : 'INCORRECT';
+
+                    headerRow.appendChild(qTitle);
+                    headerRow.appendChild(badge);
+
+                    const stemDiv = document.createElement('div');
+                    stemDiv.style.cssText = 'font-size:14px;color:var(--text-ink);margin-bottom:12px;font-weight:600;';
+                    stemDiv.textContent = qr.stem;
+
+                    const optsContainer = document.createElement('div');
+                    optsContainer.style.marginBottom = '12px';
+
+                    (originalQ.options || []).forEach((opt, optIdx) => {
+                        const isUserChoice = optIdx === qr.selected_index;
+                        const isCorrectAnswer = optIdx === qr.correct_index;
+
+                        const optDiv = document.createElement('div');
+                        let optStyle = 'padding:8px 12px;border-radius:6px;margin-bottom:6px;background:var(--bg-page);font-size:13px;display:flex;justify-content:space-between;align-items:center;';
+
+                        let badgeText = '';
+                        let badgeClass = '';
+
+                        if (isCorrectAnswer) {
+                            optStyle += 'border:1px solid var(--emerald-border);background:var(--emerald-soft);color:#065f46;font-weight:600;';
+                            badgeText = '✓ Authoritative Correct';
+                            badgeClass = 'badge badge-green';
+                        }
+                        if (isUserChoice && !isCorrectAnswer) {
+                            optStyle += 'border:1px solid var(--rose-border);background:var(--rose-soft);color:#991b1b;font-weight:600;';
+                            badgeText = '✕ Your Choice (Incorrect)';
+                            badgeClass = 'badge badge-rose';
+                        } else if (isUserChoice && isCorrectAnswer) {
+                            badgeText = '✓ Your Choice (Correct)';
+                            badgeClass = 'badge badge-green';
+                        }
+
+                        optDiv.style.cssText = optStyle;
+
+                        const textSpan = document.createElement('span');
+                        const prefix = document.createElement('strong');
+                        prefix.textContent = `${String.fromCharCode(65 + optIdx)}. `;
+                        textSpan.appendChild(prefix);
+                        textSpan.appendChild(document.createTextNode(opt));
+                        optDiv.appendChild(textSpan);
+
+                        if (badgeText) {
+                            const b = document.createElement('span');
+                            b.className = badgeClass;
+                            b.textContent = badgeText;
+                            optDiv.appendChild(b);
+                        }
+
+                        optsContainer.appendChild(optDiv);
+                    });
+
+                    reviewCard.appendChild(headerRow);
+                    reviewCard.appendChild(stemDiv);
+                    reviewCard.appendChild(optsContainer);
+
+                    if (qr.misconception) {
+                        const miscDiv = document.createElement('div');
+                        miscDiv.style.cssText = 'font-size:12px;color:var(--rose);margin-bottom:6px;';
+                        const mStrong = document.createElement('strong');
+                        mStrong.textContent = 'Diagnosed Misconception: ';
+                        miscDiv.appendChild(mStrong);
+                        miscDiv.appendChild(document.createTextNode(qr.misconception));
+                        reviewCard.appendChild(miscDiv);
+                    }
+
+                    if (qr.explanation) {
+                        const expDiv = document.createElement('div');
+                        expDiv.style.cssText = 'font-size:12px;color:var(--text-muted);background:var(--bg-page);padding:8px 12px;border-radius:6px;';
+                        const expStrong = document.createElement('strong');
+                        expStrong.textContent = 'Explanation: ';
+                        expDiv.appendChild(expStrong);
+                        expDiv.appendChild(document.createTextNode(qr.explanation));
+                        reviewCard.appendChild(expDiv);
+                    }
+
+                    reviewContainer.appendChild(reviewCard);
+                });
             }
-
-            videos.forEach(v => {
-                const btnId = `btnGenVid_${v.concept_id.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-                queueEl.innerHTML += `
-                    <div style="background:#0d1117;border:1px solid #30363d;border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
-                        <div>
-                            <div style="color:#f0f6fc;font-weight:600;font-size:14px;">${v.concept_name}</div>
-                            <div style="font-size:12px;color:#8b949e;margin-top:2px;">${v.directive} • <span style="color:#58a6ff;">${v.difficulty}</span></div>
-                        </div>
-                        <button id="${btnId}" onclick="generateAndPlayVideo('${v.concept_id}', '${v.concept_name}', '${v.difficulty}', ${v.target_seconds})" class="action-btn" style="width:auto;padding:6px 14px;font-size:13px;display:flex;align-items:center;gap:6px;">
-                            <span>🎬 Generate & Watch (${v.target_seconds}s)</span>
-                        </button>
-                    </div>
-                `;
-            });
-
-            resultsBox.scrollIntoView({ behavior: 'smooth' });
         }
 
-        let currentRemediationTarget = null;
-        let activeRemediationSession = null;
-        let activeVideoId = null;
+        async function loadVideoTargets(studentId, sourceId) {
+            try {
+                const res = await fetch(`/assessment/video-target/${studentId}/${sourceId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                renderVideoTargets(data);
+            } catch (err) {
+                console.error('Failed to load video target matrix:', err);
+            }
+        }
 
-        async function generateAndPlayVideo(conceptId, conceptName, difficulty, targetSeconds) {
-            if (!currentSession) {
-                alert('No active session.');
+        function renderVideoTargets(data) {
+            const section = document.getElementById('remediationTargetsSection');
+            const list = document.getElementById('videoTargetsList');
+            list.innerHTML = '';
+
+            if (!data.videos || data.videos.length === 0) {
+                section.style.display = 'none';
                 return;
             }
 
-            currentRemediationTarget = { conceptId, conceptName, difficulty, targetSeconds };
+            section.style.display = 'block';
+            data.videos.forEach(v => {
+                const card = document.createElement('div');
+                card.className = 'target-card';
 
+                const infoDiv = document.createElement('div');
+                const headerRow = document.createElement('div');
+                headerRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
+
+                const diffBadge = document.createElement('span');
+                diffBadge.className = 'badge badge-peach-green';
+                diffBadge.textContent = (v.difficulty || '').toUpperCase();
+
+                const timeBadge = document.createElement('span');
+                timeBadge.className = 'badge badge-blue';
+                timeBadge.textContent = `⏱ ${v.target_seconds}s Micro-Lesson`;
+
+                const nameSpan = document.createElement('span');
+                nameSpan.style.cssText = 'font-weight:700;font-size:15px;color:var(--text-ink);';
+                nameSpan.textContent = v.concept_name;
+
+                headerRow.appendChild(diffBadge);
+                headerRow.appendChild(timeBadge);
+                headerRow.appendChild(nameSpan);
+
+                const objDiv = document.createElement('div');
+                objDiv.style.cssText = 'font-size:13px;color:var(--text-muted);';
+                objDiv.textContent = v.learning_objective || '';
+
+                infoDiv.appendChild(headerRow);
+                infoDiv.appendChild(objDiv);
+
+                if (v.target_misconception) {
+                    const miscDiv = document.createElement('div');
+                    miscDiv.style.cssText = 'font-size:12px;color:var(--rose);margin-top:4px;';
+                    const mBold = document.createElement('strong');
+                    mBold.textContent = 'Target Misconception: ';
+                    miscDiv.appendChild(mBold);
+                    miscDiv.appendChild(document.createTextNode(v.target_misconception));
+                    infoDiv.appendChild(miscDiv);
+                }
+
+                const btn = document.createElement('button');
+                btn.className = 'neo-btn neo-btn-peach-green';
+                const btnSpan = document.createElement('span');
+                btnSpan.textContent = '🎬 Synthesize & Watch Video';
+                btn.appendChild(btnSpan);
+                btn.addEventListener('click', () => {
+                    synthesizeAndPlayVideo(v.concept_id, v.concept_name, v.difficulty, v.target_seconds);
+                });
+
+                card.appendChild(infoDiv);
+                card.appendChild(btn);
+                list.appendChild(card);
+            });
+        }
+
+        async function synthesizeAndPlayVideo(conceptId, conceptName, difficulty, targetSeconds) {
             const modal = document.getElementById('videoModal');
-            const modalTitle = document.getElementById('modalVideoTitle');
-            const modalSub = document.getElementById('modalVideoSub');
             const loader = document.getElementById('modalVideoLoader');
             const wrapper = document.getElementById('modalVideoWrapper');
+            const modalTitle = document.getElementById('modalVideoTitle');
+            const modalSub = document.getElementById('modalVideoSub');
             const progressText = document.getElementById('modalProgressText');
-            const player = document.getElementById('html5VideoPlayer');
+            const downloadBtn = document.getElementById('btnDownloadVideo');
 
-            // Reset verification UI
-            const remCard = document.getElementById('remediationCard');
-            const remFeedback = document.getElementById('remediationFeedback');
-            const btnVerify = document.getElementById('btnVerifyMastery');
-            if (remCard) remCard.style.display = 'none';
-            if (remFeedback) { remFeedback.style.display = 'none'; remFeedback.innerHTML = ''; }
-            if (btnVerify) {
-                btnVerify.style.display = 'inline-flex';
-                btnVerify.disabled = false;
-                btnVerify.innerHTML = '<span>🎯 Verify Mastery (Re-Test)</span>';
-            }
+            downloadBtn.style.display = 'none';
+            document.getElementById('remediationCard').style.display = 'none';
+            document.getElementById('remediationFeedback').style.display = 'none';
+            document.getElementById('btnVerifyMastery').style.display = 'inline-flex';
 
-            modalTitle.textContent = `Remediation: ${conceptName}`;
-            modalSub.textContent = `${difficulty.toUpperCase()} • ${targetSeconds}s Targeted Lesson`;
+            modalTitle.textContent = `Remediation Lesson: ${conceptName}`;
+            modalSub.textContent = `${difficulty.toUpperCase()} • ${targetSeconds}s Targeted Lesson addressing diagnosed misconception`;
 
             modal.style.display = 'flex';
             loader.style.display = 'block';
             wrapper.style.display = 'none';
-            progressText.textContent = 'Initializing Step 3 Video Engine...';
+            progressText.textContent = 'Initializing Phase 3 Learning Agent & Video Engine...';
 
             try {
-                // Trigger POST /video/generate
                 const res = await fetch('/video/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1387,17 +2000,12 @@ DASHBOARD_HTML = """
                 });
 
                 const data = await res.json();
-                if (!res.ok) {
-                    throw new Error(data.detail || JSON.stringify(data));
-                }
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
 
                 const jobId = data.job_id;
-                progressText.textContent = `Generating timed script & synthesizing voiceover...`;
+                progressText.textContent = 'Generating timed script, voiceover, and authentic visual frames...';
 
-                // Poll status until completed
-                let attempts = 0;
                 const pollInterval = setInterval(async () => {
-                    attempts++;
                     try {
                         const sRes = await fetch(`/video/status/${jobId}`);
                         const sData = await sRes.json();
@@ -1411,253 +2019,76 @@ DASHBOARD_HTML = """
                             loader.style.display = 'none';
                             wrapper.style.display = 'block';
 
+                            activeVideoId = sData.video_id;
                             const videoSrc = document.getElementById('videoSource');
                             const videoTrack = document.getElementById('videoTrack');
-
-                            activeVideoId = sData.video_id;
-                            resetVideoRagUI(sData.video_id);
 
                             videoSrc.src = `/video/${sData.video_id}/stream`;
                             videoTrack.src = `/video/${sData.video_id}/subtitles`;
 
+                            downloadBtn.href = `/video/${sData.video_id}/download`;
+                            downloadBtn.setAttribute('download', `${conceptName.replace(/\\s+/g, '_')}_remediation.mp4`);
+                            downloadBtn.style.display = 'inline-flex';
+
+                            const player = document.getElementById('html5VideoPlayer');
                             player.load();
                             player.play().catch(() => {});
+                            setupPlayheadSync(player);
                         } else if (sData.status === 'failed') {
                             clearInterval(pollInterval);
-                            progressText.textContent = `❌ Rendering Failed: ${sData.error_message || 'Unknown error'}`;
+                            loader.innerHTML = '';
+                            const errDiv = document.createElement('div');
+                            errDiv.style.cssText = 'color:var(--rose);font-weight:700;';
+                            errDiv.textContent = `Synthesis Failed: ${sData.error || 'Video generation error'}`;
+                            loader.appendChild(errDiv);
                         }
                     } catch (e) {
-                        console.error('Polling error:', e);
-                    }
-
-                    if (attempts > 120) {
-                        clearInterval(pollInterval);
-                        progressText.textContent = '⏱ Generation timed out. Please try again.';
+                        console.error('Video status poll error:', e);
                     }
                 }, 1500);
 
             } catch (err) {
-                progressText.textContent = `❌ Error: ${err.message}`;
+                loader.innerHTML = '';
+                const errDiv = document.createElement('div');
+                errDiv.style.cssText = 'color:var(--rose);font-weight:700;';
+                errDiv.textContent = `Error: ${err.message}`;
+                loader.appendChild(errDiv);
             }
         }
 
-        async function launchRemediationCheck() {
-            if (!currentRemediationTarget || !currentSession) return;
-            const btnVerify = document.getElementById('btnVerifyMastery');
-            btnVerify.disabled = true;
-            btnVerify.innerHTML = '<span>⏳ Preparing Verification...</span>';
-
-            const remCard = document.getElementById('remediationCard');
-            const remFeedback = document.getElementById('remediationFeedback');
-            remFeedback.style.display = 'none';
-
-            try {
-                const res = await fetch('/remediation/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        student_id: currentSession.student_id,
-                        source_id: currentSession.source_id,
-                        concept_id: currentRemediationTarget.conceptId,
-                        count: 1
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-
-                activeRemediationSession = data;
-                const q = data.questions[0];
-
-                document.getElementById('lblRemediationVariant').textContent = (q.variant_type || 'application').toUpperCase();
-                document.getElementById('lblRemediationDifficulty').textContent = (q.difficulty || 'targeted').toUpperCase();
-                document.getElementById('remediationStem').textContent = q.stem;
-
-                const optsEl = document.getElementById('remediationOptions');
-                optsEl.innerHTML = q.options.map(opt => `
-                    <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#161b22;border:1px solid #30363d;border-radius:6px;cursor:pointer;color:#c9d1d9;font-size:13px;transition:border-color 0.2s;">
-                        <input type="radio" name="remOption" value="${opt.index}" style="cursor:pointer;" />
-                        <span>${opt.text}</span>
-                    </label>
-                `).join('');
-
-                btnVerify.style.display = 'none';
-                remCard.style.display = 'block';
-            } catch (err) {
-                btnVerify.disabled = false;
-                btnVerify.innerHTML = '<span>🎯 Verify Mastery (Re-Test)</span>';
-                alert('Could not start verification: ' + err.message);
-            }
-        }
-
-        async function submitRemediationCheck() {
-            if (!activeRemediationSession) return;
-            const selected = document.querySelector('input[name="remOption"]:checked');
-            if (!selected) {
-                alert('Please select an answer option.');
-                return;
-            }
-
-            const submitBtn = document.getElementById('btnSubmitRemediation');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span>⏳ Grading...</span>';
-
-            try {
-                const res = await fetch('/remediation/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: activeRemediationSession.session_id,
-                        student_id: activeRemediationSession.student_id,
-                        concept_id: activeRemediationSession.concept_id,
-                        answers: [{
-                            question_id: activeRemediationSession.questions[0].question_id,
-                            selected_index: parseInt(selected.value)
-                        }]
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-
-                const remCard = document.getElementById('remediationCard');
-                const remFeedback = document.getElementById('remediationFeedback');
-                remCard.style.display = 'none';
-                remFeedback.style.display = 'block';
-
-                if (data.passed) {
-                    remFeedback.innerHTML = `
-                        <div style="background:#23863626;border:1px solid #238636;color:#3fb950;padding:14px;border-radius:8px;">
-                            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">
-                                🎉 Mastery Verified!
-                            </div>
-                            <div style="font-size:13px;color:#c9d1d9;margin-top:6px;">${data.message}</div>
-                            <div style="font-size:12px;color:#8b949e;margin-top:4px;">${data.explanations.join('<br>')}</div>
-                        </div>
-                    `;
-
-                    // Dynamic Dashboard Badge and Score Updates (Amber -> Green)
-                    if (data.profile_summary) {
-                        const strong = data.profile_summary.strong_concepts || [];
-                        const weak = data.profile_summary.weak_concepts || [];
-                        const masteriesEl = document.getElementById('lblMasteries');
-                        if (masteriesEl) {
-                            masteriesEl.innerHTML = '';
-                            strong.forEach(c => masteriesEl.innerHTML += `<span class="badge badge-green">✔ ${c} (Strong)</span> `);
-                            weak.forEach(c => masteriesEl.innerHTML += `<span class="badge badge-amber">⚠ ${c} (Needs Review)</span> `);
-                        }
-
-                        const scoreEl = document.getElementById('lblProfileScore');
-                        if (scoreEl && typeof data.profile_summary.overall_score === 'number') {
-                            scoreEl.textContent = `${data.profile_summary.overall_score.toFixed(1)}%`;
-                        }
-
-                        // Update video queue item
-                        const btnId = `btnGenVid_${currentRemediationTarget.conceptId.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-                        const targetBtn = document.getElementById(btnId);
-                        if (targetBtn) {
-                            const parent = targetBtn.parentElement;
-                            if (parent) {
-                                targetBtn.remove();
-                                parent.innerHTML += '<span class="badge badge-green" style="padding:6px 12px;font-size:12px;font-weight:600;">✔ Mastered</span>';
-                            }
-                        }
-
-                        // Update badge count
-                        const badgeEl = document.getElementById('lblVideoCountBadge');
-                        if (badgeEl) {
-                            const remCount = (data.profile_summary.weak_concepts || []).length;
-                            badgeEl.textContent = `${remCount} Targets`;
-                            if (remCount === 0) {
-                                document.getElementById('lblVideoDirective').textContent = 'All assessed concepts in this assessment have been successfully mastered. No AI videos needed.';
-                            }
-                        }
-                    }
-                } else {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = '<span>Submit Verification</span>';
-                    remFeedback.innerHTML = `
-                        <div style="background:#da363326;border:1px solid #da3633;color:#f85149;padding:14px;border-radius:8px;">
-                            <div style="font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;">
-                                ❌ Verification Incomplete
-                            </div>
-                            <div style="font-size:13px;color:#c9d1d9;margin-top:6px;">${data.message}</div>
-                            <div style="font-size:12px;color:#8b949e;margin-top:4px;">${data.explanations.join('<br>')}</div>
-                            <button onclick="launchRemediationCheck()" class="action-btn" style="margin-top:10px;width:auto;padding:6px 14px;font-size:12px;">🔄 Try Again</button>
-                        </div>
-                    `;
-                }
-            } catch (err) {
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = '<span>Submit Verification</span>';
-                alert('Error submitting verification: ' + err.message);
+        function setupPlayheadSync(player) {
+            const tsBadge = document.getElementById('lblVideoTimestampBadge');
+            if (player) {
+                player.ontimeupdate = () => {
+                    const cur = player.currentTime;
+                    const mins = Math.floor(cur / 60);
+                    const secs = Math.floor(cur % 60);
+                    tsBadge.textContent = `⏱ Playhead: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                };
             }
         }
 
         function toggleRagPanel() {
             const content = document.getElementById('videoRagContent');
-            if (content) {
-                content.style.display = (content.style.display === 'none') ? 'block' : 'none';
-            }
-        }
-
-        function resetVideoRagUI(videoId) {
-            const chatLog = document.getElementById('ragChatLog');
-            if (chatLog) {
-                chatLog.innerHTML = `
-                    <div style="color:#8b949e;font-size:12px;font-style:italic;">
-                        Ask any question about this video or click a quick prompt above. The assistant answers grounded in the current scene timestamp and course textbook.
-                    </div>
-                `;
-            }
-            const input = document.getElementById('ragInput');
-            if (input) input.value = '';
-
-            const player = document.getElementById('html5VideoPlayer');
-            if (player && !player._timeUpdateAttached) {
-                player.addEventListener('timeupdate', () => {
-                    const cur = player.currentTime;
-                    const mins = Math.floor(cur / 60);
-                    const secs = Math.floor(cur % 60);
-                    const badge = document.getElementById('lblVideoTimestampBadge');
-                    if (badge) {
-                        badge.textContent = `⏱ At ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                    }
-                });
-                player._timeUpdateAttached = true;
-            }
-        }
-
-        function jumpToVideoTimestamp(seconds) {
-            const player = document.getElementById('html5VideoPlayer');
-            if (player) {
-                player.currentTime = parseFloat(seconds);
-                player.play().catch(() => {});
+            const btn = document.getElementById('btnToggleRag');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                btn.textContent = 'Hide';
+            } else {
+                content.style.display = 'none';
+                btn.textContent = 'Show';
             }
         }
 
         function askQuickQuestion(promptText) {
             const input = document.getElementById('ragInput');
-            if (input) {
-                input.value = promptText;
-                sendRagQuestion();
-            }
-        }
-
-        // SEC-004: HTML escape utility — prevents XSS when injecting LLM/user content via innerHTML
-        function _escHtml(str) {
-            if (str == null) return '';
-            return String(str)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#x27;');
+            input.value = promptText;
+            sendRagQuestion();
         }
 
         async function sendRagQuestion() {
             if (!activeVideoId) {
-                alert('Please wait for the video to finish loading.');
+                alert('Please wait for the video to load.');
                 return;
             }
             const input = document.getElementById('ragInput');
@@ -1668,24 +2099,25 @@ DASHBOARD_HTML = """
             const timestamp = player ? player.currentTime : 0;
             const chatLog = document.getElementById('ragChatLog');
 
-            // Append User Bubble — SEC-004: escape question text before innerHTML injection
             const userMsg = document.createElement('div');
-            userMsg.style.cssText = 'background:#1f6feb26;border:1px solid #1f6feb55;padding:8px 12px;border-radius:6px;align-self:flex-end;max-width:85%;color:#f0f6fc;';
+            userMsg.style.cssText = 'background:var(--peach-green-soft);border:1px solid var(--peach-green-border);padding:10px 14px;border-radius:var(--radius-sm);align-self:flex-end;max-width:85%;';
             const curMins = Math.floor(timestamp / 60);
             const curSecs = Math.floor(timestamp % 60);
-            userMsg.innerHTML = `<div style="font-size:11px;color:#58a6ff;font-weight:600;margin-bottom:2px;">You (${curMins}:${curSecs < 10 ? '0' : ''}${curSecs})</div><div>${_escHtml(question)}</div>`;
+            const userHeader = document.createElement('div');
+            userHeader.style.cssText = 'font-size:11px;color:var(--peach-green);font-weight:700;margin-bottom:2px;';
+            userHeader.textContent = `You (${curMins}:${curSecs < 10 ? '0' : ''}${curSecs})`;
+            const userBody = document.createElement('div');
+            userBody.textContent = question;
+            userMsg.appendChild(userHeader);
+            userMsg.appendChild(userBody);
             chatLog.appendChild(userMsg);
             input.value = '';
 
-            // Loading Indicator
             const loadingMsg = document.createElement('div');
-            loadingMsg.style.cssText = 'background:#161b22;border:1px solid #30363d;padding:8px 12px;border-radius:6px;align-self:flex-start;max-width:85%;color:#8b949e;font-style:italic;';
-            loadingMsg.textContent = 'Analyzing video scene and textbook chunks...';
+            loadingMsg.style.cssText = 'background:var(--bg-surface);padding:10px 14px;border-radius:var(--radius-sm);align-self:flex-start;max-width:85%;color:var(--text-muted);font-style:italic;';
+            loadingMsg.textContent = 'Consulting Layer A textbook ground truth...';
             chatLog.appendChild(loadingMsg);
             chatLog.scrollTop = chatLog.scrollHeight;
-
-            const sendBtn = document.getElementById('btnSendRag');
-            sendBtn.disabled = true;
 
             try {
                 const res = await fetch('/video/rag/ask', {
@@ -1704,69 +2136,192 @@ DASHBOARD_HTML = """
 
                 loadingMsg.remove();
 
-                // Assistant Bubble
                 const botMsg = document.createElement('div');
-                botMsg.style.cssText = 'background:#161b22;border:1px solid #30363d;padding:10px 14px;border-radius:6px;align-self:flex-start;max-width:92%;color:#e1e4e8;';
+                botMsg.style.cssText = 'background:var(--bg-surface);border:1px solid var(--border-card);padding:12px 16px;border-radius:var(--radius-sm);align-self:flex-start;max-width:92%;box-shadow:var(--neo-raised-sm);';
 
-                let sceneChip = '';
-                if (data.active_scene) {
-                    sceneChip = `
-                        <button onclick="jumpToVideoTimestamp(${data.active_scene.start_seconds})" class="badge badge-blue" style="cursor:pointer;border:none;margin-right:6px;font-size:11px;" title="Click to seek video">
-                            ▶ Scene ${data.active_scene.scene_number} (${data.active_scene.timestamp_label})
-                        </button>
-                    `;
-                }
+                const headerDiv = document.createElement('div');
+                headerDiv.style.cssText = 'font-size:12px;color:var(--emerald);font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;';
+                headerDiv.innerHTML = '<span>🎓 Dual-Layer Video RAG</span><span class="badge badge-green" style="font-size:10px;">Layer A Grounded</span>';
+                botMsg.appendChild(headerDiv);
 
-                // SEC-004: Use textContent for the LLM answer to prevent XSS injection
-                const answerDiv = document.createElement('div');
-                answerDiv.style.cssText = 'line-height:1.4;white-space:pre-line;';
-                answerDiv.textContent = data.answer || '';
+                const ansDiv = document.createElement('div');
+                ansDiv.style.lineHeight = '1.5';
+                ansDiv.textContent = data.answer || '';
+                botMsg.appendChild(ansDiv);
 
-                let citationsHtml = '';
                 if (data.citations && data.citations.length > 0) {
-                    citationsHtml = '<div style="margin-top:8px;padding-top:6px;border-top:1px solid #21262d;font-size:11px;color:#8b949e;display:flex;flex-wrap:wrap;gap:4px;"><strong>Sources:</strong>';
+                    const citeDiv = document.createElement('div');
+                    citeDiv.style.cssText = 'margin-top:10px;padding-top:8px;border-top:1px solid var(--border-card);font-size:12px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center;';
+                    const cStrong = document.createElement('strong');
+                    cStrong.textContent = 'Layer A Ground Truth: ';
+                    citeDiv.appendChild(cStrong);
                     data.citations.forEach(c => {
-                        // chunk_id and page are system-generated, safe to display but still escape
-                        citationsHtml += `<span class="meta-chip">${_escHtml(c.chunk_id)}${c.page ? ` (p.${_escHtml(String(c.page))})` : ''}</span>`;
+                        const chip = document.createElement('span');
+                        chip.className = 'meta-chip';
+                        chip.textContent = `${c.chunk_id}${c.page ? ` (p.${c.page})` : ''}`;
+                        citeDiv.appendChild(chip);
                     });
-                    citationsHtml += '</div>';
+                    botMsg.appendChild(citeDiv);
                 }
 
-                let suggestionsHtml = '';
-                if (data.suggested_questions && data.suggested_questions.length > 0) {
-                    suggestionsHtml = '<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:4px;">';
-                    data.suggested_questions.forEach(sq => {
-                        // SEC-004: Use data attribute + event listener instead of inline onclick
-                        // to avoid HTML injection through suggested question text
-                        const safeSq = _escHtml(sq);
-                        suggestionsHtml += `<button class="meta-chip rag-suggest-btn" data-question="${safeSq}" style="cursor:pointer;background:#21262d;color:#58a6ff;font-size:11px;padding:2px 6px;">❓ ${safeSq}</button>`;
-                    });
-                    suggestionsHtml += '</div>';
-                }
-
-                botMsg.innerHTML = `
-                    <div style="font-size:11px;color:#3fb950;font-weight:600;margin-bottom:4px;display:flex;align-items:center;gap:6px;">
-                        <span>🎓 Video Assistant</span>
-                        ${sceneChip}
-                    </div>
-                    <div id="answerTextSlot"></div>
-                    ${citationsHtml}
-                    ${suggestionsHtml}
-                `;
-                // Insert answer via textContent to prevent innerHTML XSS
-                botMsg.querySelector('#answerTextSlot').replaceWith(answerDiv);
-
-                // Attach click handlers to suggestion chips via JS (safe, no inline eval)
-                botMsg.querySelectorAll('.rag-suggest-btn').forEach(btn => {
-                    btn.addEventListener('click', () => askQuickQuestion(btn.dataset.question));
-                });
                 chatLog.appendChild(botMsg);
                 chatLog.scrollTop = chatLog.scrollHeight;
+
             } catch (err) {
-                loadingMsg.style.color = '#f85149';
-                loadingMsg.textContent = '❌ Error: ' + err.message;
-            } finally {
-                sendBtn.disabled = false;
+                loadingMsg.style.color = 'var(--rose)';
+                loadingMsg.textContent = `❌ Error: ${err.message}`;
+            }
+        }
+
+        async function launchRemediationCheck() {
+            if (!activeVideoId) return;
+            const btn = document.getElementById('btnVerifyMastery');
+            btn.disabled = true;
+            btn.innerHTML = '<span>⏳ Preparing Verification Re-Test...</span>';
+
+            try {
+                const vRes = await fetch(`/video/${activeVideoId}/script`);
+                const scriptData = await vRes.json();
+                const conceptId = scriptData.concept_id;
+
+                const res = await fetch('/remediation/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: currentSession.student_id,
+                        source_id: currentSession.source_id,
+                        concept_id: conceptId
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                activeRemediationSession = data;
+                const q = data.questions ? data.questions[0] : (data.question || {});
+
+                document.getElementById('lblRemediationVariant').textContent = (q.variant || 'APPLICATION').toUpperCase();
+                document.getElementById('lblRemediationDifficulty').textContent = (q.difficulty || 'TARGETED').toUpperCase();
+                document.getElementById('remediationStem').textContent = q.stem;
+
+                const optionsBox = document.getElementById('remediationOptions');
+                optionsBox.innerHTML = '';
+                (q.options || []).forEach((opt, idx) => {
+                    const optId = `rem_opt_${idx}`;
+                    const optText = typeof opt === 'object' ? opt.text : opt;
+
+                    const label = document.createElement('label');
+                    label.className = 'option-item';
+                    label.htmlFor = optId;
+
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = 'remediation_choice';
+                    input.id = optId;
+                    input.value = idx;
+
+                    const span = document.createElement('span');
+                    const strong = document.createElement('strong');
+                    strong.textContent = `${String.fromCharCode(65 + idx)}. `;
+                    span.appendChild(strong);
+                    span.appendChild(document.createTextNode(optText || ''));
+
+                    label.appendChild(input);
+                    label.appendChild(span);
+                    optionsBox.appendChild(label);
+                });
+
+                document.getElementById('remediationCard').style.display = 'block';
+                btn.style.display = 'none';
+
+            } catch (err) {
+                alert(`Error launching verification: ${err.message}`);
+                btn.disabled = false;
+                btn.innerHTML = '<span>🎯 Verify Mastery (Re-Test)</span>';
+            }
+        }
+
+        async function submitRemediationCheck() {
+            if (!activeRemediationSession) return;
+
+            const selected = document.querySelector('input[name="remediation_choice"]:checked');
+            if (!selected) {
+                alert('Please select an answer option.');
+                return;
+            }
+
+            const selectedIdx = parseInt(selected.value, 10);
+            const btn = document.getElementById('btnSubmitRemediation');
+            btn.disabled = true;
+            btn.textContent = 'Verifying Comprehension...';
+
+            try {
+                const res = await fetch('/remediation/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        session_id: activeRemediationSession.session_id,
+                        student_id: currentSession.student_id,
+                        concept_id: activeRemediationSession.concept_id,
+                        answers: [{
+                            question_id: (activeRemediationSession.questions && activeRemediationSession.questions[0]) ? activeRemediationSession.questions[0].question_id : 'Q1',
+                            selected_index: selectedIdx
+                        }]
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                const feedback = document.getElementById('remediationFeedback');
+                feedback.style.display = 'block';
+
+                if (data.status === 'resolved' || data.passed === true) {
+                    feedback.style.background = 'var(--emerald-soft)';
+                    feedback.style.border = '1px solid var(--emerald-border)';
+                    feedback.style.color = '#065f46';
+                    feedback.innerHTML = `
+                        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">🎉 Concept Mastered! (Verified in Phase 4)</div>
+                        <div>${escapeHtml(data.explanation || data.message || 'You demonstrated full comprehension of this concept.')}</div>
+                        <div style="font-size:12px;margin-top:8px;font-weight:600;">Status: Remediation target resolved &amp; student profile updated!</div>
+                    `;
+                    document.getElementById('remediationCard').style.display = 'none';
+                } else if (data.new_status === 'REQUIRES_HUMAN_FALLBACK' || (data.iteration_count && data.iteration_count >= 3)) {
+                    feedback.style.background = '#fef2f2';
+                    feedback.style.border = '2px solid #ef4444';
+                    feedback.style.color = '#991b1b';
+                    feedback.innerHTML = `
+                        <div style="font-weight:700;font-size:16px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+                            <span>🛡 Anti-Loop Kill Switch Engaged</span>
+                            <span class="badge badge-rose" style="font-size:11px;">Human Intervention Required</span>
+                        </div>
+                        <div style="font-size:13px;line-height:1.5;color:#7f1d1d;">
+                            ${escapeHtml(data.message || 'Misconception persists after repeated attempts. Automated AI loop suspended to prevent cognitive fatigue.')}
+                        </div>
+                        <div style="margin-top:14px;">
+                            <a href="/instructor" target="_blank" class="neo-btn" style="background:#dc2626;color:#ffffff;font-size:13px;">
+                                👩‍🏫 Open Instructor Intervention Portal ➔
+                            </a>
+                        </div>
+                    `;
+                    document.getElementById('remediationCard').style.display = 'none';
+                } else {
+                    feedback.style.background = 'var(--rose-soft)';
+                    feedback.style.border = '1px solid var(--rose-border)';
+                    feedback.style.color = '#991b1b';
+                    feedback.innerHTML = `
+                        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">⚠ Misconception Persists</div>
+                        <div>${escapeHtml(data.explanation || data.message || 'Your answer did not resolve the core misconception.')}</div>
+                        <div style="font-size:12px;margin-top:8px;font-weight:600;">Phase 4: Review the video lesson and ask the Video RAG Assistant before re-testing.</div>
+                    `;
+                    btn.disabled = false;
+                    btn.textContent = 'Re-Try Verification';
+                }
+
+            } catch (err) {
+                alert(`Submission error: ${err.message}`);
+                btn.disabled = false;
+                btn.textContent = 'Submit Verification Answer';
             }
         }
 
@@ -1779,15 +2334,17 @@ DASHBOARD_HTML = """
             modal.style.display = 'none';
         }
 
-        // Initialize sources on page load
-        window.addEventListener('DOMContentLoaded', loadSources);
+        window.addEventListener('DOMContentLoaded', () => {
+            loadSources();
+            initCounters();
+        });
     </script>
 </body>
 </html>
 """
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard():
     """VisualAI dashboard — Interactive test runner and complete pipeline documentation."""
     return HTMLResponse(content=DASHBOARD_HTML)

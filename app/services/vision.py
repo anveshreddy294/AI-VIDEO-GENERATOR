@@ -6,11 +6,14 @@ flow through `describe_image`. The prompt forces a strict, structured read of
 """
 
 import base64
+import logging
 from pathlib import Path
 
 import google.generativeai as genai
 
 from ..core.config import settings
+
+logger = logging.getLogger(__name__)
 
 _DIAGRAM_PROMPT = (
     "You are an expert textbook diagram and image reader with perfect visual "
@@ -56,7 +59,7 @@ def describe_frame(image_bytes: bytes, source: str = "frame") -> str:
 
 
 def _generate(prompt: str, image_bytes: bytes, source: str, mime_type: str) -> str:
-    """Shared call: prompt + base64 media -> text answer via OmniRoute or Gemini."""
+    """Shared call: prompt + base64 media -> text answer via Gemini Vision."""
     if not isinstance(image_bytes, bytes):
         raise TypeError(
             f"_generate() expects raw bytes, got {type(image_bytes).__name__}. "
@@ -65,41 +68,7 @@ def _generate(prompt: str, image_bytes: bytes, source: str, mime_type: str) -> s
 
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
 
-    # 1. Try OmniRoute vision if configured
-    if settings.llm_provider == "omniroute" and settings.omniroute_api_key:
-        try:
-            import json
-            import urllib.request
-            url = f"{settings.omniroute_base_url}/chat/completions"
-            payload = json.dumps({
-                "model": settings.omniroute_model,
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:{mime_type};base64,{b64_data}"},
-                            },
-                        ],
-                    }
-                ],
-            }).encode("utf-8")
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {settings.omniroute_api_key}",
-            }
-            req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
-            with urllib.request.urlopen(req, timeout=30.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                choices = data.get("choices", [])
-                if choices and "message" in choices[0]:
-                    return choices[0]["message"].get("content", "").strip()
-        except Exception as exc:
-            print(f"[vision] OmniRoute vision failed: {exc}. Trying Gemini fallback.")
-
-    # 2. Try Gemini Vision if key is set
+    # Call Gemini Vision if key is set
     if settings.gemini_api_key:
         try:
             model = _client()
@@ -112,9 +81,9 @@ def _generate(prompt: str, image_bytes: bytes, source: str, mime_type: str) -> s
             if text:
                 return text
         except Exception as exc:
-            print(f"[vision] Gemini vision failed: {exc}")
+            logger.warning("[vision] Gemini vision analysis failed for '%s': %s", source, exc)
 
-    return "[No description returned by vision API]"
+    return f"[Diagram: {source}]"
 
 
 def describe_image_file(file_path: Path) -> str:

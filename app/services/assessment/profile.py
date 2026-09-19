@@ -5,10 +5,13 @@ These profiles are the handoff artifact to Step 3 (video generation).
 """
 
 import json
+import logging
 from pathlib import Path
 
 from ...core.config import BASE_DIR, settings
 from .schemas import ConceptMastery, StudentLearningProfile
+
+logger = logging.getLogger(__name__)
 
 PROFILES_DIR = getattr(settings, "learning_profiles_dir", BASE_DIR / "storage" / "runtime" / "learning_profiles")
 PROFILES_DIR.mkdir(parents=True, exist_ok=True)
@@ -45,7 +48,7 @@ def load_profile(student_id: str, source_id: str) -> StudentLearningProfile | No
         data = json.loads(path.read_text(encoding="utf-8"))
         return StudentLearningProfile.model_validate(data)
     except Exception as exc:
-        print(f"[profile] Failed to load profile for {student_id}/{source_id}: {exc}")
+        logger.warning("[profile] Failed to load profile for %s/%s: %s", student_id, source_id, exc)
         return None
 
 

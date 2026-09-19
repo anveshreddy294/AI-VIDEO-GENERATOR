@@ -15,8 +15,29 @@ import wave
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import edge_tts
-import imageio_ffmpeg
+try:
+    import edge_tts
+    HAS_EDGE_TTS = True
+except ImportError:
+    edge_tts = None
+    HAS_EDGE_TTS = False
+
+try:
+    import imageio_ffmpeg
+except ImportError:
+    imageio_ffmpeg = None
+
+
+def get_ffmpeg_exe() -> str:
+    """Safely obtain ffmpeg binary path from imageio_ffmpeg, system PATH, or fallback."""
+    if imageio_ffmpeg is not None:
+        try:
+            return imageio_ffmpeg.get_ffmpeg_exe()
+        except Exception:
+            pass
+    import shutil
+    return shutil.which("ffmpeg") or "ffmpeg"
+
 
 from .schemas import VideoScene, VideoScript
 
@@ -61,7 +82,7 @@ def get_wav_duration(wav_path: Path) -> float:
 
 def convert_mp3_to_wav(mp3_path: Path, wav_path: Path) -> None:
     """Convert an MP3 file to standard 16kHz mono WAV using imageio-ffmpeg."""
-    ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+    ffmpeg_exe = get_ffmpeg_exe()
     cmd = [
         ffmpeg_exe,
         "-y",
@@ -94,7 +115,7 @@ async def synthesize_scene_audio(
     if not text:
         text = scene.title
 
-    if mock_mode:
+    if mock_mode or not HAS_EDGE_TTS:
         duration = _generate_mock_wav(wav_path, scene.duration_seconds)
         return wav_path, duration
 
@@ -113,6 +134,29 @@ async def synthesize_scene_audio(
         )
         duration = _generate_mock_wav(wav_path, scene.duration_seconds)
         return wav_path, duration
+
+
+def append_silence_to_wav(wav_path: Path, silence_seconds: float = 0.3) -> float:
+    """Appends real silence frames directly to the audio WAV file so video and audio clocks match."""
+    try:
+        with wave.open(str(wav_path), "rb") as wf:
+            params = wf.getparams()
+            n_channels = params.nchannels
+            sampwidth = params.sampwidth
+            framerate = params.framerate
+            frames = wf.readframes(params.nframes)
+
+        silence_frames = int(framerate * silence_seconds)
+        silence_bytes = b"\x00" * (silence_frames * n_channels * sampwidth)
+
+        with wave.open(str(wav_path), "wb") as wf:
+            wf.setparams(params)
+            wf.writeframes(frames + silence_bytes)
+
+        return get_wav_duration(wav_path)
+    except Exception as e:
+        logger.warning(f"[audio_synthesizer] Could not append silence to {wav_path}: {e}")
+        return get_wav_duration(wav_path)
 
 
 def concatenate_wav_files(wav_paths: List[Path], output_path: Path) -> float:
@@ -152,18 +196,20 @@ async def synthesize_script_audio(
     durations: List[float] = []
 
     for scene in script.scenes:
-        wav_path, dur = await synthesize_scene_audio(
+        wav_path, raw_dur = await synthesize_scene_audio(
             scene=scene,
             output_dir=audio_dir,
             voice=voice,
             mock_mode=mock_mode,
         )
+        # Authoritative clock: append 0.3s real silence to audio wave
+        calibrated_dur = append_silence_to_wav(wav_path, silence_seconds=0.3)
         scene_wavs.append(wav_path)
-        durations.append(dur)
-        # Calibrate scene duration to match measured audio length (with 0.3s pause buffer)
-        scene.duration_seconds = max(dur + 0.3, scene.duration_seconds)
+        durations.append(calibrated_dur)
+        # Calibrate scene duration to match measured audio length exactly
+        scene.duration_seconds = calibrated_dur
 
     master_path = audio_dir / "master_voiceover.wav"
-    concatenate_wav_files(scene_wavs, master_path)
+    master_dur = concatenate_wav_files(scene_wavs, master_path)
 
     return master_path, scene_wavs, durations

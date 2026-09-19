@@ -4,6 +4,7 @@ Chains FFmpeg audio extraction, Whisper ASR, OpenCV keyframes, Gemini Vision,
 and multimodal fusion into normalized ContentUnits.
 """
 
+import logging
 from pathlib import Path
 
 from ...core.config import settings
@@ -13,6 +14,8 @@ from .frame_extractor import FrameCapture, extract_frames
 from .fusion import fuse_units
 from .transcriber import transcribe_with_timestamps
 
+logger = logging.getLogger(__name__)
+
 
 def process_video_units(
     video_path: Path, source_id: str, asset_id: str
@@ -21,29 +24,29 @@ def process_video_units(
     audio_path = settings.processed_dir / f"{video_path.stem}_audio.wav"
     try:
         # Phase 1: Split audio track
-        print(f"[video] Phase 1: Extracting audio from {video_path.name}...")
+        logger.info("[video] Phase 1: Extracting audio from %s...", video_path.name)
         try:
             extract_audio(video_path, audio_path)
         except Exception as exc:
-            print(f"[video] Phase 1 FAILED (audio extraction): {exc}")
+            logger.warning("[video] Phase 1 FAILED (audio extraction): %s", exc)
             return _visuals_only_units(video_path, source_id, asset_id)
 
         # Phase 2: Transcribe speech
-        print("[video] Phase 2: Transcribing audio...")
+        logger.info("[video] Phase 2: Transcribing audio...")
         try:
             segments = transcribe_with_timestamps(audio_path)
-            print(f"[video] Phase 2: Got {len(segments)} speech segments.")
+            logger.info("[video] Phase 2: Got %d speech segments.", len(segments))
         except Exception as exc:
-            print(f"[video] Phase 2 FAILED (transcription): {exc}")
+            logger.warning("[video] Phase 2 FAILED (transcription): %s", exc)
             segments = []
 
         # Phase 3: Keyframe extraction
-        print("[video] Phase 3: Extracting keyframes...")
+        logger.info("[video] Phase 3: Extracting keyframes...")
         try:
             captures = extract_frames(video_path)
-            print(f"[video] Phase 3: Got {len(captures)} keyframes.")
+            logger.info("[video] Phase 3: Got %d keyframes.", len(captures))
         except Exception as exc:
-            print(f"[video] Phase 3 FAILED (frame extraction): {exc}")
+            logger.warning("[video] Phase 3 FAILED (frame extraction): %s", exc)
             captures = []
 
         # Phase 3b: Describe keyframes via Gemini Vision
@@ -55,7 +58,7 @@ def process_video_units(
                     cap.description = desc
                     described.append(cap)
                 except Exception as exc:
-                    print(f"[video] Phase 3b FAILED for frame {i} @{cap.timestamp}s: {exc}")
+                    logger.warning("[video] Phase 3b FAILED for frame %d @%ss: %s", i, cap.timestamp, exc)
                     cap.description = (
                         f"[Frame at {cap.timestamp:.0f}s — vision description unavailable]"
                     )
@@ -80,11 +83,13 @@ def _visuals_only_units(
                     desc = describe_frame(cap.frame_bytes, cap.timestamp)
                     cap.description = desc
                     described.append(cap)
-                except Exception:
+                except Exception as exc:
+                    logger.warning("[video] Frame description failed @%ss: %s", cap.timestamp, exc)
                     cap.description = f"[Frame at {cap.timestamp:.0f}s — unavailable]"
                     described.append(cap)
         return fuse_units([], described, source_id=source_id, asset_id=asset_id)
     except Exception as exc:
+        logger.error("[video] _visuals_only_units failed: %s", exc)
         return [
             ContentUnit(
                 source_id=source_id,

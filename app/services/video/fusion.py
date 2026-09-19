@@ -109,9 +109,3 @@ def fuse_units(
             seq_index += 1
 
     return units
-
-
-def fuse(segments: list[Segment], frames: list[FrameCapture]) -> str:
-    """Stitch speech + visuals into legacy single authoritative text string."""
-    units = fuse_units(segments, frames, source_id="SRC_LEGACY", asset_id="AST_LEGACY")
-    return "\n\n".join(u.text for u in units)

@@ -104,37 +104,3 @@ def create_rich_chunks(
             chunks.append(chunk)
 
     return chunks
-
-
-# Legacy backwards-compatible helpers
-def chunk_authoritative_text(text: str, document_name: str, page_map=None):
-    from .schemas import AuthoritativeSourceChunk
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap,
-        length_function=_token_len,
-    )
-    return [
-        AuthoritativeSourceChunk(document_name=document_name, text=raw.strip())
-        for raw in splitter.split_text(text)
-    ]
-
-
-def chunk_video_text(text: str, video_name: str):
-    from .schemas import AuthoritativeVideoChunk
-
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=settings.chunk_size,
-        chunk_overlap=settings.chunk_overlap,
-        length_function=_token_len,
-    )
-    return [
-        AuthoritativeVideoChunk(
-            video_name=video_name,
-            start_timestamp="00:00",
-            end_timestamp="00:00",
-            text=raw.strip(),
-        )
-        for raw in splitter.split_text(text)
-    ]

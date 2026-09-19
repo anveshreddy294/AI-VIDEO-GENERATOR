@@ -49,6 +49,7 @@ class ContentUnit(BaseModel):
     content_id: str = Field(default_factory=lambda: f"CU_{uuid4().hex[:12]}")
     source_id: str
     asset_id: str
+    layer: Literal["A"] = "A"
     modality: Literal["pdf", "image", "txt", "video"]
     text: str
     visual_description: str | None = None
@@ -70,6 +71,7 @@ class ContentUnit(BaseModel):
     )
     region_id: str | None = None
     image_id: str | None = None
+    image_path: str | None = None
     extraction_method: str
     confidence_score: float = Field(
         default=1.0, description="Extraction or OCR/Vision confidence score (0.0 - 1.0)"
@@ -142,6 +144,19 @@ LayerAChunk = Annotated[
 ]
 
 
+class StageDiagnostics(BaseModel):
+    """Observable diagnostics envelope emitted across subsystem boundaries."""
+
+    stage: str = "general"
+    provider_used: str = "default"
+    fallback_used: bool = False
+    fallback_reason: str | None = None
+    error_code: str | None = None
+    grounding_verified: bool = True
+    dimension_validated: bool | None = None
+    duration_ms: float = 0.0
+
+
 class TopicBlueprint(BaseModel):
     """Derived representation over normalized ContentUnits and KnowledgeGraph."""
 
@@ -156,6 +171,8 @@ class TopicBlueprint(BaseModel):
         description="Rough difficulty level"
     )
     source_id: str | None = None
+    diagnostics: StageDiagnostics | None = None
+
     asset_id: str | None = None
     content_unit_count: int = 0
     chunk_count: int = 0
