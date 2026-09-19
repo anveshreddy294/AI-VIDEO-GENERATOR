@@ -87,6 +87,7 @@ class ProgressEvent(BaseModel):
     progress_percent: int = Field(ge=0, le=100)
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: dict[str, Any] = Field(default_factory=dict)
+    terminal: bool = False
 
 
 class PipelineJob(BaseModel):
@@ -130,6 +131,7 @@ class JobManager:
         message: str,
         progress_percent: int,
         metadata: dict[str, Any] | None = None,
+        terminal: bool = False,
     ) -> ProgressEvent:
         """Record an event and dispatch it asynchronously to all active SSE subscribers."""
         safe_meta = sanitize_metadata(metadata)
@@ -140,16 +142,17 @@ class JobManager:
             message=message,
             progress_percent=max(0, min(100, progress_percent)),
             metadata=safe_meta,
+            terminal=terminal,
         )
 
         job = self._jobs.get(job_id)
         if job:
             job.current_stage = stage
-            job.status = status if status in ("failed", "completed") else ("warning" if status == "warning" else "running")
+            job.status = status if terminal else ("warning" if status == "warning" else "running")
             job.progress_percent = event.progress_percent
             job.updated_at = event.timestamp
             job.events.append(event)
-            if status in ("completed", "failed"):
+            if terminal:
                 job.is_finished = True
 
         # Dispatch to active SSE queues
@@ -180,6 +183,7 @@ class JobManager:
             status="completed",
             message=message,
             progress_percent=100,
+            terminal=True,
             metadata={"questions_generated": len(result.get("assessment", {}).get("questions", [])) if "assessment" in result else 0},
         )
 
@@ -201,6 +205,7 @@ class JobManager:
             stage=stage,
             status="failed",
             message=error_message,
+            terminal=True,
             progress_percent=job.progress_percent if job else 0,
             metadata=metadata,
         )

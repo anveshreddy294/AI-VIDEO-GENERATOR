@@ -6,6 +6,7 @@ and multimodal fusion into normalized ContentUnits.
 
 import logging
 from pathlib import Path
+from uuid import uuid4
 
 from ...core.config import settings
 from ..schemas import ContentUnit
@@ -21,7 +22,7 @@ def process_video_units(
     video_path: Path, source_id: str, asset_id: str
 ) -> list[ContentUnit]:
     """Extract and fuse video content into normalized ContentUnits."""
-    audio_path = settings.processed_dir / f"{video_path.stem}_audio.wav"
+    audio_path = settings.processed_dir / f"{uuid4().hex}_audio.wav"
     try:
         # Phase 1: Split audio track
         logger.info("[video] Phase 1: Extracting audio from %s...", video_path.name)

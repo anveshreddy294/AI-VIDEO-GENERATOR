@@ -81,7 +81,10 @@ def extract_from_pdf(
                     except Exception as exc:
                         logger.warning("[extractor] Vision failed for image on page %s: %s", page_number, exc)
                 else:
-                    description = f"Technical visual model on page {page_number}."
+                    raise RuntimeError("PDF exceeds the configured vision budget; split the source into smaller files")
+
+                if not description:
+                    raise RuntimeError(f"Could not extract diagram on page {page_number}")
 
                 unit = ContentUnit(
                     source_id=source_id,
@@ -174,9 +177,9 @@ def _extract_page_images_with_info(page: fitz.Page, page_number: int) -> list[di
 
 def _try_extract_image(page: fitz.Page, xref: int, page_number: int) -> bytes | None:
     try:
-        pix = fitz.Pixmap(doc=page.parent, xref=xref)
+        pix = fitz.Pixmap(page.parent, xref)
         if pix.alpha:
-            pix = fitz.Pixmap(fitz.csRGB, pix, 0)
+            pix = fitz.Pixmap(pix, 0)
         elif pix.colorspace and pix.colorspace.n > 3:
             pix = fitz.Pixmap(fitz.csRGB, pix)
         if pix.width < 50 or pix.height < 50:

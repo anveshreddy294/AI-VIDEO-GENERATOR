@@ -122,7 +122,7 @@ def grade_submission(
         curr_score = (sum(correct_list) / len(correct_list) * 100.0) if correct_list else 0.0
         mastery.last_score = curr_score
 
-        all_correct = all(correct_list)
+        all_correct = curr_score >= settings.assessment_pass_threshold
         any_correct = any(correct_list)
 
         if all_correct:
@@ -138,7 +138,7 @@ def grade_submission(
             mastery.status = "REQUIRES_HUMAN_FALLBACK"
         elif (
             mastery.correct_attempts >= settings.mastery_threshold
-            and mastery.consecutive_correct >= 1
+            and mastery.consecutive_correct >= settings.mastery_threshold
         ):
             mastery.status = "MASTERED"
         elif any_correct or mastery.correct_attempts >= 1:
@@ -153,11 +153,11 @@ def grade_submission(
         if not concept:
             continue
 
-        child_failed = not all(correct_list)
+        child_failed = sum(correct_list) / len(correct_list) * 100 < settings.assessment_pass_threshold
         if child_failed:
             for prereq_id in concept.prerequisite_concept_ids:
                 prereq_correct = concept_scores.get(prereq_id)
-                if prereq_correct is not None and not all(prereq_correct):
+                if prereq_correct is not None and sum(prereq_correct) / len(prereq_correct) * 100 < settings.assessment_pass_threshold:
                     parent_name = kg.concepts[prereq_id].name if prereq_id in kg.concepts else prereq_id
                     gap_desc = f"Prerequisite gap: Failed '{concept.name}' (child) AND '{parent_name}' (parent)"
                     prerequisite_gaps.append(gap_desc)

@@ -25,6 +25,8 @@ class Settings:
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
         self.storage_dir: Path = BASE_DIR / os.getenv("STORAGE_DIR", "storage")
         self.runtime_dir: Path = BASE_DIR / os.getenv("RUNTIME_DIR", "storage/runtime")
+        self.include_fixture_sources = os.getenv("INCLUDE_FIXTURE_SOURCES", "false").lower() == "true"
+        self.assessment_pass_threshold = float(os.getenv("ASSESSMENT_PASS_THRESHOLD", "70"))
         self.fixtures_dir: Path = BASE_DIR / os.getenv("FIXTURES_DIR", "tests/fixtures")
         self.registry_dir: Path = BASE_DIR / os.getenv("REGISTRY_DIR", "storage/runtime/registry")
         env_upload = os.getenv("UPLOAD_DIR")

@@ -91,6 +91,7 @@ class OllamaProvider:
             "model": self.model_name,
             "prompt": prompt,
             "stream": False,
+            "think": False,
         }
         if is_json:
             req_data["format"] = "json"
@@ -106,7 +107,11 @@ class OllamaProvider:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
+                if data.get("error") or data.get("done") is False:
+                    raise RuntimeError(data.get("error") or "Incomplete Ollama response")
                 raw = data.get("response", "")
+                if not isinstance(raw, str) or not raw.strip():
+                    raise RuntimeError("Ollama returned no text")
                 # Clean markdown fences if model outputs ```json ... ```
                 cleaned = raw.strip()
                 if cleaned.startswith("```"):

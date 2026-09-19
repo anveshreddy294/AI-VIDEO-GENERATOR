@@ -53,7 +53,8 @@ def plan_assessment(
         Ordered queue of ConceptNode objects ready for question generation.
     """
     limit = max_questions if max_questions is not None else settings.max_questions
-    concepts = list(kg.concepts.values())
+    blocked = {cid for cid, m in profile.concept_masteries.items() if m.status in ("REQUIRES_HUMAN_FALLBACK", "REQUIRES_FALLBACK")} if profile else set()
+    concepts = [c for c in kg.concepts.values() if c.concept_id not in blocked]
     if not concepts:
         return []
 

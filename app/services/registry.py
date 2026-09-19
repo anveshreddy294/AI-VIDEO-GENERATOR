@@ -12,6 +12,8 @@ import hashlib
 import json
 import logging
 import mimetypes
+import shutil
+from .storage import atomic_json, serialized, validate_id
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -44,6 +46,8 @@ def get_registry_dir() -> Path:
 def get_fixtures_registry_dir() -> Path:
     """Deterministic fixtures registry directory for reproducible seed data."""
     f_dir = getattr(settings, "fixtures_dir", BASE_DIR / "tests" / "fixtures") / "registry"
+    if not settings.include_fixture_sources:
+        return get_registry_dir()
     if f_dir.exists():
         return f_dir
     return BASE_DIR / "storage" / "registry"
@@ -58,7 +62,7 @@ def _load_sources_index() -> dict[str, dict[str, Any]]:
     """Loads sources index by merging seed fixtures with runtime additions."""
     fixtures_index: dict[str, dict[str, Any]] = {}
     fixtures_file = get_fixtures_registry_dir() / "sources_index.json"
-    if fixtures_file.exists():
+    if settings.include_fixture_sources and fixtures_file.exists():
         try:
             fixtures_index = json.loads(fixtures_file.read_text(encoding="utf-8"))
         except Exception as exc:
@@ -72,14 +76,13 @@ def _load_sources_index() -> dict[str, dict[str, Any]]:
         runtime_index = json.loads(runtime_file.read_text(encoding="utf-8"))
         return {**fixtures_index, **runtime_index}
     except Exception as exc:
-        logger.debug("[registry] Could not read runtime sources_index: %s", exc)
-        return fixtures_index
+        raise RuntimeError("Cannot read runtime source index; refusing to overwrite it") from exc
 
 
 def _save_sources_index(index: dict[str, dict[str, Any]]) -> None:
     """Save sources index exclusively to isolated runtime storage."""
     runtime_file = get_registry_dir() / "sources_index.json"
-    runtime_file.write_text(json.dumps(index, indent=2), encoding="utf-8")
+    atomic_json(runtime_file, index)
 
 
 def calculate_sha256(file_path: Path) -> str:
@@ -144,12 +147,12 @@ def validate_file(file_path: Path, filename: str) -> tuple[str, str]:
 def find_existing_by_hash(file_hash: str) -> SourceRecord | None:
     """Check if the exact file hash has already been registered."""
     index = _load_sources_index()
-    for record_data in index.values():
-        if record_data.get("file_hash") == file_hash and record_data.get("status") == "READY":
-            return SourceRecord.model_validate(record_data)
-    return None
+    matches = [SourceRecord.model_validate(r) for r in index.values() if r.get("file_hash") == file_hash]
+    return max(matches, key=lambda r: r.version) if matches else None
 
 
+
+@serialized
 def register_source(
     temp_path: Path, filename: str, uploaded_by: str = "student_default"
 ) -> tuple[SourceRecord, Path]:
@@ -185,12 +188,13 @@ def register_source(
     persistent_file = source_dir / f"original{ext}"
 
     # Copy file to persistent location
-    persistent_file.write_bytes(temp_path.read_bytes())
+    shutil.copyfile(temp_path, persistent_file)
 
     save_source_record(record)
     return record, persistent_file
 
 
+@serialized
 def save_source_record(record: SourceRecord) -> None:
     """Save/update a SourceRecord in the persistent registry."""
     record.updated_at = datetime.now(timezone.utc).isoformat()
@@ -199,6 +203,7 @@ def save_source_record(record: SourceRecord) -> None:
     _save_sources_index(index)
 
 
+@serialized
 def update_source_status(
     source_id: str,
     status: str,
@@ -211,8 +216,7 @@ def update_source_status(
 
     record_data = index[source_id]
     record_data["status"] = status
-    if error_message:
-        record_data["error_message"] = error_message
+    record_data["error_message"] = error_message
     record = SourceRecord.model_validate(record_data)
     save_source_record(record)
     return record
@@ -220,23 +224,23 @@ def update_source_status(
 
 def save_content_units(source_id: str, content_units: list[ContentUnit]) -> None:
     """Persist normalized ContentUnits for a source to JSON in runtime registry."""
-    source_dir = get_registry_dir() / source_id
+    source_dir = get_registry_dir() / validate_id(source_id)
     source_dir.mkdir(parents=True, exist_ok=True)
     cu_file = source_dir / "content_units.json"
     data = [cu.model_dump() for cu in content_units]
-    cu_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_json(cu_file, data)
 
 
 def load_content_units(source_id: str) -> list[ContentUnit]:
     """Load normalized ContentUnits for a source with runtime, fixture, and legacy fallback."""
     # 1. Check runtime registry
-    cu_file = get_registry_dir() / source_id / "content_units.json"
+    cu_file = get_registry_dir() / validate_id(source_id) / "content_units.json"
     # 2. Check fixtures registry
     if not cu_file.exists():
-        cu_file = get_fixtures_registry_dir() / source_id / "content_units.json"
+        cu_file = get_fixtures_registry_dir() / validate_id(source_id) / "content_units.json"
     # 3. Check legacy storage path
     if not cu_file.exists():
-        cu_file = BASE_DIR / "storage" / "registry" / source_id / "content_units.json"
+        cu_file = BASE_DIR / "storage" / "registry" / validate_id(source_id) / "content_units.json"
 
     if not cu_file.exists():
         return []
@@ -250,22 +254,22 @@ get_content_units = load_content_units
 
 def save_knowledge_graph(source_id: str, kg: KnowledgeGraph) -> None:
     """Persist Knowledge Graph for a source to JSON in runtime registry."""
-    source_dir = get_registry_dir() / source_id
+    source_dir = get_registry_dir() / validate_id(source_id)
     source_dir.mkdir(parents=True, exist_ok=True)
     kg_file = source_dir / "knowledge_graph.json"
-    kg_file.write_text(json.dumps(kg.model_dump(), indent=2), encoding="utf-8")
+    atomic_json(kg_file, kg.model_dump())
 
 
 def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
     """Load Knowledge Graph for a source with runtime, fixture, and legacy fallback."""
     # 1. Check runtime registry
-    kg_file = get_registry_dir() / source_id / "knowledge_graph.json"
+    kg_file = get_registry_dir() / validate_id(source_id) / "knowledge_graph.json"
     # 2. Check fixtures registry
     if not kg_file.exists():
-        kg_file = get_fixtures_registry_dir() / source_id / "knowledge_graph.json"
+        kg_file = get_fixtures_registry_dir() / validate_id(source_id) / "knowledge_graph.json"
     # 3. Check legacy storage path
     if not kg_file.exists():
-        kg_file = BASE_DIR / "storage" / "registry" / source_id / "knowledge_graph.json"
+        kg_file = BASE_DIR / "storage" / "registry" / validate_id(source_id) / "knowledge_graph.json"
 
     if not kg_file.exists():
         return None
@@ -288,3 +292,14 @@ def get_source_record(source_id: str) -> SourceRecord | None:
     except Exception as exc:
         logger.warning("[registry] Failed to validate source record for %s: %s", source_id, exc)
         return None
+
+
+def save_rich_chunks(source_id: str, chunks) -> None:
+    atomic_json(get_registry_dir() / validate_id(source_id) / "rich_chunks.json", [c.model_dump() for c in chunks])
+
+
+def load_rich_chunks(source_id: str) -> list[dict]:
+    path = get_registry_dir() / validate_id(source_id) / "rich_chunks.json"
+    if not path.exists():
+        return []
+    return json.loads(path.read_text(encoding="utf-8"))

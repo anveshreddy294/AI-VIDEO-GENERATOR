@@ -1,3 +1,4 @@
+from ..storage import atomic_json, validate_id, serialized
 """Assessment Session persistence.
 
 File-based storage for active and completed assessment sessions.
@@ -19,18 +20,15 @@ LEGACY_SESSIONS_DIR = BASE_DIR / "storage" / "assessment_sessions"
 
 def save_session(session: AssessmentSession) -> None:
     """Persist an AssessmentSession to runtime disk."""
-    path = SESSIONS_DIR / f"{session.session_id}.json"
-    path.write_text(
-        json.dumps(session.model_dump(), indent=2, default=str),
-        encoding="utf-8",
-    )
+    path = SESSIONS_DIR / f"{validate_id(session.session_id)}.json"
+    atomic_json(path, session.model_dump())
 
 
 def load_session(session_id: str) -> AssessmentSession | None:
     """Load an AssessmentSession from runtime disk with legacy fallback. Returns None if not found."""
-    path = SESSIONS_DIR / f"{session_id}.json"
+    path = SESSIONS_DIR / f"{validate_id(session_id)}.json"
     if not path.exists() and LEGACY_SESSIONS_DIR.exists():
-        path = LEGACY_SESSIONS_DIR / f"{session_id}.json"
+        path = LEGACY_SESSIONS_DIR / f"{validate_id(session_id)}.json"
 
     if not path.exists():
         return None

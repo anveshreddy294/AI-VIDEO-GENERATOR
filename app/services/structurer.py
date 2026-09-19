@@ -97,9 +97,11 @@ def process_structure_and_concepts(
     prompt_blocks = []
     for u in units:
         loc = f"p.{u.page_number}" if u.page_number else (f"{u.timestamp_start:.0f}s" if u.timestamp_start is not None else f"seq.{u.sequence_index}")
-        prompt_blocks.append(f"[{u.content_id}] ({loc}): {u.text[:400]}")
+        prompt_blocks.append(f"[{u.content_id}] ({loc}): {u.text}")
 
-    material_text = "\n\n".join(prompt_blocks)[:60_000]
+    material_text = "\n\n".join(prompt_blocks)
+    if len(material_text) > 60_000:
+        raise ValueError("Material exceeds the reasoning context limit; split it into smaller sources. No content was silently truncated.")
     payload = _STRUCTURE_AND_CONCEPT_PROMPT + material_text
 
     start_t = time.time()
@@ -120,15 +122,45 @@ def process_structure_and_concepts(
             )
 
     dur_ms = int((time.time() - start_t) * 1000)
-    logger.warning("[structurer] LLM structure extraction failed after retries. Using heuristic fallback. Error: %s", last_err)
+    logger.warning("[structurer] LLM structure extraction failed after retries. Ingestion stopped. Error: %s", last_err)
     # Fallback if LLM fails
-    return _fallback_outputs(units, fallback_reason=last_err, duration_ms=dur_ms)
+    raise RuntimeError(f"Knowledge extraction failed after two attempts: {last_err}")
 
 
 def _assemble_outputs(
     data: dict[str, Any], units: list[ContentUnit], duration_ms: int = 0
 ) -> tuple[list[ContentUnit], KnowledgeGraph, TopicBlueprint]:
     cu_map = {u.content_id: u for u in units}
+    concepts = data.get("concepts")
+    if not isinstance(concepts, list) or not concepts:
+        raise ValueError("Knowledge extraction returned no concepts")
+    ids = [c.get("concept_id") for c in concepts]
+    if any(not isinstance(cid, str) or not cid.strip() for cid in ids) or len(set(ids)) != len(ids):
+        raise ValueError("Concept IDs must be nonempty and unique")
+    dependencies = {}
+    for c in concepts:
+        refs = c.get("source_content_ids", [])
+        if not refs or any(ref not in cu_map for ref in refs):
+            raise ValueError("Every concept must reference actual content units")
+        if not c.get("name", "").strip() or not c.get("definition", "").strip():
+            raise ValueError("Every concept must have a name and definition")
+        parents = c.get("prerequisite_concept_ids", [])
+        if any(parent not in ids for parent in parents):
+            raise ValueError("Unknown prerequisite concept")
+        dependencies[c["concept_id"]] = parents
+    visiting, visited = set(), set()
+    def visit(cid):
+        if cid in visiting:
+            raise ValueError("Cyclic concept prerequisites")
+        if cid in visited:
+            return
+        visiting.add(cid)
+        for parent in dependencies[cid]:
+            visit(parent)
+        visiting.remove(cid)
+        visited.add(cid)
+    for cid in ids:
+        visit(cid)
 
     # 1. Map Chapters & Sections back to ContentUnits
     chapters_data = data.get("chapters", [])

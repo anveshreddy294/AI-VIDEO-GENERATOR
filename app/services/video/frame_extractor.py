@@ -31,6 +31,8 @@ class FrameCapture:
 
 def extract_frames(video_path: Path) -> list[FrameCapture]:
     """Sample the video every N seconds, deduping near-identical frames."""
+    if settings.frame_interval_seconds <= 0:
+        raise ValueError("FRAME_INTERVAL_SECONDS must be positive")
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise RuntimeError(f"OpenCV could not open video file: {video_path}")

@@ -51,7 +51,8 @@ def _client() -> genai.GenerativeModel:
 
 def describe_image(image_bytes: bytes, source: str = "image") -> str:
     """Send image bytes (or a path to one) to Gemini Vision and get a caption."""
-    return _generate(_DIAGRAM_PROMPT, image_bytes, source, mime_type="image/png")
+    mime_type = "image/jpeg" if image_bytes.startswith(b"\xff\xd8\xff") else "image/png"
+    return _generate(_DIAGRAM_PROMPT, image_bytes, source, mime_type=mime_type)
 
 
 def describe_frame(image_bytes: bytes, source: str = "frame") -> str:
@@ -84,7 +85,7 @@ def _generate(prompt: str, image_bytes: bytes, source: str, mime_type: str) -> s
         except Exception as exc:
             logger.warning("[vision] Gemini vision analysis failed for '%s': %s", source, exc)
 
-    return f"[Diagram: {source}]"
+    raise RuntimeError(f"Vision extraction unavailable or empty for {source}")
 
 
 def describe_image_file(file_path: Path) -> str:

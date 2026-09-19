@@ -12,6 +12,7 @@ Executes the complete Step 1 sequence:
 """
 
 import logging
+import asyncio
 import os
 from pathlib import Path
 from uuid import uuid4
@@ -24,6 +25,7 @@ from ..services.dispatcher import UnsupportedFileType, dispatch
 from ..services.registry import (
     register_source,
     save_content_units,
+    save_rich_chunks,
     save_knowledge_graph,
     update_source_status,
 )
@@ -113,13 +115,13 @@ async def upload_file(
                     break
                 bytes_written += len(chunk)
                 if bytes_written > _MAX_UPLOAD_BYTES:
-                    temp_path.unlink(missing_ok=True)
                     raise HTTPException(
                         status_code=413,
                         detail=f"File too large. Maximum upload size is {_MAX_UPLOAD_BYTES // (1024 * 1024)} MB.",
                     )
                 out.write(chunk)
     except HTTPException:
+        temp_path.unlink(missing_ok=True)
         raise
     except Exception as exc:
         temp_path.unlink(missing_ok=True)
@@ -131,7 +133,7 @@ async def upload_file(
     try:
         # Step 2 & 3: File Validation & Registration
         try:
-            source_record, persistent_file = register_source(temp_path, filename)
+            source_record, persistent_file = register_source(temp_path, filename, uploaded_by=student_id)
         except ValueError as val_err:
             raise HTTPException(status_code=400, detail=str(val_err)) from val_err
 
@@ -144,7 +146,7 @@ async def upload_file(
 
         # Step 4 & 5: Dispatcher & Modality Extraction -> ContentUnits
         try:
-            extraction_result = dispatch(
+            extraction_result = await asyncio.to_thread(dispatch,
                 persistent_file, source_id=source_id, asset_id=asset_id
             )
             raw_units = extraction_result.units
@@ -167,7 +169,7 @@ async def upload_file(
 
         # Step 6, 7 & 8: Structure Detection, Concept Extraction & Knowledge Graph
         update_source_status(source_id, "NORMALIZING")
-        enriched_units, knowledge_graph, blueprint = process_structure_and_concepts(raw_units)
+        enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, raw_units)
 
         # Persist normalized ContentUnits and Knowledge Graph to registry storage
         save_content_units(source_id, enriched_units)
@@ -176,9 +178,10 @@ async def upload_file(
         # Step 9 & 10: Semantic Chunking & Provenance Mapping
         update_source_status(source_id, "INDEXING")
         rich_chunks = create_rich_chunks(enriched_units, knowledge_graph)
+        save_rich_chunks(source_id, rich_chunks)
 
         # Step 11: Rich Qdrant Payload Upsert (Layer A)
-        synced_count = upsert_safely(rich_chunks)
+        synced_count = await asyncio.to_thread(upsert_safely, rich_chunks)
 
         # Update blueprint chunk_count with real count
         blueprint.chunk_count = len(rich_chunks)
@@ -203,7 +206,7 @@ async def upload_file(
                 from .assessment import start_assessment
                 from ..services.assessment.schemas import AssessmentStartRequest
 
-                assessment_session = start_assessment(
+                assessment_session = await asyncio.to_thread(start_assessment,
                     student_id=student_id,
                     source_id=source_id,
                     payload=AssessmentStartRequest(
@@ -242,6 +245,13 @@ async def upload_file(
             update_source_status(source_record.source_id, "FAILED", error_message=str(val_exc))
         raise HTTPException(status_code=422, detail=f"Validation failed: {val_exc}") from val_exc
 
+    except Exception as exc:
+        if source_record:
+            update_source_status(source_record.source_id, "FAILED", error_message=type(exc).__name__)
+        if isinstance(exc, HTTPException):
+            raise
+        logger.exception("Ingestion failed")
+        raise HTTPException(status_code=503, detail="Ingestion failed; verify model and storage services and retry") from exc
     finally:
         temp_path.unlink(missing_ok=True)
 

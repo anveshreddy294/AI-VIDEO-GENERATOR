@@ -45,7 +45,12 @@ def validate_ingestion_quality(
     # 2. Content Level Validation
     if not units:
         raise ValidationFailed("Content level failure: No ContentUnits extracted.")
+    unit_ids = {u.content_id for u in units}
+    if len(unit_ids) != len(units):
+        raise ValidationFailed("Duplicate content IDs")
     for cu in units:
+        if not cu.text.strip() or cu.confidence_score <= 0 or cu.source_id != record.source_id or cu.asset_id != record.asset_id:
+            raise ValidationFailed("Empty, failed, or mismatched content unit")
         if not cu.content_id or not cu.source_id or not cu.asset_id:
             raise ValidationFailed(f"Content level failure: ContentUnit {cu} missing essential IDs.")
         if cu.modality in ("pdf", "image") and cu.page_number is None and cu.modality == "pdf":
@@ -56,6 +61,8 @@ def validate_ingestion_quality(
     if not chunks:
         raise ValidationFailed("Chunk level failure: No RichChunks created.")
     for ch in chunks:
+        if not ch.text.strip() or ch.source_id != record.source_id or ch.asset_id != record.asset_id or not set(ch.content_ids).issubset(unit_ids):
+            raise ValidationFailed("Invalid chunk text or provenance")
         if not ch.chunk_id or not ch.source_id or not ch.asset_id:
             raise ValidationFailed(f"Chunk level failure: Chunk {ch} missing essential IDs.")
         if ch.layer != "A":
@@ -65,7 +72,13 @@ def validate_ingestion_quality(
     report["checks"]["chunk_level"] = f"PASSED ({len(chunks)} Chunks)"
 
     # 4. Concept Level Validation
+    if not kg.concepts:
+        raise ValidationFailed("Knowledge graph has no concepts")
     for cid, concept in kg.concepts.items():
+        if not concept.source_content_ids or not set(concept.source_content_ids).issubset(unit_ids):
+            raise ValidationFailed("Concept has missing or invalid content references")
+        if not set(concept.prerequisite_concept_ids).issubset(kg.concepts):
+            raise ValidationFailed("Concept has unknown prerequisites")
         if not concept.concept_id or not concept.name:
             raise ValidationFailed(f"Concept level failure: Concept node {cid} missing ID or name.")
         if not concept.source_content_ids:

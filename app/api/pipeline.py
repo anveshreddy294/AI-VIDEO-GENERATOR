@@ -28,6 +28,7 @@ from ..services.registry import (
     load_knowledge_graph,
     register_source,
     save_content_units,
+    save_rich_chunks,
     save_knowledge_graph,
     update_source_status,
 )
@@ -74,7 +75,7 @@ async def _execute_upload_and_assess(
         )
 
         try:
-            source_record, persistent_file = register_source(temp_path, original_filename)
+            source_record, persistent_file = register_source(temp_path, original_filename, uploaded_by=student_id)
         except ValueError as val_err:
             await job_manager.fail_job(
                 job_id=job_id,
@@ -107,7 +108,7 @@ async def _execute_upload_and_assess(
         )
 
         try:
-            extraction_result = dispatch(persistent_file, source_id=source_id, asset_id=asset_id)
+            extraction_result = await asyncio.to_thread(dispatch,persistent_file, source_id=source_id, asset_id=asset_id)
             raw_units = extraction_result.units
         except UnsupportedFileType as exc:
             await job_manager.fail_job(
@@ -164,7 +165,7 @@ async def _execute_upload_and_assess(
         )
 
         try:
-            enriched_units, knowledge_graph, blueprint = process_structure_and_concepts(raw_units)
+            enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, raw_units)
         except Exception as exc:
             await job_manager.fail_job(
                 job_id=job_id,
@@ -211,6 +212,7 @@ async def _execute_upload_and_assess(
         )
 
         rich_chunks = create_rich_chunks(enriched_units, knowledge_graph)
+        save_rich_chunks(source_id, rich_chunks)
         blueprint.chunk_count = len(rich_chunks)
 
         await job_manager.emit_event(
@@ -232,38 +234,10 @@ async def _execute_upload_and_assess(
             metadata={"source_id": source_id},
         )
 
-        synced_count = 0
+        from ..db.vector_store import upsert_chunks
+        synced_count = await asyncio.to_thread(upsert_chunks, rich_chunks)
         sync_error = None
         fallback_used = False
-        try:
-            from ..db.vector_store import upsert_chunks
-            synced_count = upsert_chunks(rich_chunks)
-        except Exception as exc:
-            logger.warning("[pipeline_job] Initial Qdrant upsert failed: %s. Retrying explicitly with embedded storage...", exc)
-            try:
-                from ..db.vector_store import get_client, ensure_collection, _embed, _point_id, _payload
-                from qdrant_client import QdrantClient
-                from qdrant_client.http import models as qmodels
-                try:
-                    embedded_client = get_client()
-                except Exception:
-                    embedded_client = QdrantClient(":memory:")
-                ensure_collection(embedded_client)
-                texts = [c.text for c in rich_chunks]
-                vectors = _embed(texts)
-                points = [
-                    qmodels.PointStruct(id=_point_id(c), vector=v, payload=_payload(c))
-                    for c, v in zip(rich_chunks, vectors)
-                ]
-                if points:
-                    embedded_client.upsert(collection_name=settings.collection_name, points=points)
-                synced_count = len(points)
-                fallback_used = True
-                logger.info("[pipeline_job] Fallback storage successfully synchronized %d chunks.", synced_count)
-            except Exception as embedded_exc:
-                sync_error = f"VECTOR_SYNC_FAILED: Both primary and fallback Qdrant storage failed: {embedded_exc}"
-                logger.error("[pipeline_job] %s", sync_error)
-                synced_count = 0
 
         from ..db.vector_store import get_last_embed_diagnostics
         embed_diag = get_last_embed_diagnostics()
@@ -375,7 +349,7 @@ async def _execute_upload_and_assess(
                 for rc in rich_chunks
             ]
 
-            assessment_session = start_assessment(
+            assessment_session = await asyncio.to_thread(start_assessment,
                 student_id=student_id,
                 source_id=source_id,
                 payload=AssessmentStartRequest(
@@ -458,6 +432,10 @@ async def _execute_upload_and_assess(
             error_message=f"Internal pipeline failure: {unhandled_exc}",
         )
     finally:
+        if source_record:
+            current = get_source_record(source_record.source_id)
+            if current and current.status != "READY":
+                update_source_status(current.source_id, "FAILED", error_message="Ingestion did not complete; see pipeline diagnostics")
         temp_path.unlink(missing_ok=True)
 
 
@@ -546,7 +524,7 @@ async def _execute_assess_existing(
             for cu in existing_cus if cu.text
         ]
 
-        assessment_session = start_assessment(
+        assessment_session = await asyncio.to_thread(start_assessment,
             student_id=student_id,
             source_id=source_id,
             payload=AssessmentStartRequest(
@@ -615,8 +593,19 @@ async def create_upload_job(
     temp_path = settings.upload_dir / temp_name
     settings.upload_dir.mkdir(parents=True, exist_ok=True)
 
-    with temp_path.open("wb") as out:
-        shutil.copyfileobj(file.file, out)
+    from .upload import _validate_mime, _MAX_UPLOAD_BYTES
+    _validate_mime(filename, file.content_type)
+    try:
+        size = 0
+        with temp_path.open("wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > _MAX_UPLOAD_BYTES:
+                    raise HTTPException(status_code=413, detail="Upload exceeds size limit")
+                out.write(chunk)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
 
     job = job_manager.create_job(job_type="upload_and_assess")
     background_tasks.add_task(
@@ -664,21 +653,19 @@ async def stream_job_events(job_id: str):
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
 
     async def event_generator():
-        # 1. Replay historical events already recorded
-        for event in list(job.events):
-            yield f"data: {event.model_dump_json()}\n\n"
-
-        if job.is_finished:
-            return
-
-        # 2. Subscribe to live stream
+        # Subscribe before replay so events emitted while yielding are not lost.
         queue = job_manager.subscribe(job_id)
+        history = list(job.events)
         try:
+            for event in history:
+                yield f"data: {event.model_dump_json()}\n\n"
+                if event.terminal:
+                    return
             while True:
                 try:
                     event: ProgressEvent = await asyncio.wait_for(queue.get(), timeout=30.0)
                     yield f"data: {event.model_dump_json()}\n\n"
-                    if event.status in ("completed", "failed"):
+                    if event.terminal:
                         break
                 except asyncio.TimeoutError:
                     # Keep-alive ping

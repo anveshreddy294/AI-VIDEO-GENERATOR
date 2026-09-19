@@ -12,7 +12,6 @@ from pathlib import Path
 
 from .extractor import extract_from_pdf
 from .schemas import ContentUnit
-from .video.pipeline import process_video_units
 from .vision import describe_image_file
 
 IMAGE_EXTENSIONS: set[str] = {"png", "jpg", "jpeg"}
@@ -70,6 +69,7 @@ def dispatch(
         char_cursor = 0
 
         for idx, para in enumerate(paragraphs):
+            char_cursor = raw_text.index(para, char_cursor)
             para_len = len(para)
             unit = ContentUnit(
                 source_id=source_id,
@@ -83,7 +83,7 @@ def dispatch(
                 confidence_score=1.0,
             )
             units.append(unit)
-            char_cursor += para_len + 2
+            char_cursor += para_len
 
         if not units:
             units.append(
@@ -103,6 +103,7 @@ def dispatch(
         )
 
     if ext in VIDEO_EXTENSIONS:
+        from .video.pipeline import process_video_units
         units = process_video_units(
             file_path, source_id=source_id, asset_id=asset_id
         )

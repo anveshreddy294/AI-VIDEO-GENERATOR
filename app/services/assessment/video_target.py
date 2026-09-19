@@ -1,3 +1,4 @@
+from ..storage import atomic_json, validate_id, serialized
 """Step 6 — Video Generation Blueprint: Video Target Matrix Builder.
 
 Goal: Tell Step 3 (AI Video Generation Engine) exactly which parts need AI videos.
@@ -28,7 +29,7 @@ from .schemas import AssessmentSession, StudentLearningProfile, VideoTarget, Vid
 logger = logging.getLogger(__name__)
 
 # Passing score threshold (percentage 0-100)
-PASS_THRESHOLD = 70.0
+PASS_THRESHOLD = settings.assessment_pass_threshold
 
 # Duration scaling rule by difficulty tier
 DURATION_BY_DIFFICULTY = {
@@ -334,21 +335,18 @@ def save_video_matrix(matrix: VideoTargetMatrix) -> Path:
     from ...core.config import BASE_DIR, settings
     out_dir = getattr(settings, "video_targets_dir", BASE_DIR / "storage" / "runtime" / "video_targets")
     out_dir.mkdir(parents=True, exist_ok=True)
-    safe_student = matrix.student_id.replace("/", "_")
-    safe_source = matrix.source_id.replace("/", "_")
+    safe_student = validate_id(matrix.student_id)
+    safe_source = validate_id(matrix.source_id)
     out_file = out_dir / f"{safe_student}_{safe_source}.json"
-    out_file.write_text(
-        json.dumps(matrix.model_dump(), indent=2, default=str),
-        encoding="utf-8",
-    )
+    atomic_json(out_file, matrix.model_dump())
     return out_file
 
 
 def load_video_matrix(student_id: str, source_id: str) -> VideoTargetMatrix | None:
     """Load an existing Video Target Matrix from runtime disk with legacy fallback."""
     from ...core.config import BASE_DIR, settings
-    safe_student = student_id.replace("/", "_")
-    safe_source = source_id.replace("/", "_")
+    safe_student = validate_id(student_id)
+    safe_source = validate_id(source_id)
     target_dir = getattr(settings, "video_targets_dir", BASE_DIR / "storage" / "runtime" / "video_targets")
     path = target_dir / f"{safe_student}_{safe_source}.json"
     if not path.exists():

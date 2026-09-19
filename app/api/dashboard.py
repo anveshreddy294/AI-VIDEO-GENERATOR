@@ -1520,7 +1520,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     clearInterval(timelineTimerInterval);
                     timelineTimerInterval = null;
                 }
-                fetch(`/pipeline/jobs/${jobId}/status`)
+                fetch(`/pipeline/jobs/${jobId}`)
                     .then(r => r.json())
                     .then(statusData => {
                         if (statusData.status === 'completed') {
@@ -1552,7 +1552,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             formData.append('file', fileInput.files[0]);
 
             try {
-                const res = await fetch(`/upload?auto_start_assessment=true&student_id=${encodeURIComponent(studentId)}&max_questions=${maxQ}`, {
+                const res = await fetch(`/pipeline/upload-and-assess?student_id=${encodeURIComponent(studentId)}&max_questions=${maxQ}`, {
                     method: 'POST',
                     body: formData
                 });
@@ -1564,11 +1564,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     trackJobSSE(data.job_id, async () => {
                         btn.disabled = false;
                         btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
-                        if (data.session_id) {
-                            const sessRes = await fetch(`/assessment/session/${data.session_id}`);
-                            const sessData = await sessRes.json();
-                            startQuiz(sessData);
-                        }
+                        const resultRes = await fetch(`/pipeline/jobs/${data.job_id}`);
+                        const resultData = await resultRes.json();
+                        if (resultData.result?.assessment) startQuiz(resultData.result.assessment);
+                        loadSources();
                     }, (err) => {
                         btn.disabled = false;
                         btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
@@ -1623,6 +1622,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         function startQuiz(session) {
+            if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+            timelineTimerInterval = null;
+            document.getElementById('btnNextQuestion').disabled = false;
             currentSession = session;
             activeQuestions = session.questions || [];
             currentQuestionIdx = 0;
@@ -1671,7 +1673,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 const strong = document.createElement('strong');
                 strong.textContent = `${String.fromCharCode(65 + idx)}. `;
                 span.appendChild(strong);
-                span.appendChild(document.createTextNode(opt || ''));
+                span.appendChild(document.createTextNode(opt.text || ''));
 
                 label.appendChild(input);
                 label.appendChild(span);
@@ -1749,7 +1751,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             const statusEl = document.getElementById('lblGradeStatus');
             statusEl.innerHTML = scorePct >= 70
-                ? '<span class="badge badge-green">MASTERY DEMONSTRATED</span>'
+                ? '<span class="badge badge-green">ASSESSMENT PASSED</span>'
                 : '<span class="badge badge-amber">REMEDIAL VIDEO TARGETED</span>';
 
             const masteriesEl = document.getElementById('lblMasteries');
@@ -1786,9 +1788,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             const reviewContainer = document.getElementById('quizReviewContainer');
             reviewContainer.innerHTML = '';
 
-            if (data.question_results && data.question_results.length > 0) {
+            if (data.results && data.results.length > 0) {
                 reviewSection.style.display = 'block';
-                data.question_results.forEach((qr, idx) => {
+                data.results.forEach((qr, idx) => {
                     const originalQ = activeQuestions.find(q => q.question_id === qr.question_id) || {};
                     const isCorrect = qr.correct;
 
@@ -1811,7 +1813,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                     const stemDiv = document.createElement('div');
                     stemDiv.style.cssText = 'font-size:14px;color:var(--text-ink);margin-bottom:12px;font-weight:600;';
-                    stemDiv.textContent = qr.stem;
+                    stemDiv.textContent = originalQ.stem;
 
                     const optsContainer = document.createElement('div');
                     optsContainer.style.marginBottom = '12px';
@@ -1846,7 +1848,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         const prefix = document.createElement('strong');
                         prefix.textContent = `${String.fromCharCode(65 + optIdx)}. `;
                         textSpan.appendChild(prefix);
-                        textSpan.appendChild(document.createTextNode(opt));
+                        textSpan.appendChild(document.createTextNode(opt.text || ''));
                         optDiv.appendChild(textSpan);
 
                         if (badgeText) {
@@ -1936,18 +1938,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 const objDiv = document.createElement('div');
                 objDiv.style.cssText = 'font-size:13px;color:var(--text-muted);';
-                objDiv.textContent = v.learning_objective || '';
+                objDiv.textContent = v.video_objective || '';
 
                 infoDiv.appendChild(headerRow);
                 infoDiv.appendChild(objDiv);
 
-                if (v.target_misconception) {
+                if (v.misconception) {
                     const miscDiv = document.createElement('div');
                     miscDiv.style.cssText = 'font-size:12px;color:var(--rose);margin-top:4px;';
                     const mBold = document.createElement('strong');
                     mBold.textContent = 'Target Misconception: ';
                     miscDiv.appendChild(mBold);
-                    miscDiv.appendChild(document.createTextNode(v.target_misconception));
+                    miscDiv.appendChild(document.createTextNode(v.misconception));
                     infoDiv.appendChild(miscDiv);
                 }
 

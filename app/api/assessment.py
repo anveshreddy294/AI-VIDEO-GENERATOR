@@ -12,13 +12,14 @@ Endpoints:
 import logging
 import math
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Annotated
 
 from fastapi import APIRouter, Body, HTTPException, Query
 
 logger = logging.getLogger(__name__)
 
 from ..core.config import settings
+from ..services.storage import validate_id, serialized, commit_assessment, recover_assessment_commits
 from ..services.assessment.engine import grade_submission
 from ..services.assessment.generator import generate_question
 from ..services.assessment.planner import _apply_prerequisite_pairing, classify_difficulty, plan_assessment
@@ -44,7 +45,7 @@ from ..services.assessment.video_target import (
     load_video_matrix,
     save_video_matrix,
 )
-from ..services.registry import get_source_record, load_knowledge_graph
+from ..services.registry import get_source_record, load_knowledge_graph, load_rich_chunks
 from ..services.schemas import ConceptNode, KnowledgeGraph
 
 router = APIRouter(prefix="/assessment", tags=["Step 2 — Assessment & Profiling"])
@@ -84,9 +85,9 @@ def _call_generate_question(
 
 @router.post("/start", response_model=AssessmentStartResponse)
 def start_assessment(
-    payload: AssessmentStartRequest | None = Body(default=None),
-    student_id: str | None = Query(default=None),
-    source_id: str | None = Query(default=None),
+    payload: Annotated[AssessmentStartRequest | None, Body()] = None,
+    student_id: Annotated[str | None, Query()] = None,
+    source_id: Annotated[str | None, Query()] = None,
 ) -> AssessmentStartResponse:
     """Step 1 -> Step 2 Handoff: Ingest, Plan, Ground, Validate, and Dispatch.
 
@@ -150,22 +151,17 @@ def start_assessment(
         )
 
     # 2. Extract or load KnowledgeGraph and concepts into temporary memory
-    in_memory_kg = _extract_knowledge_graph_from_payload(step1_data, req_source_id)
-    kg = in_memory_kg or load_knowledge_graph(req_source_id)
-
-    # Lock Check: if loaded from disk, verify source status is READY
-    if not in_memory_kg:
-        record = get_source_record(req_source_id)
-        if not record:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Source '{req_source_id}' not found in registry and no knowledge graph provided in payload.",
-            )
-        if record.status != "READY":
-            raise HTTPException(
-                status_code=423,
-                detail=f"Source '{req_source_id}' is not ready (status: {record.status}). Wait for ingestion.",
-            )
+    try:
+        validate_id(req_source_id)
+        validate_id(req_student_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    record = get_source_record(req_source_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Source not found; ingest material first")
+    if record.status != "READY":
+        raise HTTPException(status_code=423, detail=f"Source is not ready: {record.status}")
+    kg = load_knowledge_graph(req_source_id)
 
     if not kg or not kg.concepts:
         raise HTTPException(
@@ -177,7 +173,7 @@ def start_assessment(
     key_concepts = _extract_key_concepts(step1_data)
 
     # Extract any in-memory chunks provided in Step 1 JSON
-    provided_chunks = step1_data.get("chunks") or step1_data.get("rich_chunks")
+    provided_chunks = load_rich_chunks(req_source_id) or None
 
     # 3. Load or create Student Learning Profile
     profile = get_or_create_profile(req_student_id, req_source_id)
@@ -308,7 +304,7 @@ def start_assessment(
             return False
 
         # Grounding validation
-        grounding_ok, grounding_err = validate_grounding(q, context_text)
+        grounding_ok, grounding_err = validate_grounding(q, q.evidence_text)
         if not grounding_ok:
             failed_concepts.append(concept.concept_id)
             logger.warning(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={grounding_err}")
@@ -365,7 +361,7 @@ def start_assessment(
                     logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={err}")
                     continue
 
-                grounding_ok, g_err = validate_grounding(q, context_text)
+                grounding_ok, g_err = validate_grounding(q, q.evidence_text)
                 if not grounding_ok:
                     if c.concept_id not in failed_concepts:
                         failed_concepts.append(c.concept_id)
@@ -500,6 +496,7 @@ def handoff_from_step1(payload: AssessmentStartRequest) -> AssessmentStartRespon
 
 
 @router.post("/submit", response_model=AssessmentSubmitResponse)
+@serialized
 def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse:
     """Step 5 & 6: Grade submission, apply Kill Switch, and build Video Target Matrix.
 
@@ -511,11 +508,15 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
     5. Video Target Matrix Generation: isolates failed concepts with duration scaling (30s/45s/60s)
     6. Persists matrix and terminates Step 2, handing off to Step 3.
     """
+    recover_assessment_commits()
     session = load_session(submission.session_id)
     if not session:
         raise HTTPException(status_code=404, detail=f"Session '{submission.session_id}' not found.")
 
     if session.status == "SUBMITTED":
+        answers = {a.question_id: a.selected_index for a in submission.answers}
+        if session.submission_response and len(answers) == len(submission.answers) and answers == session.submitted_answers:
+            return AssessmentSubmitResponse.model_validate(session.submission_response)
         raise HTTPException(status_code=409, detail="This assessment has already been submitted.")
 
     if session.status != "READY":
@@ -541,7 +542,7 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
         submitted_q_ids.add(ans.question_id)
 
     # Load KnowledgeGraph (attempt normal registry load first)
-    kg = load_knowledge_graph(session.source_id)
+    kg = reconstruct_kg_from_snapshot(session, expected_source_id=session.source_id) or load_knowledge_graph(session.source_id)
     if not kg:
         # Fallback 1 (Phase 2B): reconstruct minimal KnowledgeGraph from session concept_snapshot
         try:
@@ -574,10 +575,6 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
     # Finalize session
     session.status = "SUBMITTED"
     session.submitted_at = datetime.now(timezone.utc).isoformat()
-    save_session(session)
-
-    # Persist updated StudentLearningProfile
-    save_profile(profile)
 
     # Step 6: Build the Video Target Matrix (Step 2 -> Step 3 Handoff)
     record = get_source_record(session.source_id)
@@ -589,13 +586,12 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
         session=session,
         submission_result=result,
     )
-    save_video_matrix(video_matrix)
 
     # Concept-level score breakdown (e.g. Concept A: 100%, Concept B: 0%)
     concept_scores = {
         m.concept_name or cid: round(m.last_score, 1)
         for cid, m in profile.concept_masteries.items()
-        if m.attempts > 0
+        if cid in {q.concept_id for q in session.questions}
     }
 
     profile_summary = ProfileSummary(
@@ -606,7 +602,7 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
         weak_concept_ids=profile.weak_concept_ids,
     )
 
-    return AssessmentSubmitResponse(
+    response = AssessmentSubmitResponse(
         status="SUBMITTED",
         session_id=result.session_id,
         score=result.score,
@@ -628,6 +624,10 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
         concept_scores=concept_scores,
         video_target_matrix=video_matrix,
     )
+    session.submission_response = response.model_dump()
+    session.submitted_answers = {a.question_id: a.selected_index for a in submission.answers}
+    commit_assessment(session, profile, video_matrix)
+    return response
 
 
 @router.get("/profile/{student_id}/{source_id}")

@@ -78,6 +78,7 @@ Respond with STRICT JSON only (no markdown, no explanation outside JSON):
     {{"index": 3, "text": "<option D>"}}
   ],
   "correct_index": <0, 1, 2, or 3>,
+  "evidence_quote": "<exact supporting quote copied from SOURCE MATERIAL>",
   "explanation": "<grounded explanation>"
 }}"""
 
@@ -97,6 +98,8 @@ def search_concept_chunks(
     if provided_chunks:
         matched = []
         for ch in provided_chunks:
+            if ch.get("source_id") != source_id or ch.get("layer", "A") != "A":
+                continue
             c_ids = ch.get("concept_ids", [])
             cu_ids = ch.get("content_ids", [])
             text = ch.get("text", "")
@@ -108,7 +111,7 @@ def search_concept_chunks(
                 matched.append(ch)
         if matched:
             return matched[:limit]
-        return provided_chunks[:limit]
+        return []
 
     # 2. Qdrant vector retrieval
     try:
@@ -124,7 +127,7 @@ def search_concept_chunks(
     vector = None
     for attempt in range(3):
         try:
-            vector = _embed([query_text])[0]
+            vector = _embed([query_text], task_type="retrieval_query")[0]
             break
         except Exception as exc:
             logger.warning(f"[generator] Embedding attempt {attempt+1}/3 failed: {exc}")
@@ -177,13 +180,8 @@ def generate_question(
 
     # If no chunks found, construct minimal context from concept definition without fabricated page numbers
     if not chunks:
-        chunks = [{
-            "chunk_id": f"CHUNK_SYNTH_{concept.concept_id}",
-            "text": f"{concept.name}: {concept.definition or 'Key foundational concept in ' + source_id}",
-            "page_start": None,
-            "page_end": None,
-            "content_ids": list(concept.source_content_ids),
-        }]
+        logger.warning("No authoritative chunks for %s", concept.concept_id)
+        return None
 
     # Provenance Tracking: Extract provenance metadata
     chunk_ids = [ch.get("chunk_id", "") for ch in chunks if ch.get("chunk_id")]
@@ -197,17 +195,13 @@ def generate_question(
     page_start = min(pages) if pages else (chunks[0].get("page") if chunks else None)
     page_end = max(pages_end) if pages_end else page_start
 
-    timestamp_start = next(
-        (ch.get("timestamp_start") for ch in chunks if ch.get("timestamp_start") is not None),
-        None,
-    )
-    timestamp_end = next(
-        (ch.get("timestamp_end") for ch in chunks if ch.get("timestamp_end") is not None),
-        None,
-    )
+    starts = [ch.get("timestamp_start") for ch in chunks if isinstance(ch.get("timestamp_start"), (int, float))]
+    ends = [ch.get("timestamp_end") for ch in chunks if isinstance(ch.get("timestamp_end"), (int, float))]
+    timestamp_start = min(starts) if starts else None
+    timestamp_end = max(ends) if ends else None
 
     chunk_text = "\n\n".join(
-        f"[Source chunk {i+1} (Page {ch.get('page_start', ch.get('page', 'N/A'))})]: {ch.get('text', '')[:800]}"
+        f"[Source chunk {i+1} (Page {ch.get('page_start', ch.get('page', 'N/A'))})]: {ch.get('text', '')}"
         for i, ch in enumerate(chunks)
     )
 
@@ -235,13 +229,17 @@ def generate_question(
             if len(raw_options) != 4 or not data.get("question", "").strip():
                 continue
 
-            raw_corr = data.get("correct_index", 0)
-            try:
-                raw_corr_int = int(raw_corr)
-            except (ValueError, TypeError):
-                raw_corr_int = 0
-            if raw_corr_int < 0 or raw_corr_int >= len(raw_options):
-                raw_corr_int = 0
+            raw_corr_int = data.get("correct_index")
+            if type(raw_corr_int) is not int or raw_corr_int not in range(4):
+                raise ValueError("Invalid correct_index")
+            if {opt.get("index") for opt in raw_options} != {0, 1, 2, 3}:
+                raise ValueError("Options must have unique indices 0–3")
+            raw_options = sorted(raw_options, key=lambda opt: opt["index"])
+            quote = data.get("evidence_quote", "").strip()
+            if len(quote) < 12 or not any(quote in ch.get("text", "") for ch in chunks):
+                raise ValueError("Missing or fabricated supporting quote")
+            if len({opt.get("text", "").strip().casefold() for opt in raw_options}) != 4:
+                raise ValueError("Duplicate options")
 
             # Authoritative correct answer text before shuffling
             correct_answer_text = raw_options[raw_corr_int].get("text", "").strip()
@@ -273,6 +271,8 @@ def generate_question(
                 options=options,
                 correct_index=new_correct_index,
                 explanation=data.get("explanation", f"Based on source definition of {concept.name}"),
+                evidence_quote=quote,
+                evidence_text="\n\n".join(ch.get("text", "") for ch in chunks),
                 chunk_ids=chunk_ids,
                 content_ids=content_ids,
                 page_start=page_start,
@@ -290,7 +290,7 @@ def generate_question(
             last_error = str(exc)
             logger.warning(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
             if "exceeded your current quota" in err or "quota_value" in err:
-                logger.warning("[generator] Quota reached, instantly switching to grounded fallback generator.")
+                logger.warning("[generator] Quota reached; question generation stopped.")
                 break
             if "not set" in err or "unconfigured" in err or "not found" in err:
                 break
@@ -299,21 +299,8 @@ def generate_question(
 
     # Resilient grounded fallback generation (fast & deterministic)
     duration_ms = round((time.time() - t0) * 1000, 2)
-    return _generate_grounded_fallback(
-        concept=concept,
-        chunks=chunks,
-        chunk_ids=chunk_ids,
-        content_ids=content_ids,
-        page_start=page_start,
-        page_end=page_end,
-        timestamp_start=timestamp_start,
-        timestamp_end=timestamp_end,
-        source_id=source_id,
-        difficulty=difficulty,
-        variant_type=variant_type,
-        fallback_reason=last_error or "LLM generation unavailable or unparseable response",
-        duration_ms=duration_ms,
-    )
+    logger.error("Question generation failed for %s: %s", concept.concept_id, last_error)
+    return None
 
 
 def _generate_grounded_fallback(

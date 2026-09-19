@@ -46,7 +46,7 @@ def validate_question(
         return False, f"Option indices must be 0-3, got {indices}"
 
     # Check source_id integrity
-    if allowed_source_id and question.source_id and question.source_id != allowed_source_id:
+    if allowed_source_id and question.source_id != allowed_source_id:
         return False, f"Question source_id '{question.source_id}' does not match session source_id '{allowed_source_id}'"
 
     # Provenance anchors: must have at least one of chunk_ids or content_ids
@@ -79,7 +79,9 @@ def validate_grounding(
     Rejects hallucinated questions with zero semantic grounding in source chunks.
     """
     if not context_text or not context_text.strip():
-        return True, "OK"
+        return False, "No source context available"
+    if not question.evidence_quote or question.evidence_quote not in context_text:
+        return False, "Supporting quote is missing from the source context"
 
     import re
     STOP_WORDS = {
@@ -101,7 +103,7 @@ def validate_grounding(
         if 0 <= question.correct_index < len(question.options)
         else ""
     )
-    question_tokens = extract_tokens(f"{question.stem} {correct_text} {question.concept_name}")
+    question_tokens = extract_tokens(correct_text)
 
     overlap = question_tokens & context_tokens
     if len(overlap) < min_overlap_words:

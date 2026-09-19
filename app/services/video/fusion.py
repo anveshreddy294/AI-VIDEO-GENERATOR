@@ -43,7 +43,10 @@ def fuse_units(
             )
             units.append(unit)
             seq_index += 1
-        return units
+        units.sort(key=lambda unit: unit.timestamp_start if unit.timestamp_start is not None else 0)
+    for index, unit in enumerate(units):
+        unit.sequence_index = index
+    return units
 
     frames_used = [False] * len(frames)
 
@@ -108,4 +111,7 @@ def fuse_units(
             units.append(unit)
             seq_index += 1
 
+    units.sort(key=lambda unit: unit.timestamp_start if unit.timestamp_start is not None else 0)
+    for index, unit in enumerate(units):
+        unit.sequence_index = index
     return units

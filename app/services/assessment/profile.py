@@ -1,3 +1,4 @@
+from ..storage import atomic_json, validate_id, serialized
 """Step 7 — Student Learning Profile persistence.
 
 File-based storage of StudentLearningProfile artifacts.
@@ -20,26 +21,23 @@ LEGACY_PROFILES_DIR = BASE_DIR / "storage" / "learning_profiles"
 
 def _profile_path(student_id: str, source_id: str) -> Path:
     """Get the file path for a student's profile on a specific source in runtime storage."""
-    safe_student = student_id.replace("/", "_").replace("\\", "_")
-    safe_source = source_id.replace("/", "_").replace("\\", "_")
+    safe_student = validate_id(student_id)
+    safe_source = validate_id(source_id)
     return PROFILES_DIR / f"{safe_student}_{safe_source}.json"
 
 
 def save_profile(profile: StudentLearningProfile) -> None:
     """Persist a StudentLearningProfile to runtime disk."""
     path = _profile_path(profile.student_id, profile.source_id)
-    path.write_text(
-        json.dumps(profile.model_dump(), indent=2, default=str),
-        encoding="utf-8",
-    )
+    atomic_json(path, profile.model_dump())
 
 
 def load_profile(student_id: str, source_id: str) -> StudentLearningProfile | None:
     """Load a StudentLearningProfile from runtime disk with legacy fallback. Returns None if not found."""
     path = _profile_path(student_id, source_id)
     if not path.exists() and LEGACY_PROFILES_DIR.exists():
-        safe_student = student_id.replace("/", "_").replace("\\", "_")
-        safe_source = source_id.replace("/", "_").replace("\\", "_")
+        safe_student = validate_id(student_id)
+        safe_source = validate_id(source_id)
         path = LEGACY_PROFILES_DIR / f"{safe_student}_{safe_source}.json"
 
     if not path.exists():

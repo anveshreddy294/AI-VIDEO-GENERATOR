@@ -51,6 +51,8 @@ class Question(BaseModel):
     options: list[AssessmentOption] = Field(description="Exactly 4 options")
     correct_index: int = Field(ge=0, le=3, description="Index of the correct answer (0-3)")
     explanation: str = Field(description="Why the correct answer is correct")
+    evidence_quote: str = ""
+    evidence_text: str = ""
     chunk_ids: list[str] = Field(default_factory=list, description="Source chunk IDs used for grounding")
     content_ids: list[str] = Field(default_factory=list, description="ContentUnit IDs for grounding")
     page_start: int | None = Field(default=None, description="Starting page number in source document")
@@ -104,6 +106,8 @@ class AssessmentSession(BaseModel):
     )
     expires_at: str | None = None
     submitted_at: str | None = None
+    submission_response: dict[str, Any] | None = None
+    submitted_answers: dict[str, int] | None = None
     concept_queue: list[str] = Field(default_factory=list, description="Concept IDs queued for question generation")
     current_index: int = 0
     concept_snapshot: dict[str, ConceptSnapshot] = Field(
