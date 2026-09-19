@@ -20,7 +20,7 @@ class Settings:
 
         # --- Models ---
         self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
-        self.generation_model: str = os.getenv("GENERATION_MODEL", "gemini-3.5-flash")
+        self.generation_model: str = os.getenv("GENERATION_MODEL", "qwen3:8b")
 
         # --- Optional Alternative Providers (e.g. OmniRoute) ---
         self.omniroute_api_key: str = os.getenv("OMNIROUTE_API_KEY", "")
@@ -76,9 +76,9 @@ class Settings:
         self.max_question_retries: int = int(os.getenv("MAX_QUESTION_RETRIES", "2"))
         self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
         self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
-        self.llm_provider: str = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
+        self.llm_provider: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
         self.ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen3:8b")
         self.ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
         self.ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
 

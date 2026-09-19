@@ -37,7 +37,13 @@ class GeminiProvider:
         model_name: str | None = None,
     ) -> None:
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
-        self.model_name = model_name if model_name is not None else settings.generation_model
+        gen_model = getattr(settings, "generation_model", "gemini-3.5-flash")
+        if model_name is not None:
+            self.model_name = model_name
+        elif "gemini" in gen_model.lower():
+            self.model_name = gen_model
+        else:
+            self.model_name = "gemini-3.5-flash"
         self._model = None
 
     def _init_client(self):
@@ -59,28 +65,37 @@ class GeminiProvider:
 
 
 class OllamaProvider:
-    """Ollama local LLM Provider via HTTP (no external dependencies)."""
+    """Ollama local LLM Provider via HTTP using qwen3:8b (no external dependencies)."""
 
     def __init__(
         self,
         base_url: str | None = None,
         model_name: str | None = None,
-        timeout: float = 30.0,
+        timeout: float | None = None,
     ) -> None:
         raw_url = base_url or getattr(settings, "ollama_url", None) or os.getenv("OLLAMA_URL", "http://localhost:11434")
         self.base_url = raw_url.rstrip("/")
-        self.model_name = model_name or getattr(settings, "ollama_model", None) or os.getenv("OLLAMA_MODEL", "llama3.2")
-        self.timeout = timeout
+        self.model_name = (
+            model_name
+            or getattr(settings, "ollama_model", None)
+            or getattr(settings, "generation_model", None)
+            or os.getenv("OLLAMA_MODEL", "qwen3:8b")
+        )
+        self.timeout = timeout if timeout is not None else float(getattr(settings, "ollama_timeout", 120.0))
 
     def generate_content(self, prompt: str) -> str:
         """Generate content via Ollama /api/generate endpoint."""
         url = f"{self.base_url}/api/generate"
-        payload = json.dumps({
+        is_json = "json" in prompt.lower() or "{" in prompt
+        req_data = {
             "model": self.model_name,
             "prompt": prompt,
             "stream": False,
-            "format": "json",
-        }).encode("utf-8")
+        }
+        if is_json:
+            req_data["format"] = "json"
+
+        payload = json.dumps(req_data).encode("utf-8")
 
         req = urllib.request.Request(
             url,
@@ -91,7 +106,17 @@ class OllamaProvider:
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                return data.get("response", "")
+                raw = data.get("response", "")
+                # Clean markdown fences if model outputs ```json ... ```
+                cleaned = raw.strip()
+                if cleaned.startswith("```"):
+                    lines = cleaned.splitlines()
+                    if lines[0].startswith("```"):
+                        lines = lines[1:]
+                    if lines and lines[-1].strip() == "```":
+                        lines = lines[:-1]
+                    cleaned = "\n".join(lines).strip()
+                return cleaned
         except Exception as exc:
             raise RuntimeError(f"Ollama generation failed ({url}, model={self.model_name}): {exc}") from exc
 
@@ -173,13 +198,13 @@ def get_default_provider() -> LLMProvider:
     Fails immediately on unsupported or missing provider configurations rather than
     silently swapping the AI backend.
     """
-    provider_name = getattr(settings, "llm_provider", os.getenv("LLM_PROVIDER", "gemini")).lower().strip()
-    if provider_name == "gemini":
+    provider_name = getattr(settings, "llm_provider", os.getenv("LLM_PROVIDER", "ollama")).lower().strip()
+    if provider_name == "ollama":
+        return OllamaProvider()
+    elif provider_name == "gemini":
         return GeminiProvider()
     elif provider_name == "omniroute":
         return OmniRouteProvider()
-    elif provider_name == "ollama":
-        return OllamaProvider()
     elif provider_name in ("mock", "test"):
         return MockProvider()
 

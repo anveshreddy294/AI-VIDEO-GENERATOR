@@ -45,7 +45,8 @@ _FRAME_PROMPT = (
 def _client() -> genai.GenerativeModel:
     settings.require_gemini()
     genai.configure(api_key=settings.gemini_api_key)
-    return genai.GenerativeModel(settings.generation_model)
+    model_name = settings.generation_model if "gemini" in settings.generation_model.lower() else "gemini-3.5-flash-lite"
+    return genai.GenerativeModel(model_name)
 
 
 def describe_image(image_bytes: bytes, source: str = "image") -> str:
