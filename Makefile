@@ -29,9 +29,9 @@ test:  ## Run the full test suite from the tests/ folder
 	.venv\Scripts\python -m pytest tests/ -v
 	@echo "[OK] All tests complete."
 
-test-core:  ## Run the 4 core pipeline tests (fast, no full suite)
-	.venv/bin/python -m unittest tests.test_step4_remediation_loop tests.test_video_rag_agent tests.test_instructor_portal tests.test_step2_to_step3_remediation -v 2>/dev/null || \
-	.venv\Scripts\python -m unittest tests.test_step4_remediation_loop tests.test_video_rag_agent tests.test_instructor_portal tests.test_step2_to_step3_remediation -v
+test-core:  ## Run the core pipeline tests (fast, no full suite)
+	.venv/bin/python -m unittest tests.test_instructor_portal tests.test_pipeline_observability -v 2>/dev/null || \
+	.venv\Scripts\python -m unittest tests.test_instructor_portal tests.test_pipeline_observability -v
 
 docker-up:  ## Start with Docker Compose
 	docker compose up -d --build

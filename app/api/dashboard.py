@@ -1037,124 +1037,26 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- 🎬 Video Remediation Section -->
-            <div id="remediationTargetsSection" style="display:none;margin-top:32px;">
-                <div style="font-family:var(--font-display);font-size:22px;font-weight:700;margin-bottom:6px;">Phase 3: Video Target Matrix</div>
-                <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px;">Targeted micro-lessons generated to remediate diagnosed misconceptions.</p>
-                <div id="videoTargetsList"></div>
-            </div>
         </section>
-
-        <!-- 🎥 Video Player Modal -->
-        <div id="videoModal" class="modal-overlay">
-            <div class="modal-card">
-                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-                    <div>
-                        <h3 id="modalVideoTitle" style="font-family:var(--font-display);font-size:20px;font-weight:700;">Remediation Lesson</h3>
-                        <p id="modalVideoSub" style="font-size:13px;color:var(--text-muted);">Targeted Pedagogical Micro-Lesson</p>
-                    </div>
-                    <div style="display:flex;align-items:center;gap:10px;">
-                        <a id="btnDownloadVideo" href="#" download class="neo-btn" style="display:none;">
-                            <span>⬇ Download Video (.mp4)</span>
-                        </a>
-                        <button onclick="closeVideoModal()" class="neo-btn">✕ Close</button>
-                    </div>
-                </div>
-
-                <div id="modalVideoLoader" style="display:none;padding:48px;text-align:center;">
-                    <div style="display:inline-block;width:40px;height:40px;border:3px solid var(--border-card);border-top-color:var(--peach-green);border-radius:50%;animation:spin 1s linear infinite;margin-bottom:16px;"></div>
-                    <div id="modalProgressText" style="font-weight:700;font-size:16px;">Synthesizing Remediation Video...</div>
-                    <div id="modalProgressSub" style="font-size:13px;color:var(--text-muted);margin-top:6px;">Generating script, TTS voiceover, and motion visuals</div>
-                </div>
-
-                <div id="modalVideoWrapper" style="display:none;">
-                    <video id="html5VideoPlayer" controls style="width:100%;max-height:440px;border-radius:var(--radius-sm);background:#000;outline:none;" preload="auto">
-                        <source id="videoSource" src="" type="video/mp4">
-                        <track id="videoTrack" label="English" kind="subtitles" srclang="en" src="" default>
-                        Your browser does not support HTML5 video playback.
-                    </video>
-
-                    <!-- 💬 Dual-Traceable Video RAG Assistant -->
-                    <div id="videoRagSection" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-card);">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                            <div style="display:flex;align-items:center;gap:10px;">
-                                <span style="font-weight:700;font-size:15px;">💬 Dual-Traceable Video RAG</span>
-                                <span id="lblVideoTimestampBadge" class="badge badge-peach-green">⏱ Syncing Playhead...</span>
-                                <span class="badge badge-green">Layer A Grounded</span>
-                            </div>
-                            <button onclick="toggleRagPanel()" id="btnToggleRag" class="neo-btn" style="padding:4px 10px;font-size:12px;">Hide</button>
-                        </div>
-
-                        <div id="videoRagContent">
-                            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
-                                <button onclick="askQuickQuestion('Explain what is happening in this scene.')" class="meta-chip" style="cursor:pointer;">💡 Explain Scene</button>
-                                <button onclick="askQuickQuestion('Can you give an intuitive real-world example of this concept?')" class="meta-chip" style="cursor:pointer;">🌍 Real-World Example</button>
-                                <button onclick="askQuickQuestion('What is the core rule or formula to prevent quiz mistakes?')" class="meta-chip" style="cursor:pointer;">⚖ Core Mastery Rule</button>
-                            </div>
-
-                            <div id="ragChatLog" style="max-height:220px;overflow-y:auto;background:var(--bg-card);box-shadow:var(--neo-inset);border-radius:var(--radius-sm);padding:14px;display:flex;flex-direction:column;gap:12px;margin-bottom:12px;font-size:14px;">
-                                <div style="color:var(--text-muted);font-size:13px;font-style:italic;">
-                                    Ask questions about this video clip. The assistant responds strictly grounded in Layer A textbook content.
-                                </div>
-                            </div>
-
-                            <div style="display:flex;gap:10px;">
-                                <input type="text" id="ragInput" class="neo-input" placeholder="Ask a question about this video or concept..." style="flex:1;" onkeydown="if(event.key==='Enter') sendRagQuestion();" />
-                                <button id="btnSendRag" onclick="sendRagQuestion()" class="neo-btn neo-btn-peach-green">
-                                    <span>Ask ➔</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 🎯 Phase 4 Verification Re-Testing Action -->
-                    <div id="remediationActionArea" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border-card);">
-                        <div style="display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:12px;">
-                            <div>
-                                <div style="font-weight:700;font-size:15px;">Phase 4: Comprehension Verification Check</div>
-                                <div style="font-size:13px;color:var(--text-muted);">Watched the video? Complete a 1-question verification to resolve the misconception.</div>
-                            </div>
-                            <button id="btnVerifyMastery" onclick="launchRemediationCheck()" class="neo-btn neo-btn-peach-green" style="background:#059669;">
-                                <span>🎯 Verify Mastery (Re-Test)</span>
-                            </button>
-                        </div>
-
-                        <div id="remediationCard" style="display:none;width:100%;background:var(--bg-card);box-shadow:var(--neo-raised-sm);border-radius:var(--radius-sm);padding:18px;margin-top:16px;">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-                                <span class="badge badge-blue" id="lblRemediationVariant">APPLICATION CHECK</span>
-                                <span class="badge badge-amber" id="lblRemediationDifficulty">TARGETED</span>
-                            </div>
-                            <div id="remediationStem" style="font-weight:600;font-size:15px;line-height:1.5;margin-bottom:14px;"></div>
-                            <div id="remediationOptions" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
-                            <button id="btnSubmitRemediation" onclick="submitRemediationCheck()" class="neo-btn neo-btn-peach-green" style="width:100%;justify-content:center;">
-                                <span>Submit Verification Answer</span>
-                            </button>
-                        </div>
-
-                        <div id="remediationFeedback" style="display:none;width:100%;border-radius:var(--radius-sm);padding:16px;margin-top:16px;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- 🗺 Architectural Pipeline Flow Documentation -->
         <section class="flow-section">
             <div style="margin-bottom:8px;">
-                <h2 class="flow-title">The Four-Phase Adaptive Pipeline</h2>
-                <p style="font-size:15px;color:var(--text-muted);">Modular, loosely coupled architecture transforming raw study materials into personalized programmatic lessons</p>
+                <h2 class="flow-title">The Multimodal Assessment Pipeline</h2>
+                <p style="font-size:15px;color:var(--text-muted);">Modular, loosely coupled architecture transforming raw study materials into personalized knowledge graphs and diagnostic quizzes</p>
             </div>
 
             <div class="step-card" style="margin-top:24px;">
                 <div class="step-num">1</div>
                 <div>
                     <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--peach-green);margin-bottom:4px;">
-                        Phase 1 — Multimodal Ingestion &amp; Ground Truth Engine
+                        Step 1 — Multimodal Ingestion &amp; Ground Truth Engine
                     </div>
                     <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
                         Separated Ingestion Pipelines &amp; Layer A Vectorization
                     </div>
                     <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
-                        Normalizes study materials into an immutable ground-truth repository. Digital text via PyMuPDF; handwritten notes &amp; scans via OpenCV/EasyOCR; diagrams via Gemini Vision; lectures via FFmpeg and Faster-Whisper. Embedded in Qdrant as <strong>Layer A (Authoritative Source)</strong> with strict provenance.
+                        Normalizes study materials into an immutable ground-truth repository. Digital text via PyMuPDF; handwritten notes &amp; scans via OpenCV; diagrams via Gemini Vision; lectures via FFmpeg and Faster-Whisper. Embedded in Qdrant as <strong>Layer A (Authoritative Source)</strong> with strict provenance.
                     </div>
                     <div class="meta-chip">POST /upload?auto_start_assessment=true &middot; Layer A Locked</div>
                 </div>
@@ -1164,7 +1066,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <div class="step-num">2</div>
                 <div>
                     <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:4px;">
-                        Phase 2 — Diagnostic Assessment &amp; Knowledge Profiling
+                        Step 2 — Diagnostic Assessment &amp; Knowledge Profiling
                     </div>
                     <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
                         Prerequisite Concept Pairing &amp; Sequential Grounded Generation
@@ -1173,38 +1075,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         Constructs the KnowledgeGraph prerequisite dependency tree. Generates strict JSON multiple-choice questions sequentially from Layer A chunks using negative prompting. Utilizes Fisher-Yates balanced option shuffling with dynamic explanation tracking to detect Prerequisite Gaps.
                     </div>
                     <div class="meta-chip">POST /assessment/start &amp; /assessment/submit &middot; StudentLearningProfile</div>
-                </div>
-            </div>
-
-            <div class="step-card">
-                <div class="step-num">3</div>
-                <div>
-                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--amber);margin-bottom:4px;">
-                        Phase 3 — The Learning Agent &amp; Targeted Video Matrix
-                    </div>
-                    <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
-                        Programmatic Assembly &amp; Layer B Vectorization
-                    </div>
-                    <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
-                        Isolates exact conceptual weaknesses into the VideoTargetMatrix. Generates targeted 30s/45s/60s scripts breaking down student misconceptions in Act 2, accompanied by Manim math animations and authentic diagrams. Vectorizes into Qdrant as <strong>Layer B (Generated Artifacts)</strong> hard-linked to Layer A.
-                    </div>
-                    <div class="meta-chip">GET /assessment/video-target/{student_id}/{source_id} &middot; Layer B Linked</div>
-                </div>
-            </div>
-
-            <div class="step-card">
-                <div class="step-num">4</div>
-                <div>
-                    <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--emerald);margin-bottom:4px;">
-                        Phase 4 — Dual-Traceable RAG &amp; The Kill Switch Loop
-                    </div>
-                    <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
-                        In-Video Timestamp Grounding &amp; Anti-Loop Kill Switch
-                    </div>
-                    <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
-                        Students ask questions synced with playback timestamps. The system queries Layer B, traces back to Layer A textbook context, and responds with zero hallucination. Post-video, administers a 1-question verification re-test. If the student fails 3 times, the Anti-Loop Kill Switch engages (<code>REQUIRES_HUMAN_FALLBACK</code>).
-                    </div>
-                    <div class="meta-chip">POST /video/rag/ask &amp; /remediation/submit &middot; Kill Switch Limit: 3 Attempts</div>
                 </div>
             </div>
 
@@ -1300,8 +1170,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         let activeEventSource = null;
         let timelineStartTime = 0;
         let timelineTimerInterval = null;
-        let activeVideoId = null;
-        let activeRemediationSession = null;
 
         const STAGE_LABELS = {
             'uploading': 'Phase 1: Ingestion — Uploading Course Material',
@@ -1633,7 +1501,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             document.getElementById('quizSection').style.display = 'block';
             document.getElementById('resultsBox').style.display = 'none';
             document.getElementById('quizReviewSection').style.display = 'none';
-            document.getElementById('remediationTargetsSection').style.display = 'none';
 
             renderCurrentQuestion();
         }
@@ -1726,7 +1593,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 document.getElementById('quizSection').style.display = 'none';
                 displayResults(data);
-                loadVideoTargets(currentSession.student_id, currentSession.source_id);
             } catch (err) {
                 alert(`Quiz grading error: ${err.message}`);
                 btn.disabled = false;
@@ -1752,7 +1618,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             const statusEl = document.getElementById('lblGradeStatus');
             statusEl.innerHTML = scorePct >= 70
                 ? '<span class="badge badge-green">ASSESSMENT PASSED</span>'
-                : '<span class="badge badge-amber">REMEDIAL VIDEO TARGETED</span>';
+                : '<span class="badge badge-amber">NEEDS REVIEW</span>';
 
             const masteriesEl = document.getElementById('lblMasteries');
             masteriesEl.innerHTML = '';
@@ -1888,452 +1754,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     reviewContainer.appendChild(reviewCard);
                 });
             }
-        }
-
-        async function loadVideoTargets(studentId, sourceId) {
-            try {
-                const res = await fetch(`/assessment/video-target/${studentId}/${sourceId}`);
-                if (!res.ok) return;
-                const data = await res.json();
-                renderVideoTargets(data);
-            } catch (err) {
-                console.error('Failed to load video target matrix:', err);
-            }
-        }
-
-        function renderVideoTargets(data) {
-            const section = document.getElementById('remediationTargetsSection');
-            const list = document.getElementById('videoTargetsList');
-            list.innerHTML = '';
-
-            if (!data.videos || data.videos.length === 0) {
-                section.style.display = 'none';
-                return;
-            }
-
-            section.style.display = 'block';
-            data.videos.forEach(v => {
-                const card = document.createElement('div');
-                card.className = 'target-card';
-
-                const infoDiv = document.createElement('div');
-                const headerRow = document.createElement('div');
-                headerRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;';
-
-                const diffBadge = document.createElement('span');
-                diffBadge.className = 'badge badge-peach-green';
-                diffBadge.textContent = (v.difficulty || '').toUpperCase();
-
-                const timeBadge = document.createElement('span');
-                timeBadge.className = 'badge badge-blue';
-                timeBadge.textContent = `⏱ ${v.target_seconds}s Micro-Lesson`;
-
-                const nameSpan = document.createElement('span');
-                nameSpan.style.cssText = 'font-weight:700;font-size:15px;color:var(--text-ink);';
-                nameSpan.textContent = v.concept_name;
-
-                headerRow.appendChild(diffBadge);
-                headerRow.appendChild(timeBadge);
-                headerRow.appendChild(nameSpan);
-
-                const objDiv = document.createElement('div');
-                objDiv.style.cssText = 'font-size:13px;color:var(--text-muted);';
-                objDiv.textContent = v.video_objective || '';
-
-                infoDiv.appendChild(headerRow);
-                infoDiv.appendChild(objDiv);
-
-                if (v.misconception) {
-                    const miscDiv = document.createElement('div');
-                    miscDiv.style.cssText = 'font-size:12px;color:var(--rose);margin-top:4px;';
-                    const mBold = document.createElement('strong');
-                    mBold.textContent = 'Target Misconception: ';
-                    miscDiv.appendChild(mBold);
-                    miscDiv.appendChild(document.createTextNode(v.misconception));
-                    infoDiv.appendChild(miscDiv);
-                }
-
-                const btn = document.createElement('button');
-                btn.className = 'neo-btn neo-btn-peach-green';
-                const btnSpan = document.createElement('span');
-                btnSpan.textContent = '🎬 Synthesize & Watch Video';
-                btn.appendChild(btnSpan);
-                btn.addEventListener('click', () => {
-                    synthesizeAndPlayVideo(v.concept_id, v.concept_name, v.difficulty, v.target_seconds);
-                });
-
-                card.appendChild(infoDiv);
-                card.appendChild(btn);
-                list.appendChild(card);
-            });
-        }
-
-        async function synthesizeAndPlayVideo(conceptId, conceptName, difficulty, targetSeconds) {
-            const modal = document.getElementById('videoModal');
-            const loader = document.getElementById('modalVideoLoader');
-            const wrapper = document.getElementById('modalVideoWrapper');
-            const modalTitle = document.getElementById('modalVideoTitle');
-            const modalSub = document.getElementById('modalVideoSub');
-            const progressText = document.getElementById('modalProgressText');
-            const downloadBtn = document.getElementById('btnDownloadVideo');
-
-            downloadBtn.style.display = 'none';
-            document.getElementById('remediationCard').style.display = 'none';
-            document.getElementById('remediationFeedback').style.display = 'none';
-            document.getElementById('btnVerifyMastery').style.display = 'inline-flex';
-
-            modalTitle.textContent = `Remediation Lesson: ${conceptName}`;
-            modalSub.textContent = `${difficulty.toUpperCase()} • ${targetSeconds}s Targeted Lesson addressing diagnosed misconception`;
-
-            modal.style.display = 'flex';
-            loader.style.display = 'block';
-            wrapper.style.display = 'none';
-            progressText.textContent = 'Initializing Phase 3 Learning Agent & Video Engine...';
-
-            try {
-                const res = await fetch('/video/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        student_id: currentSession.student_id,
-                        source_id: currentSession.source_id,
-                        concept_id: conceptId
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-
-                const jobId = data.job_id;
-                progressText.textContent = 'Generating timed script, voiceover, and authentic visual frames...';
-
-                const pollInterval = setInterval(async () => {
-                    try {
-                        const sRes = await fetch(`/video/status/${jobId}`);
-                        const sData = await sRes.json();
-
-                        if (sData.current_stage) {
-                            progressText.textContent = `[${sData.progress_percent}%] ${sData.current_stage}`;
-                        }
-
-                        if (sData.status === 'completed') {
-                            clearInterval(pollInterval);
-                            loader.style.display = 'none';
-                            wrapper.style.display = 'block';
-
-                            activeVideoId = sData.video_id;
-                            const videoSrc = document.getElementById('videoSource');
-                            const videoTrack = document.getElementById('videoTrack');
-
-                            videoSrc.src = `/video/${sData.video_id}/stream`;
-                            videoTrack.src = `/video/${sData.video_id}/subtitles`;
-
-                            downloadBtn.href = `/video/${sData.video_id}/download`;
-                            downloadBtn.setAttribute('download', `${conceptName.replace(/\\s+/g, '_')}_remediation.mp4`);
-                            downloadBtn.style.display = 'inline-flex';
-
-                            const player = document.getElementById('html5VideoPlayer');
-                            player.load();
-                            player.play().catch(() => {});
-                            setupPlayheadSync(player);
-                        } else if (sData.status === 'failed') {
-                            clearInterval(pollInterval);
-                            loader.innerHTML = '';
-                            const errDiv = document.createElement('div');
-                            errDiv.style.cssText = 'color:var(--rose);font-weight:700;';
-                            errDiv.textContent = `Synthesis Failed: ${sData.error || 'Video generation error'}`;
-                            loader.appendChild(errDiv);
-                        }
-                    } catch (e) {
-                        console.error('Video status poll error:', e);
-                    }
-                }, 1500);
-
-            } catch (err) {
-                loader.innerHTML = '';
-                const errDiv = document.createElement('div');
-                errDiv.style.cssText = 'color:var(--rose);font-weight:700;';
-                errDiv.textContent = `Error: ${err.message}`;
-                loader.appendChild(errDiv);
-            }
-        }
-
-        function setupPlayheadSync(player) {
-            const tsBadge = document.getElementById('lblVideoTimestampBadge');
-            if (player) {
-                player.ontimeupdate = () => {
-                    const cur = player.currentTime;
-                    const mins = Math.floor(cur / 60);
-                    const secs = Math.floor(cur % 60);
-                    tsBadge.textContent = `⏱ Playhead: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
-                };
-            }
-        }
-
-        function toggleRagPanel() {
-            const content = document.getElementById('videoRagContent');
-            const btn = document.getElementById('btnToggleRag');
-            if (content.style.display === 'none') {
-                content.style.display = 'block';
-                btn.textContent = 'Hide';
-            } else {
-                content.style.display = 'none';
-                btn.textContent = 'Show';
-            }
-        }
-
-        function askQuickQuestion(promptText) {
-            const input = document.getElementById('ragInput');
-            input.value = promptText;
-            sendRagQuestion();
-        }
-
-        async function sendRagQuestion() {
-            if (!activeVideoId) {
-                alert('Please wait for the video to load.');
-                return;
-            }
-            const input = document.getElementById('ragInput');
-            const question = input.value.trim();
-            if (!question) return;
-
-            const player = document.getElementById('html5VideoPlayer');
-            const timestamp = player ? player.currentTime : 0;
-            const chatLog = document.getElementById('ragChatLog');
-
-            const userMsg = document.createElement('div');
-            userMsg.style.cssText = 'background:var(--peach-green-soft);border:1px solid var(--peach-green-border);padding:10px 14px;border-radius:var(--radius-sm);align-self:flex-end;max-width:85%;';
-            const curMins = Math.floor(timestamp / 60);
-            const curSecs = Math.floor(timestamp % 60);
-            const userHeader = document.createElement('div');
-            userHeader.style.cssText = 'font-size:11px;color:var(--peach-green);font-weight:700;margin-bottom:2px;';
-            userHeader.textContent = `You (${curMins}:${curSecs < 10 ? '0' : ''}${curSecs})`;
-            const userBody = document.createElement('div');
-            userBody.textContent = question;
-            userMsg.appendChild(userHeader);
-            userMsg.appendChild(userBody);
-            chatLog.appendChild(userMsg);
-            input.value = '';
-
-            const loadingMsg = document.createElement('div');
-            loadingMsg.style.cssText = 'background:var(--bg-surface);padding:10px 14px;border-radius:var(--radius-sm);align-self:flex-start;max-width:85%;color:var(--text-muted);font-style:italic;';
-            loadingMsg.textContent = 'Consulting Layer A textbook ground truth...';
-            chatLog.appendChild(loadingMsg);
-            chatLog.scrollTop = chatLog.scrollHeight;
-
-            try {
-                const res = await fetch('/video/rag/ask', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        video_id: activeVideoId,
-                        question: question,
-                        timestamp: timestamp,
-                        student_id: currentSession ? currentSession.student_id : 'student_1'
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-
-                loadingMsg.remove();
-
-                const botMsg = document.createElement('div');
-                botMsg.style.cssText = 'background:var(--bg-surface);border:1px solid var(--border-card);padding:12px 16px;border-radius:var(--radius-sm);align-self:flex-start;max-width:92%;box-shadow:var(--neo-raised-sm);';
-
-                const headerDiv = document.createElement('div');
-                headerDiv.style.cssText = 'font-size:12px;color:var(--emerald);font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;';
-                headerDiv.innerHTML = '<span>🎓 Dual-Layer Video RAG</span><span class="badge badge-green" style="font-size:10px;">Layer A Grounded</span>';
-                botMsg.appendChild(headerDiv);
-
-                const ansDiv = document.createElement('div');
-                ansDiv.style.lineHeight = '1.5';
-                ansDiv.textContent = data.answer || '';
-                botMsg.appendChild(ansDiv);
-
-                if (data.citations && data.citations.length > 0) {
-                    const citeDiv = document.createElement('div');
-                    citeDiv.style.cssText = 'margin-top:10px;padding-top:8px;border-top:1px solid var(--border-card);font-size:12px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center;';
-                    const cStrong = document.createElement('strong');
-                    cStrong.textContent = 'Layer A Ground Truth: ';
-                    citeDiv.appendChild(cStrong);
-                    data.citations.forEach(c => {
-                        const chip = document.createElement('span');
-                        chip.className = 'meta-chip';
-                        chip.textContent = `${c.chunk_id}${c.page ? ` (p.${c.page})` : ''}`;
-                        citeDiv.appendChild(chip);
-                    });
-                    botMsg.appendChild(citeDiv);
-                }
-
-                chatLog.appendChild(botMsg);
-                chatLog.scrollTop = chatLog.scrollHeight;
-
-            } catch (err) {
-                loadingMsg.style.color = 'var(--rose)';
-                loadingMsg.textContent = `❌ Error: ${err.message}`;
-            }
-        }
-
-        async function launchRemediationCheck() {
-            if (!activeVideoId) return;
-            const btn = document.getElementById('btnVerifyMastery');
-            btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Preparing Verification Re-Test...</span>';
-
-            try {
-                const vRes = await fetch(`/video/${activeVideoId}/script`);
-                const scriptData = await vRes.json();
-                const conceptId = scriptData.concept_id;
-
-                const res = await fetch('/remediation/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        student_id: currentSession.student_id,
-                        source_id: currentSession.source_id,
-                        concept_id: conceptId
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-
-                activeRemediationSession = data;
-                const q = data.questions ? data.questions[0] : (data.question || {});
-
-                document.getElementById('lblRemediationVariant').textContent = (q.variant || 'APPLICATION').toUpperCase();
-                document.getElementById('lblRemediationDifficulty').textContent = (q.difficulty || 'TARGETED').toUpperCase();
-                document.getElementById('remediationStem').textContent = q.stem;
-
-                const optionsBox = document.getElementById('remediationOptions');
-                optionsBox.innerHTML = '';
-                (q.options || []).forEach((opt, idx) => {
-                    const optId = `rem_opt_${idx}`;
-                    const optText = typeof opt === 'object' ? opt.text : opt;
-
-                    const label = document.createElement('label');
-                    label.className = 'option-item';
-                    label.htmlFor = optId;
-
-                    const input = document.createElement('input');
-                    input.type = 'radio';
-                    input.name = 'remediation_choice';
-                    input.id = optId;
-                    input.value = idx;
-
-                    const span = document.createElement('span');
-                    const strong = document.createElement('strong');
-                    strong.textContent = `${String.fromCharCode(65 + idx)}. `;
-                    span.appendChild(strong);
-                    span.appendChild(document.createTextNode(optText || ''));
-
-                    label.appendChild(input);
-                    label.appendChild(span);
-                    optionsBox.appendChild(label);
-                });
-
-                document.getElementById('remediationCard').style.display = 'block';
-                btn.style.display = 'none';
-
-            } catch (err) {
-                alert(`Error launching verification: ${err.message}`);
-                btn.disabled = false;
-                btn.innerHTML = '<span>🎯 Verify Mastery (Re-Test)</span>';
-            }
-        }
-
-        async function submitRemediationCheck() {
-            if (!activeRemediationSession) return;
-
-            const selected = document.querySelector('input[name="remediation_choice"]:checked');
-            if (!selected) {
-                alert('Please select an answer option.');
-                return;
-            }
-
-            const selectedIdx = parseInt(selected.value, 10);
-            const btn = document.getElementById('btnSubmitRemediation');
-            btn.disabled = true;
-            btn.textContent = 'Verifying Comprehension...';
-
-            try {
-                const res = await fetch('/remediation/submit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        session_id: activeRemediationSession.session_id,
-                        student_id: currentSession.student_id,
-                        concept_id: activeRemediationSession.concept_id,
-                        answers: [{
-                            question_id: (activeRemediationSession.questions && activeRemediationSession.questions[0]) ? activeRemediationSession.questions[0].question_id : 'Q1',
-                            selected_index: selectedIdx
-                        }]
-                    })
-                });
-
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
-
-                const feedback = document.getElementById('remediationFeedback');
-                feedback.style.display = 'block';
-
-                if (data.status === 'resolved' || data.passed === true) {
-                    feedback.style.background = 'var(--emerald-soft)';
-                    feedback.style.border = '1px solid var(--emerald-border)';
-                    feedback.style.color = '#065f46';
-                    feedback.innerHTML = `
-                        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">🎉 Concept Mastered! (Verified in Phase 4)</div>
-                        <div>${escapeHtml(data.explanation || data.message || 'You demonstrated full comprehension of this concept.')}</div>
-                        <div style="font-size:12px;margin-top:8px;font-weight:600;">Status: Remediation target resolved &amp; student profile updated!</div>
-                    `;
-                    document.getElementById('remediationCard').style.display = 'none';
-                } else if (data.new_status === 'REQUIRES_HUMAN_FALLBACK' || (data.iteration_count && data.iteration_count >= 3)) {
-                    feedback.style.background = '#fef2f2';
-                    feedback.style.border = '2px solid #ef4444';
-                    feedback.style.color = '#991b1b';
-                    feedback.innerHTML = `
-                        <div style="font-weight:700;font-size:16px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
-                            <span>🛡 Anti-Loop Kill Switch Engaged</span>
-                            <span class="badge badge-rose" style="font-size:11px;">Human Intervention Required</span>
-                        </div>
-                        <div style="font-size:13px;line-height:1.5;color:#7f1d1d;">
-                            ${escapeHtml(data.message || 'Misconception persists after repeated attempts. Automated AI loop suspended to prevent cognitive fatigue.')}
-                        </div>
-                        <div style="margin-top:14px;">
-                            <a href="/instructor" target="_blank" class="neo-btn" style="background:#dc2626;color:#ffffff;font-size:13px;">
-                                👩‍🏫 Open Instructor Intervention Portal ➔
-                            </a>
-                        </div>
-                    `;
-                    document.getElementById('remediationCard').style.display = 'none';
-                } else {
-                    feedback.style.background = 'var(--rose-soft)';
-                    feedback.style.border = '1px solid var(--rose-border)';
-                    feedback.style.color = '#991b1b';
-                    feedback.innerHTML = `
-                        <div style="font-weight:700;font-size:15px;margin-bottom:6px;">⚠ Misconception Persists</div>
-                        <div>${escapeHtml(data.explanation || data.message || 'Your answer did not resolve the core misconception.')}</div>
-                        <div style="font-size:12px;margin-top:8px;font-weight:600;">Phase 4: Review the video lesson and ask the Video RAG Assistant before re-testing.</div>
-                    `;
-                    btn.disabled = false;
-                    btn.textContent = 'Re-Try Verification';
-                }
-
-            } catch (err) {
-                alert(`Submission error: ${err.message}`);
-                btn.disabled = false;
-                btn.textContent = 'Submit Verification Answer';
-            }
-        }
-
-        function closeVideoModal() {
-            const modal = document.getElementById('videoModal');
-            const player = document.getElementById('html5VideoPlayer');
-            if (player) {
-                player.pause();
-            }
-            modal.style.display = 'none';
         }
 
         window.addEventListener('DOMContentLoaded', () => {
