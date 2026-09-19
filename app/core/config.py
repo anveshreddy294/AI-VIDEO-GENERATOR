@@ -22,11 +22,6 @@ class Settings:
         self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
         self.generation_model: str = os.getenv("GENERATION_MODEL", "qwen3:8b")
 
-        # --- Optional Alternative Providers (e.g. OmniRoute) ---
-        self.omniroute_api_key: str = os.getenv("OMNIROUTE_API_KEY", "")
-        self.omniroute_base_url: str = os.getenv("OMNIROUTE_BASE_URL", "http://localhost:20128/v1")
-        self.omniroute_model: str = os.getenv("OMNIROUTE_MODEL", "static-best-reasoning")
-
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
         self.storage_dir: Path = BASE_DIR / os.getenv("STORAGE_DIR", "storage")
         self.runtime_dir: Path = BASE_DIR / os.getenv("RUNTIME_DIR", "storage/runtime")

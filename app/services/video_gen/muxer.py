@@ -7,6 +7,7 @@ Combines rendered visual clips and synthesized voiceovers into standard MP4 file
 import logging
 import subprocess
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 try:
     import imageio_ffmpeg
 except ImportError:

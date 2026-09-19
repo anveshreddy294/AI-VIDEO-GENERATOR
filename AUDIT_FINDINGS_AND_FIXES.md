@@ -51,18 +51,16 @@ A total of **19 critical architectural defects** across **12 core subsystems** w
      ```python
      self.llm_provider = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
      ```
-  3. Updated [app/services/assessment/providers.py](file:///Users/yogendharkusumanchi/AI-VIDEO-GENERATOR/app/services/assessment/providers.py) `get_default_provider()` to strict switching:
-     ```python
-     if provider_name == "gemini":
-         return GeminiProvider()
-     elif provider_name == "omniroute":
-         return OmniRouteProvider()
-     elif provider_name == "ollama":
-         return OllamaProvider()
-     elif provider_name in ("mock", "test"):
-         return MockProvider()
-     raise RuntimeError(f"Unsupported LLM_PROVIDER: '{provider_name}'. Supported: gemini, omniroute, ollama, mock")
-     ```
+   3. Updated [app/services/assessment/providers.py](file:///d:/ai%20video%20generator/AI-VIDEO-GENERATOR/app/services/assessment/providers.py) `get_default_provider()` to strict switching:
+      ```python
+      if provider_name == "ollama":
+          return OllamaProvider()
+      elif provider_name == "gemini":
+          return GeminiProvider()
+      elif provider_name in ("mock", "test"):
+          return MockProvider()
+      raise RuntimeError(f"Unsupported LLM_PROVIDER: '{provider_name}'. Supported: ollama, gemini, mock")
+      ```
 
 ---
 
@@ -185,7 +183,7 @@ A total of **19 critical architectural defects** across **12 core subsystems** w
 **Result:** `7 passed in 7.90s` (100% PASS).
 - `MockProvider` operates offline without Gemini API keys.
 - `GeminiProvider` explicitly defaults to `gemini-3.5-flash`.
-- `OmniRouteProvider` selects only when explicitly declared.
+- `OllamaProvider` selects as default provider running local models.
 - Unsupported provider names immediately raise `RuntimeError`.
 
 ### 3. Step 2 Scoring & Multi-Session Contract (`tests/test_step2_scoring_contract.py`)

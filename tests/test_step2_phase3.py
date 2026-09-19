@@ -164,11 +164,6 @@ def test_provider_selection_from_settings():
         assert isinstance(p_gemini, GeminiProvider), f"Expected GeminiProvider, got {type(p_gemini)}"
         assert p_gemini.model_name == "gemini-3.5-flash", f"Expected gemini-3.5-flash, got {p_gemini.model_name}"
 
-        import app.services.assessment.providers as prov_mod
-        settings.llm_provider = "omniroute"
-        p_omni = get_default_provider()
-        assert isinstance(p_omni, prov_mod.OmniRouteProvider), f"Expected OmniRouteProvider, got {type(p_omni)}"
-
         settings.llm_provider = "unsupported_provider_xyz"
         try:
             get_default_provider()
@@ -176,7 +171,7 @@ def test_provider_selection_from_settings():
         except RuntimeError:
             pass
 
-        print("   [PASS] Provider factory properly selects MockProvider, OllamaProvider, GeminiProvider, and OmniRouteProvider explicitly, failing on unknown.")
+        print("   [PASS] Provider factory properly selects MockProvider, OllamaProvider, and GeminiProvider explicitly, failing on unknown.")
     finally:
         settings.llm_provider = orig_prov
 

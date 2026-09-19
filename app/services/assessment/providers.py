@@ -121,45 +121,6 @@ class OllamaProvider:
             raise RuntimeError(f"Ollama generation failed ({url}, model={self.model_name}): {exc}") from exc
 
 
-class OmniRouteProvider:
-    """OmniRoute LLM Provider via OpenAI-compatible HTTP interface."""
-
-    def __init__(
-        self,
-        api_key: str | None = None,
-        base_url: str | None = None,
-        model_name: str | None = None,
-    ) -> None:
-        self.api_key = api_key or getattr(settings, "omniroute_api_key", "") or os.getenv("OMNIROUTE_API_KEY", "")
-        self.base_url = (base_url or getattr(settings, "omniroute_base_url", "http://localhost:20128/v1") or "http://localhost:20128/v1").rstrip("/")
-        self.model_name = model_name or getattr(settings, "omniroute_model", "static-best-reasoning") or "static-best-reasoning"
-
-    def generate_content(self, prompt: str) -> str:
-        if not self.api_key:
-            raise RuntimeError("OMNIROUTE_API_KEY is not set.")
-        url = f"{self.base_url}/chat/completions"
-        payload = json.dumps({
-            "model": self.model_name,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.2,
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=30.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return data["choices"][0]["message"]["content"]
-        except Exception as exc:
-            raise RuntimeError(f"OmniRoute generation failed ({url}): {exc}") from exc
-
-
 class MockProvider:
     """Deterministic Mock LLM Provider for testing without API keys or internet."""
 
@@ -203,8 +164,6 @@ def get_default_provider() -> LLMProvider:
         return OllamaProvider()
     elif provider_name == "gemini":
         return GeminiProvider()
-    elif provider_name == "omniroute":
-        return OmniRouteProvider()
     elif provider_name in ("mock", "test"):
         return MockProvider()
 
