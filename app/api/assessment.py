@@ -156,12 +156,16 @@ def start_assessment(
         validate_id(req_student_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    record = get_source_record(req_source_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Source not found; ingest material first")
-    if record.status != "READY":
-        raise HTTPException(status_code=423, detail=f"Source is not ready: {record.status}")
-    kg = load_knowledge_graph(req_source_id)
+
+    in_memory_kg = _extract_knowledge_graph_from_payload(step1_data, req_source_id)
+    kg = in_memory_kg or load_knowledge_graph(req_source_id)
+
+    if not in_memory_kg:
+        record = get_source_record(req_source_id)
+        if not record:
+            raise HTTPException(status_code=404, detail="Source not found; ingest material first")
+        if record.status != "READY":
+            raise HTTPException(status_code=423, detail=f"Source is not ready: {record.status}")
 
     if not kg or not kg.concepts:
         raise HTTPException(
@@ -173,7 +177,19 @@ def start_assessment(
     key_concepts = _extract_key_concepts(step1_data)
 
     # Extract any in-memory chunks provided in Step 1 JSON
-    provided_chunks = load_rich_chunks(req_source_id) or None
+    raw_chunks = (
+        step1_data.get("chunks")
+        or step1_data.get("rich_chunks")
+        or load_rich_chunks(req_source_id)
+        or None
+    )
+    if raw_chunks:
+        provided_chunks = [
+            rc.model_dump() if hasattr(rc, "model_dump") else rc
+            for rc in raw_chunks
+        ]
+    else:
+        provided_chunks = None
 
     # 3. Load or create Student Learning Profile
     profile = get_or_create_profile(req_student_id, req_source_id)
@@ -304,7 +320,7 @@ def start_assessment(
             return False
 
         # Grounding validation
-        grounding_ok, grounding_err = validate_grounding(q, q.evidence_text)
+        grounding_ok, grounding_err = validate_grounding(q, q.evidence_text or context_text)
         if not grounding_ok:
             failed_concepts.append(concept.concept_id)
             logger.warning(f"[assessment] Candidate rejected: {concept.name} (variant={variant}) reason={grounding_err}")
@@ -361,7 +377,7 @@ def start_assessment(
                     logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={err}")
                     continue
 
-                grounding_ok, g_err = validate_grounding(q, q.evidence_text)
+                grounding_ok, g_err = validate_grounding(q, q.evidence_text or context_text)
                 if not grounding_ok:
                     if c.concept_id not in failed_concepts:
                         failed_concepts.append(c.concept_id)
@@ -492,6 +508,13 @@ def start_assessment(
 @router.post("/handoff", response_model=AssessmentStartResponse)
 def handoff_from_step1(payload: AssessmentStartRequest) -> AssessmentStartResponse:
     """Explicit pipeline handoff route: accepts Step 1 JSON and starts Step 2."""
+    if not payload or not payload.source_id:
+        raise HTTPException(status_code=400, detail="source_id is required")
+    record = get_source_record(payload.source_id)
+    if not record:
+        raise HTTPException(status_code=404, detail=f"Source '{payload.source_id}' not found in registry.")
+    if record.status != "READY":
+        raise HTTPException(status_code=423, detail=f"Source '{payload.source_id}' is not ready: {record.status}")
     return start_assessment(payload=payload)
 
 
@@ -542,7 +565,7 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
         submitted_q_ids.add(ans.question_id)
 
     # Load KnowledgeGraph (attempt normal registry load first)
-    kg = reconstruct_kg_from_snapshot(session, expected_source_id=session.source_id) or load_knowledge_graph(session.source_id)
+    kg = load_knowledge_graph(session.source_id)
     if not kg:
         # Fallback 1 (Phase 2B): reconstruct minimal KnowledgeGraph from session concept_snapshot
         try:

@@ -8,7 +8,7 @@ help:  ## Show this help
 
 setup:  ## Create venv and install dependencies
 	python3 -m venv .venv 2>/dev/null || python -m venv .venv
-	.venv/bin/pip install -q -r requirements.txt 2>/dev/null || .venv\Scripts\pip install -q -r requirements.txt
+	.venv/bin/pip install -q -r requirements-dev.txt 2>/dev/null || .venv\Scripts\pip install -q -r requirements-dev.txt
 	@test -f .env || cp .env.example .env
 	@echo "[OK] Setup complete. Edit .env to add your GEMINI_API_KEY."
 

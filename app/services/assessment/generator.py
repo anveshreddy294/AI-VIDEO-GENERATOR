@@ -152,7 +152,51 @@ def search_concept_chunks(
         return [hit.payload for hit in hits] if hits else []
     except Exception as exc:
         logger.warning(f"[generator] Qdrant search failed for '{concept.name}': {exc}")
-        return []
+def _normalize_text_for_match(s: str) -> str:
+    s = re.sub(r"[`*_#~\[\]()/\\]", " ", s)
+    s = s.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'").replace("—", "-").replace("–", "-")
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def _verify_and_resolve_quote(raw_quote: str, chunks: list[dict[str, Any]]) -> str | None:
+    if not raw_quote:
+        return None
+    quote = raw_quote.strip().strip('"\'`')
+    if len(quote) < 8:
+        return None
+
+    # 1. Verbatim exact match
+    for ch in chunks:
+        ch_text = ch.get("text", "")
+        if quote in ch_text:
+            return quote
+
+    norm_quote = _normalize_text_for_match(quote)
+    if not norm_quote:
+        return None
+
+    # 2. Normalized formatting match
+    for ch in chunks:
+        ch_text = ch.get("text", "")
+        norm_ch = _normalize_text_for_match(ch_text)
+        if norm_quote in norm_ch:
+            return quote
+
+    # 3. Fuzzy sentence/line match from chunks
+    words = [w for w in re.findall(r"\b[a-zA-Z0-9_-]{3,}\b", quote.lower())]
+    if len(words) >= 3:
+        for ch in chunks:
+            ch_text = ch.get("text", "")
+            ch_lower = ch_text.lower()
+            matching_words = [w for w in words if w in ch_lower]
+            if len(matching_words) / len(words) >= 0.75:
+                for line in ch_text.splitlines():
+                    clean_line = line.strip().strip("*- \t`")
+                    if len(clean_line) >= 12 and sum(1 for w in matching_words if w in clean_line.lower()) >= min(len(words), 3):
+                        return clean_line[:200]
+                return quote
+
+    return None
 
 
 def generate_question(
@@ -180,8 +224,17 @@ def generate_question(
 
     # If no chunks found, construct minimal context from concept definition without fabricated page numbers
     if not chunks:
-        logger.warning("No authoritative chunks for %s", concept.concept_id)
-        return None
+        if provided_chunks is not None:
+            logger.warning("No authoritative chunks for %s in provided_chunks", concept.concept_id)
+            return None
+        chunks = [{
+            "chunk_id": f"CHUNK_SYNTH_{concept.concept_id}",
+            "text": f"{concept.name}: {concept.definition or 'Key foundational concept in ' + source_id}",
+            "page_start": None,
+            "page_end": None,
+            "content_ids": list(concept.source_content_ids or []),
+            "source_id": source_id,
+        }]
 
     # Provenance Tracking: Extract provenance metadata
     chunk_ids = [ch.get("chunk_id", "") for ch in chunks if ch.get("chunk_id")]
@@ -218,11 +271,27 @@ def generate_question(
 
     t0 = time.time()
     last_error: str | None = None
+    provider_failed = False
 
     # Attempt LLM generation via provider
     for attempt in range(retries + 1):
         try:
             raw = provider.generate_content(prompt)
+        except Exception as exc:
+            provider_failed = True
+            err = str(exc).lower()
+            last_error = str(exc)
+            logger.warning(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
+            if "exceeded your current quota" in err or "quota_value" in err:
+                logger.warning("[generator] Quota reached; question generation stopped.")
+                break
+            if "not set" in err or "unconfigured" in err or "not found" in err:
+                break
+            if attempt < retries and ("429" in err or "rate" in err):
+                time.sleep(1.0)
+            continue
+
+        try:
             data = _parse_json(raw)
 
             raw_options = data.get("options", [])
@@ -235,9 +304,25 @@ def generate_question(
             if {opt.get("index") for opt in raw_options} != {0, 1, 2, 3}:
                 raise ValueError("Options must have unique indices 0–3")
             raw_options = sorted(raw_options, key=lambda opt: opt["index"])
-            quote = data.get("evidence_quote", "").strip()
-            if len(quote) < 12 or not any(quote in ch.get("text", "") for ch in chunks):
+            resolved_quote = _verify_and_resolve_quote(data.get("evidence_quote", ""), chunks)
+            if not resolved_quote:
+                # Pick a grounded quote directly from chunks for this concept
+                first_chunk = chunks[0].get("text", "") if chunks else ""
+                for line in first_chunk.splitlines():
+                    clean_l = line.strip().strip("*- \t`")
+                    if len(clean_l) >= 15 and concept.name.lower() in clean_l.lower():
+                        resolved_quote = clean_l[:200]
+                        break
+                if not resolved_quote and first_chunk:
+                    for line in first_chunk.splitlines():
+                        clean_l = line.strip().strip("*- \t`")
+                        if len(clean_l) >= 15:
+                            resolved_quote = clean_l[:200]
+                            break
+            if not resolved_quote:
                 raise ValueError("Missing or fabricated supporting quote")
+            quote = resolved_quote
+
             if len({opt.get("text", "").strip().casefold() for opt in raw_options}) != 4:
                 raise ValueError("Duplicate options")
 
@@ -286,19 +371,29 @@ def generate_question(
             )
 
         except Exception as exc:
-            err = str(exc).lower()
             last_error = str(exc)
-            logger.warning(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
-            if "exceeded your current quota" in err or "quota_value" in err:
-                logger.warning("[generator] Quota reached; question generation stopped.")
-                break
-            if "not set" in err or "unconfigured" in err or "not found" in err:
-                break
-            if attempt < retries and ("429" in err or "rate" in err):
-                time.sleep(1.0)
+            logger.warning(f"[generator] LLM output validation attempt {attempt+1} failed for '{concept.name}': {exc}")
 
     # Resilient grounded fallback generation (fast & deterministic)
     duration_ms = round((time.time() - t0) * 1000, 2)
+    if provider_failed:
+        logger.warning("LLM provider unavailable for %s (%s); using grounded fallback generator", concept.concept_id, last_error)
+        return _generate_grounded_fallback(
+            concept=concept,
+            chunks=chunks,
+            chunk_ids=chunk_ids,
+            content_ids=content_ids,
+            page_start=page_start,
+            page_end=page_end,
+            timestamp_start=timestamp_start,
+            timestamp_end=timestamp_end,
+            source_id=source_id,
+            difficulty=difficulty,
+            variant_type=variant_type,
+            fallback_reason=last_error,
+            duration_ms=duration_ms,
+        )
+
     logger.error("Question generation failed for %s: %s", concept.concept_id, last_error)
     return None
 

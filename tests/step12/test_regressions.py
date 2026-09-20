@@ -211,7 +211,7 @@ def test_submission_replay_and_partial_commit_recovery(monkeypatch):
     assert assessment.submit_assessment(submission).model_dump() == response.model_dump()
 
 
-@pytest.mark.parametrize("background", [False, True])
+@pytest.mark.parametrize("background", [False, True, "runner"])
 def test_upload_quiz_submit_contract(monkeypatch, background):
     import re
     from fastapi import FastAPI
@@ -229,8 +229,23 @@ def test_upload_quiz_submit_contract(monkeypatch, background):
             return json.dumps(dict(question=q.stem, options=[o.model_dump() for o in q.options], correct_index=0, evidence_quote=TEXT, explanation=TEXT))
     monkeypatch.setattr(providers, "get_default_provider", Reasoner)
     monkeypatch.setattr(generator, "get_default_provider", Reasoner)
-    monkeypatch.setattr(vector_store, "_embed", lambda texts, **kwargs: [[1.0, 0.0, 0.0] for _ in texts])
+    def embed(texts, **kwargs):
+        from app.services.schemas import StageDiagnostics
+        vector_store._embed_diagnostics_var.set(StageDiagnostics(provider_used="test_embeddings", grounding_verified=False))
+        return [[1.0, 0.0, 0.0] for _ in texts]
+    monkeypatch.setattr(vector_store, "_embed", embed)
     monkeypatch.setattr(vector_store, "_active_embedding_dim", 3)
+    if background == "runner":
+        import run_step1_step2_ollama as runner
+        from app.services.assessment.profile import load_profile
+        monkeypatch.setattr(settings, "llm_provider", "ollama")
+        monkeypatch.setattr(runner, "DEFAULT_TOPIC_TEXT", TEXT)
+        result = asyncio.run(runner.run_demo())
+        saved = session_store.load_session(result.session_id)
+        assert saved.status == "SUBMITTED" and saved.submission_response
+        assert all(q.page_start is None and q.page_end is None for q in saved.questions)
+        assert load_profile(saved.student_id, saved.source_id).total_sessions == 1
+        return
     app = FastAPI()
     for router in [upload.router, assessment.router, pipeline.router]:
         app.include_router(router)
@@ -242,6 +257,9 @@ def test_upload_quiz_submit_contract(monkeypatch, background):
     if background:
         status = client.get(f"/pipeline/jobs/{payload['job_id']}").json()
         assert status["status"] == "completed", status
+        events = pipeline.job_manager.get_job(payload["job_id"]).events
+        sync = next(e for e in events if e.stage == "syncing_qdrant" and e.status == "completed")
+        assert sync.metadata["embedding_diagnostics"]["provider_used"] == "test_embeddings"
         payload = status["result"]
     quiz = payload["assessment"]
     assert len(quiz["questions"]) == 1, quiz
@@ -254,3 +272,26 @@ def test_upload_quiz_submit_contract(monkeypatch, background):
     assert result.status_code == 200, result.text
     assert result.json()["score"] == 1 and len(result.json()["results"]) == 1
     assert client.post("/assessment/submit", json=body).json() == result.json()
+
+
+def test_runner_rejects_other_provider(monkeypatch):
+    import run_step1_step2_ollama as runner
+    monkeypatch.setattr(settings, "llm_provider", "gemini")
+    with pytest.raises(RuntimeError, match="requires LLM_PROVIDER"):
+        asyncio.run(runner.run_demo())
+
+
+def test_embedding_diagnostics_survive_worker_and_sanitization(monkeypatch, tmp_path):
+    from app.api import pipeline
+    from app.db import vector_store
+    from app.services.schemas import StageDiagnostics
+    from app.services.pipeline_tracker import sanitize_metadata
+    def worker():
+        vector_store._embed_diagnostics_var.set(StageDiagnostics(provider_used="gemini", duration_ms=12))
+        return vector_store.get_last_embed_diagnostics().model_dump()
+    diagnostics = asyncio.run(asyncio.to_thread(worker))
+    safe = sanitize_metadata({"embedding_diagnostics": {**diagnostics, "api_key": "secret", "fallback_reason": "private traceback"}})
+    assert safe["embedding_diagnostics"]["provider_used"] == "gemini"
+    assert safe["embedding_diagnostics"]["duration_ms"] == 12
+    assert "api_key" not in safe["embedding_diagnostics"]
+    assert "fallback_reason" not in safe["embedding_diagnostics"]

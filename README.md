@@ -318,14 +318,14 @@ Key configuration options in `.env`:
 
 ```ini
 # --- LLM Provider Selection ---
-LLM_PROVIDER=gemini                  # Options: gemini | ollama | mock
-GEMINI_API_KEY=your_gemini_key_here  # Required if LLM_PROVIDER=gemini
+LLM_PROVIDER=ollama                  # Text reasoning: ollama | gemini | mock
+GEMINI_API_KEY=your_gemini_key_here  # Required for embeddings and vision
 GENERATION_MODEL=gemini-3.5-flash
 EMBEDDING_MODEL=models/gemini-embedding-2
 
 # --- Local Ollama Configuration (if LLM_PROVIDER=ollama) ---
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3.2
+OLLAMA_MODEL=qwen3:8b
 
 # --- Vector Database ---
 QDRANT_URL=http://localhost:6333     # Falls back to embedded if unreachable
@@ -376,10 +376,12 @@ docker compose up -d --build
 
 #### Option D: Standalone Local Ollama Pipeline
 
-To run an end-to-end extraction and assessment flow entirely offline using local Ollama models:
+To run the production ingestion and assessment flow with Ollama text reasoning, Gemini embeddings, and durable Qdrant storage:
 ```bash
 python run_step1_step2_ollama.py
 ```
+
+This runner requires `LLM_PROVIDER=ollama`. It uses the same upload, quality validation, and submission functions as the API. It indexes chunks before marking a source ready, preserves original provenance, and persists simulated answers, grading results, the learning profile, and the video-target blueprint. It does not provide a fully offline embedding path.
 
 ---
 
@@ -425,6 +427,10 @@ python run_step1_step2_ollama.py
 ---
 
 ## Testing & Quality Assurance
+
+Install test dependencies with `python -m pip install -r requirements-dev.txt`.
+Run isolated Step 1–2 regression checks with `python -m pytest tests/step12 -q`.
+The dashboard recovery checks run with `node tests/step12/test_progress.cjs` (Node.js required).
 
 VisualAI includes comprehensive test suites covering all phases:
 

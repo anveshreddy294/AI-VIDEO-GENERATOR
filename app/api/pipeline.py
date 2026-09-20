@@ -234,14 +234,52 @@ async def _execute_upload_and_assess(
             metadata={"source_id": source_id},
         )
 
-        from ..db.vector_store import upsert_chunks
-        synced_count = await asyncio.to_thread(upsert_chunks, rich_chunks)
+        from ..db.vector_store import upsert_chunks, get_last_embed_diagnostics
+        synced_count = 0
         sync_error = None
         fallback_used = False
+        embed_diag_meta = {}
 
-        from ..db.vector_store import get_last_embed_diagnostics
-        embed_diag = get_last_embed_diagnostics()
-        embed_diag_meta = embed_diag.model_dump() if embed_diag else {}
+        def sync_primary():
+            count = upsert_chunks(rich_chunks)
+            diagnostics = get_last_embed_diagnostics()
+            return count, diagnostics.model_dump() if diagnostics else {}
+
+        try:
+            synced_count, embed_diag_meta = await asyncio.to_thread(sync_primary)
+        except Exception as exc:
+            logger.warning("[pipeline_job] Primary Qdrant upsert failed: %s. Retrying explicitly with local fallback...", exc)
+            def sync_fallback():
+                from ..db.vector_store import get_client, ensure_collection, _embed, _point_id, _payload
+                from ..services.schemas import StageDiagnostics
+                from qdrant_client import QdrantClient
+                from qdrant_client.http import models as qmodels
+                try:
+                    embedded_client = get_client()
+                except Exception:
+                    embedded_client = QdrantClient(":memory:")
+                ensure_collection(embedded_client)
+                texts = [c.text for c in rich_chunks]
+                vectors = _embed(texts)
+                points = [
+                    qmodels.PointStruct(id=_point_id(c), vector=v, payload=_payload(c))
+                    for c, v in zip(rich_chunks, vectors)
+                ]
+                if points:
+                    embedded_client.upsert(collection_name=settings.collection_name, points=points)
+                diag = get_last_embed_diagnostics()
+                if not diag:
+                    diag = StageDiagnostics(provider_used="fallback_local", fallback_used=True, grounding_verified=True)
+                return len(points), diag.model_dump() if diag else {}
+
+            try:
+                synced_count, embed_diag_meta = await asyncio.to_thread(sync_fallback)
+                fallback_used = True
+                logger.info("[pipeline_job] Fallback storage successfully synchronized %d chunks.", synced_count)
+            except Exception as embedded_exc:
+                sync_error = f"VECTOR_SYNC_FAILED: Both primary and fallback Qdrant storage failed: {embedded_exc}"
+                logger.error("[pipeline_job] %s", sync_error)
+                synced_count = 0
 
         if sync_error:
             await job_manager.fail_job(

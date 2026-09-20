@@ -1281,6 +1281,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         function resetTimeline() {
+            if (stopJobTracking) stopJobTracking();
             if (activeEventSource) {
                 activeEventSource.close();
                 activeEventSource = null;
@@ -1343,62 +1344,67 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             `;
         }
 
+        let stopJobTracking = null;
         function trackJobSSE(jobId, onComplete, onError) {
-            const url = `/pipeline/jobs/${jobId}/events`;
-            activeEventSource = new EventSource(url);
-
-            activeEventSource.onmessage = (event) => {
-                if (!event.data || event.data.trim() === '' || event.data.startsWith(':')) return;
+            if (stopJobTracking) stopJobTracking();
+            let stopped = false;
+            let pollTimer = null;
+            let failures = 0;
+            const stream = new EventSource(`/pipeline/jobs/${jobId}/events`);
+            activeEventSource = stream;
+            const stop = () => {
+                stopped = true;
+                stream.close();
+                clearTimeout(pollTimer);
+                if (activeEventSource === stream) activeEventSource = null;
+                if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                timelineTimerInterval = null;
+            };
+            stopJobTracking = stop;
+            const finish = async (error, event) => {
+                if (stopped) return;
+                stop();
+                try {
+                    if (error) { if (onError) await onError(error); }
+                    else if (onComplete) await onComplete(event);
+                } catch (err) {
+                    if (onError) onError(err);
+                }
+            };
+            const poll = async () => {
+                if (stopped) return;
+                try {
+                    const res = await fetch(`/pipeline/jobs/${jobId}`, {signal: AbortSignal.timeout(15000)});
+                    if (!res.ok) throw new Error(`Job status unavailable (${res.status})`);
+                    const data = await res.json();
+                    if (stopped) return;
+                    failures = 0;
+                    if (data.status === 'completed') return finish(null, data);
+                    if (data.status === 'failed') return finish(new Error(data.error || 'Job failed'));
+                } catch (err) {
+                    if (stopped) return;
+                    if (++failures >= 5) return finish(new Error(`Progress tracking failed: ${err.message}. Check the job before uploading again.`));
+                }
+                if (!stopped) pollTimer = setTimeout(poll, 2000);
+            };
+            stream.onmessage = event => {
+                if (stopped || !event.data) return;
                 try {
                     const ev = JSON.parse(event.data);
                     updateTimelineEvent(ev);
-
-                    if (ev.stage === 'assessment_ready' && ev.status === 'completed') {
-                        if (activeEventSource) {
-                            activeEventSource.close();
-                            activeEventSource = null;
-                        }
-                        if (timelineTimerInterval) {
-                            clearInterval(timelineTimerInterval);
-                            timelineTimerInterval = null;
-                        }
-                        if (onComplete) onComplete(ev);
-                    } else if (ev.status === 'failed') {
-                        if (activeEventSource) {
-                            activeEventSource.close();
-                            activeEventSource = null;
-                        }
-                        if (timelineTimerInterval) {
-                            clearInterval(timelineTimerInterval);
-                            timelineTimerInterval = null;
-                        }
-                        if (onError) onError(new Error(ev.message || 'Pipeline stage failed.'));
-                    }
-                } catch (e) {
-                    console.error('Error parsing SSE event:', e);
+                    if (ev.terminal && ev.status === 'completed') finish(null, ev);
+                    else if (ev.terminal && ev.status === 'failed') finish(new Error(ev.message || 'Job failed'));
+                } catch (err) {
+                    finish(err);
                 }
             };
-
-            activeEventSource.onerror = () => {
-                if (activeEventSource) {
-                    activeEventSource.close();
-                    activeEventSource = null;
-                }
-                if (timelineTimerInterval) {
-                    clearInterval(timelineTimerInterval);
-                    timelineTimerInterval = null;
-                }
-                fetch(`/pipeline/jobs/${jobId}`)
-                    .then(r => r.json())
-                    .then(statusData => {
-                        if (statusData.status === 'completed') {
-                            if (onComplete) onComplete({ stage: 'assessment_ready', status: 'completed' });
-                        } else if (statusData.status === 'failed') {
-                            if (onError) onError(new Error(statusData.error || 'Job failed'));
-                        }
-                    })
-                    .catch(() => {});
+            stream.onerror = () => {
+                stream.close();
+                clearTimeout(pollTimer);
+                if (!stopped) pollTimer = setTimeout(poll, 0);
             };
+            // Poll periodically even if the stream silently stalls.
+            pollTimer = setTimeout(poll, 2000);
         }
 
         async function runUpload() {
@@ -1433,8 +1439,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         btn.disabled = false;
                         btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
                         const resultRes = await fetch(`/pipeline/jobs/${data.job_id}`);
+                        if (!resultRes.ok) throw new Error("Cannot retrieve completed assessment");
                         const resultData = await resultRes.json();
-                        if (resultData.result?.assessment) startQuiz(resultData.result.assessment);
+                        if (!resultData.result?.assessment?.questions?.length) throw new Error("Completed job has no quiz");
+                        startQuiz(resultData.result.assessment);
                         loadSources();
                     }, (err) => {
                         btn.disabled = false;
@@ -1445,6 +1453,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                timelineTimerInterval = null;
                 alert(`Upload failed: ${err.message}`);
             }
         }
@@ -1485,6 +1495,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 btn.innerHTML = '<span>⚡ Generate Diagnostic Quiz from Material</span>';
+                if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+                timelineTimerInterval = null;
                 alert(`Assessment generation failed: ${err.message}`);
             }
         }

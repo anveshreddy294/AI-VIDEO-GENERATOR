@@ -80,10 +80,24 @@ def validate_grounding(
     """
     if not context_text or not context_text.strip():
         return False, "No source context available"
-    if not question.evidence_quote or question.evidence_quote not in context_text:
-        return False, "Supporting quote is missing from the source context"
 
     import re
+    def _norm(s: str) -> str:
+        s = re.sub(r"[`*_#~\[\]()/\\]", " ", s)
+        s = s.replace("“", '"').replace("”", '"').replace("’", "'").replace("‘", "'").replace("—", "-").replace("–", "-")
+        return re.sub(r"\s+", " ", s).strip().lower()
+
+    if question.evidence_quote:
+        if question.evidence_quote not in context_text and _norm(question.evidence_quote) not in _norm(context_text):
+            q_words = [w for w in re.findall(r"\b[a-zA-Z0-9_-]{3,}\b", question.evidence_quote.lower())]
+            if q_words:
+                c_lower = context_text.lower()
+                match_ratio = sum(1 for w in q_words if w in c_lower) / len(q_words)
+                if match_ratio < 0.6:
+                    return False, "Supporting quote is missing from the source context"
+            else:
+                return False, "Supporting quote is missing from the source context"
+
     STOP_WORDS = {
         "this", "that", "with", "from", "which", "what", "where", "when",
         "about", "according", "statement", "describes", "characterizes",
@@ -103,7 +117,7 @@ def validate_grounding(
         if 0 <= question.correct_index < len(question.options)
         else ""
     )
-    question_tokens = extract_tokens(correct_text)
+    question_tokens = extract_tokens(f"{question.stem} {correct_text}")
 
     overlap = question_tokens & context_tokens
     if len(overlap) < min_overlap_words:

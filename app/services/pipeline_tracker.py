@@ -40,6 +40,10 @@ SAFE_METADATA_KEYS = {
     "percentage",
     "session_id",
     "student_id",
+    "embedding_diagnostics",
+    "provider_used",
+    "grounding_verified",
+    "dimension_validated",
 }
 
 
@@ -55,6 +59,10 @@ def sanitize_metadata(meta: dict[str, Any] | None) -> dict[str, Any]:
     sanitized: dict[str, Any] = {}
     for key, val in meta.items():
         if key not in SAFE_METADATA_KEYS:
+            continue
+
+        if key == "embedding_diagnostics" and isinstance(val, dict):
+            sanitized[key] = sanitize_metadata({k: v for k, v in val.items() if k in {"provider_used", "fallback_used", "grounding_verified", "dimension_validated", "duration_ms", "error_code"}})
             continue
 
         # Prevent nested secret leakage
