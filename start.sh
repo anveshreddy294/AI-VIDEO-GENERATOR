@@ -34,7 +34,7 @@ pip install -q -r requirements.txt
 if [ ! -f ".env" ]; then
     echo "[SETUP] No .env found — copying from .env.example"
     cp .env.example .env
-    echo "[ACTION] Edit .env and add your GEMINI_API_KEY before uploading files."
+    echo "[ACTION] Setup complete. Ensure Ollama is running (`ollama serve`)."
 fi
 
 # --- Check FFmpeg ---

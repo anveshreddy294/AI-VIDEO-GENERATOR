@@ -71,7 +71,7 @@ MATERIAL CONTENT UNITS:
 
 
 def _generate_with_llm(payload: str) -> str:
-    """Generate content using the active LLM provider (Gemini or local adapter)."""
+    """Generate content using the active LLM provider (Ollama or Mock)."""
     from .assessment.providers import get_default_provider
     provider = get_default_provider()
     return provider.generate_content(payload)
@@ -123,7 +123,6 @@ def process_structure_and_concepts(
 
     dur_ms = int((time.time() - start_t) * 1000)
     logger.warning("[structurer] LLM structure extraction failed after retries. Ingestion stopped. Error: %s", last_err)
-    # Fallback if LLM fails
     raise RuntimeError(f"Knowledge extraction failed after two attempts: {last_err}")
 
 

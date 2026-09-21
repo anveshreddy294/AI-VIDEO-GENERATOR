@@ -1,4 +1,4 @@
-﻿"""Comprehensive verification suite for VisualAI Observable Pipeline Progress.
+"""Comprehensive verification suite for VisualAI Observable Pipeline Progress.
 
 Tests:
 1. Successful workflow simulation -> all deterministic stages emitted in order, reaches 100% completed.
@@ -39,8 +39,15 @@ from app.api.pipeline import (
 
 class TestPipelineObservability(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        from app.core.config import settings
+        self._orig_llm = getattr(settings, "llm_provider", "ollama")
+        settings.llm_provider = "mock"
         self.client = TestClient(app)
         self.test_job_id = "JOB_test_observability"
+
+    async def asyncTearDown(self):
+        from app.core.config import settings
+        settings.llm_provider = self._orig_llm
 
     async def test_1_successful_workflow(self):
         """Scenario 1: Complete successful workflow emits stages in order and reaches 100% completed."""
@@ -118,18 +125,16 @@ class TestPipelineObservability(unittest.IsolatedAsyncioTestCase):
         self.assertIn("fallback", warning_ev.message.lower())
         print("   [PASS] Scenario 2: Qdrant unavailability emitted warning event and pipeline safely continued.")
 
-    async def test_3_gemini_rate_limit_fallback(self):
-        """Scenario 3: When LLM hits quota limit, generator switches to grounded fallback."""
+    async def test_3_llm_failure_fallback(self):
+        """Scenario 3: When LLM hits failure or quota limit, generator switches to grounded fallback."""
         job = job_manager.create_job("upload_and_assess", job_id="JOB_test_rate_limit")
 
         temp_path = BASE_DIR / "storage" / "runtime" / "test_scratch" / "rate_limit_sample.txt"
         temp_path.parent.mkdir(parents=True, exist_ok=True)
         temp_path.write_text("Thermodynamics: Heat flows from hot to cold bodies. Entropy increases.", encoding="utf-8")
 
-        # Mock LLM generating quota error to trigger grounded fallback generator
-        from google.api_core.exceptions import ResourceExhausted
-
-        with patch("app.services.assessment.providers.GeminiProvider.generate_content", side_effect=ResourceExhausted("429 Quota Exceeded")):
+        # Mock LLM generating error to trigger grounded fallback generator
+        with patch("app.services.assessment.providers.OllamaProvider.generate", side_effect=RuntimeError("Ollama service unavailable")):
             await _execute_upload_and_assess(
                 job_id=job.job_id,
                 temp_path=temp_path,

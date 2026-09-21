@@ -2,7 +2,7 @@
 
 Supported modalities:
 - PDF   -> PyMuPDF text & diagram blocks -> ContentUnits
-- Image -> Gemini Vision description -> ContentUnit
+- Image -> Vision model description -> ContentUnit
 - TXT   -> Paragraph/line parsing -> ContentUnits
 - Video -> Multimodal A/V fusion -> ContentUnits
 """
@@ -55,7 +55,7 @@ def dispatch(
             sequence_index=0,
             image_id=f"IMG_{file_path.stem}",
             image_path=str(file_path),
-            extraction_method="gemini_vision",
+            extraction_method="vision_model",
             confidence_score=0.95,
         )
         return ExtractionResult(

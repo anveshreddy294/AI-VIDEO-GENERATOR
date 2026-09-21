@@ -4,11 +4,18 @@ Ensures Uvicorn auto-reload monitors only the `app/` directory and explicitly ig
 virtual environments (`.venv/`), runtime storage (`storage/`), and temporary caches.
 """
 
+import os
+import sys
 from pathlib import Path
 import uvicorn
 
 if __name__ == "__main__":
     root_dir = Path(__file__).resolve().parent
+    venv_python = root_dir / ".venv" / "bin" / "python"
+    # Auto re-execute with venv python if not already running in it
+    if venv_python.exists() and os.path.realpath(sys.executable) != os.path.realpath(str(venv_python)):
+        os.execv(str(venv_python), [str(venv_python)] + sys.argv)
+
     app_dir = root_dir / "app"
     venv_dir = root_dir / ".venv"
     storage_dir = root_dir / "storage"

@@ -1056,7 +1056,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         Separated Ingestion Pipelines &amp; Layer A Vectorization
                     </div>
                     <div style="font-size:14px;color:var(--text-muted);line-height:1.6;margin-bottom:12px;">
-                        Normalizes study materials into an immutable ground-truth repository. Digital text via PyMuPDF; handwritten notes &amp; scans via OpenCV; diagrams via Gemini Vision; lectures via FFmpeg and Faster-Whisper. Embedded in Qdrant as <strong>Layer A (Authoritative Source)</strong> with strict provenance.
+                        Normalizes study materials into an immutable ground-truth repository. Digital text via PyMuPDF; handwritten notes &amp; scans via OpenCV; diagrams via Vision Engine; lectures via FFmpeg and Faster-Whisper. Embedded in Qdrant as <strong>Layer A (Authoritative Source)</strong> with strict provenance.
                     </div>
                     <div class="meta-chip">POST /upload?auto_start_assessment=true &middot; Layer A Locked</div>
                 </div>

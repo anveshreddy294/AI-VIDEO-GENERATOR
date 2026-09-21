@@ -1,6 +1,6 @@
 """Run the production Steps 1–2 flow with Ollama text reasoning.
 
-Gemini embeddings and durable Qdrant storage are still required. This demo
+Local embeddings and durable Qdrant storage are used. This demo
 submits simulated answers and persists a session, profile, and video blueprint.
 """
 import asyncio
@@ -37,7 +37,7 @@ A heat engine absorbs heat from a high-temperature thermal reservoir, converts a
 async def run_demo():
     if settings.llm_provider != "ollama":
         raise RuntimeError("This runner requires LLM_PROVIDER=ollama")
-    print(f"Text reasoning: Ollama {settings.ollama_model}; embeddings: Gemini; storage: Qdrant")
+    print(f"Text reasoning: Ollama {settings.ollama_model}; embeddings: {settings.embedding_model}; storage: Qdrant")
     upload = UploadFile(file=io.BytesIO(DEFAULT_TOPIC_TEXT.encode("utf-8")),
         filename="thermodynamics_topic.txt", headers=Headers({"content-type": "text/plain"}))
     try:

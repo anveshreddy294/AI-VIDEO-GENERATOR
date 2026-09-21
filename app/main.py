@@ -2,6 +2,8 @@
 
 import os
 
+from .core.config import settings
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -11,6 +13,7 @@ from .api.upload import router as upload_router
 from .api.assessment import router as assessment_router
 from .api.pipeline import router as pipeline_router
 from .api.instructor import router as instructor_router
+from .api.video import router as video_router
 
 # ---------------------------------------------------------------------------
 # Allowed origins — override via VISUALAI_CORS_ORIGINS env var (comma-sep)
@@ -19,16 +22,16 @@ _cors_origins_raw = os.getenv("VISUALAI_CORS_ORIGINS", "http://localhost:8000,ht
 ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 app = FastAPI(
-    title="VisualAI — Personalized Educational Assessment Platform",
+    title="VisualAI — Personalized Educational Assessment & Video Generation Platform",
     description=(
-        "Upload study material → Extract knowledge → Generate quizzes → Track mastery → Instructor Analytics.\n\n"
+        "Upload study material → Extract knowledge → Generate quizzes → Track mastery → Remedial Video Lessons.\n\n"
         "**Step 1 — Ingestion:** Upload PDF, image, text, or video. "
         "System extracts content, builds knowledge graph, stores in vector DB.\n\n"
         "**Step 2 — Assessment:** Generate grounded quiz questions from uploaded material. "
         "Grade submissions, detect prerequisite gaps, track student mastery.\n\n"
-        "**Instructor Analytics:** Human intervention management for kill-switch alerts and cohort gap heatmaps."
+        "**Step 3 — Video Engine:** Deterministic Manim animations + local TTS + Whisper alignment."
     ),
-    version="0.2.0",
+    version="0.3.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -47,6 +50,7 @@ app.include_router(upload_router)
 app.include_router(assessment_router)
 app.include_router(pipeline_router)
 app.include_router(instructor_router)
+app.include_router(video_router)
 
 
 @app.get("/health")
@@ -54,8 +58,61 @@ def health() -> dict:
     return {
         "status": "ok",
         "service": "VisualAI",
-        "version": "0.2.0",
-        "steps": ["ingestion", "assessment", "instructor_analytics"],
+        "version": "0.3.0",
+        "steps": ["ingestion", "assessment", "video_engine", "instructor_analytics"],
+    }
+
+
+@app.get("/health/llm")
+def health_llm() -> dict:
+    from .core.llm import get_llm_provider
+    provider = get_llm_provider()
+    if hasattr(provider, "health_check"):
+        return provider.health_check()
+    return {
+        "provider": getattr(settings, "llm_provider", "ollama"),
+        "configured_model": getattr(settings, "ollama_model", "unknown"),
+        "reachable": True,
+        "latency_ms": 0,
+    }
+
+
+@app.get("/health/qdrant")
+def health_qdrant() -> dict:
+    from .db.vector_store import get_client
+    try:
+        client = get_client()
+        collections = client.get_collections().collections
+        return {
+            "service": "Qdrant",
+            "status": "connected",
+            "collections": [c.name for c in collections],
+        }
+    except Exception as exc:
+        return {
+            "service": "Qdrant",
+            "status": "unreachable",
+            "error": str(exc),
+        }
+
+
+@app.get("/health/video")
+def health_video() -> dict:
+    import shutil
+    manim_ok = False
+    try:
+        import manim
+        manim_ok = True
+    except Exception:
+        pass
+    ffmpeg_bin = shutil.which("ffmpeg")
+    return {
+        "service": "Step 3 Video Engine",
+        "status": "ready" if (manim_ok or shutil.which("say")) else "degraded",
+        "manim_available": manim_ok,
+        "ffmpeg_available": bool(ffmpeg_bin),
+        "tts_provider": getattr(settings, "tts_provider", "edge_tts"),
+        "whisper_model": getattr(settings, "whisper_model", "base"),
     }
 
 

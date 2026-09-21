@@ -6,8 +6,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141+-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![Qdrant](https://img.shields.io/badge/Qdrant-Vector%20DB-DC2626?style=flat-square&logo=qdrant&logoColor=white)](https://qdrant.tech/)
-[![Google Gemini](https://img.shields.io/badge/Google-Gemini%20API-4285F4?style=flat-square&logo=google&logoColor=white)](https://ai.google.dev/)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-black?style=flat-square&logo=ollama&logoColor=white)](https://ollama.ai/)
+[![Manim](https://img.shields.io/badge/Manim-Community%20Edition-5A67D8?style=flat-square)](https://www.manim.community/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square)](LICENSE)
 
 ---
@@ -71,7 +71,7 @@ STUDY MATERIALS (PDF, Images, TXT, Lecture Videos)
 ├────────────────────────────────────────────────────────────────────────┤
 │ • Adaptive Assessment Planner (30% Foundational, 40% Mid, 30% Adv)     │
 │ • Prerequisite Pairing DAG Traversal                                   │
-│ • Grounded Question Generation (Gemini API / Local Ollama / Mock)      │
+│ • Grounded Question Generation (Local Ollama / Mock Provider)          │
 │ • Validation Gateway: Grounding overlap & Duplicate suppression        │
 │ • Hidden Answer Key Isolation (SafeQuestion contract)                  │
 │ • Submission Grading & False-Mastery Defense (consecutive passes)      │
@@ -86,7 +86,7 @@ STUDY MATERIALS (PDF, Images, TXT, Lecture Videos)
 │ • Targets only UNMASTERED concepts (filters out MASTERED & Kill Switch)│
 │ • Duration Scaling: Foundational (30s) | Mid (45s) | Advanced (60s)    │
 │ • Exact source provenance (ContentUnits, keyframes, audio timestamps)  │
-│ • Feed-forward contract into Automated Video Synthesis Engine          │
+│ • Deterministic Manim scene animations + EdgeTTS + Whisper alignment   │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -98,7 +98,7 @@ STUDY MATERIALS (PDF, Images, TXT, Lecture Videos)
 
 - **Universal Modality Dispatcher**:
   - **Documents (PDF, TXT)**: PyMuPDF block extraction preserving bounding boxes (`bbox`), page numbers, and embedded diagram extraction.
-  - **Images (PNG, JPG, JPEG)**: Gemini Vision multimodal prompt analysis extracting formulas, structural hierarchy, and diagram semantics.
+  - **Images (PNG, JPG, JPEG)**: Local Ollama Vision multimodal prompt analysis extracting formulas, structural hierarchy, and diagram semantics.
   - **Recorded Lectures (MP4, MOV, MKV)**:
     - FFmpeg audio ripping to 16kHz mono 16-bit PCM WAV.
     - Faster-Whisper ASR with word- and segment-level timestamps.
@@ -106,7 +106,7 @@ STUDY MATERIALS (PDF, Images, TXT, Lecture Videos)
     - Speech-visual timeline fusion into canonical `ContentUnit` records.
 - **Canonical `ContentUnit` Abstraction**: Single unified schema representing any visual, textual, or auditory element with precise page/timestamp provenance.
 - **Knowledge Graph & Prerequisite DAG**: Automatically builds conceptual dependency trees (`ConceptNode`) identifying parent-child relationships and prerequisite chains.
-- **Layer A Vector Storage**: Concept-aware semantic chunks (`RichChunk`) embedded via `gemini-embedding-2` (or local fallback) and isolated in Qdrant under `layer: "A"`.
+- **Layer A Vector Storage**: Concept-aware semantic chunks (`RichChunk`) embedded via local `nomic-embed-text` (or local fallback) and isolated in Qdrant under `layer: "A"`.
 
 ### Step 2: Diagnostic Assessment & Knowledge Profiling
 
@@ -175,7 +175,7 @@ AI-VIDEO-GENERATOR/
 │   │   ├── registry.py            # File hashing, versioning & artifact store
 │   │   ├── dispatcher.py          # Modality router (PDF, image, text, video)
 │   │   ├── extractor.py           # PyMuPDF block extractor + vision hook
-│   │   ├── vision.py              # Gemini Vision API wrapper
+│   │   ├── vision.py              # Local Ollama Vision API wrapper
 │   │   ├── structurer.py          # Structure detection & KnowledgeGraph builder
 │   │   ├── chunker.py             # Concept-aware semantic chunking
 │   │   ├── validator.py           # Step 1 5-layer Quality Gateway
@@ -185,7 +185,7 @@ AI-VIDEO-GENERATOR/
 │   │   │   ├── schemas.py         # Session, Question, Profile, VideoTarget schemas
 │   │   │   ├── planner.py         # Cold-start & prerequisite DAG planner
 │   │   │   ├── generator.py       # Source-isolated grounded question generator
-│   │   │   ├── providers.py       # LLM provider protocol (Gemini, Ollama, Mock)
+│   │   │   ├── providers.py       # LLM provider protocol (Ollama, Mock)
 │   │   │   ├── validator.py       # Grounding overlap & option validator
 │   │   │   ├── engine.py          # Grading engine, anti-loop kill switch
 │   │   │   ├── profile.py         # Student learning profile manager
@@ -297,11 +297,11 @@ Direct input contract for automated video generation:
 
 1. **Python 3.10+** (64-bit recommended)
 2. **FFmpeg**: Required on your system `PATH` for processing lecture videos (audio track separation).
-3. **LLM Access** (choose one):
-   - **Google Gemini API Key** (default cloud provider)
-   - **Ollama** running locally with `llama3.2` or `mistral` (zero cloud cost)
+3. **LLM Access** (Local):
+   - **Ollama** running locally with `llama3.2:3b` and `nomic-embed-text` (100% private, zero cloud cost)
    - **Mock Provider** (for offline testing without external dependencies)
-4. **Qdrant** (Optional):
+4. **Manim Community Edition**: For deterministic programmatic math & physics scene video rendering.
+5. **Qdrant** (Optional):
    - VisualAI automatically falls back to an **embedded in-process Qdrant** database (`storage/qdrant/`) if Docker is not running.
 
 ---
@@ -318,18 +318,21 @@ Key configuration options in `.env`:
 
 ```ini
 # --- LLM Provider Selection ---
-LLM_PROVIDER=ollama                  # Text reasoning: ollama | gemini | mock
-GEMINI_API_KEY=your_gemini_key_here  # Required for embeddings and vision
-GENERATION_MODEL=gemini-3.5-flash
-EMBEDDING_MODEL=models/gemini-embedding-2
-
-# --- Local Ollama Configuration (if LLM_PROVIDER=ollama) ---
+LLM_PROVIDER=ollama                  # Text reasoning: ollama | mock
 OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=qwen3:8b
+OLLAMA_MODEL=llama3.2:3b             # Fast, accurate local reasoning & JSON output
+GENERATION_MODEL=llama3.2:3b
+EMBEDDING_MODEL=nomic-embed-text     # Local embeddings
+OLLAMA_EMBED_MODEL=nomic-embed-text
+WHISPER_MODEL_SIZE=base              # Local subtitle & speech alignment
+
+# --- Quick Ollama Setup (Terminal) ---
+# ollama pull llama3.2:3b
+# ollama pull nomic-embed-text
 
 # --- Vector Database ---
 QDRANT_URL=http://localhost:6333     # Falls back to embedded if unreachable
-COLLECTION_NAME=visualai_layer_a
+COLLECTION_NAME=visualai_layer_a_v1
 
 # --- Step 2 Assessment & Pedagogical Rules ---
 MAX_QUESTIONS=10
@@ -376,12 +379,14 @@ docker compose up -d --build
 
 #### Option D: Standalone Local Ollama Pipeline
 
-To run the production ingestion and assessment flow with Ollama text reasoning, Gemini embeddings, and durable Qdrant storage:
+#### Option D: Standalone Local Ollama Pipeline
+ 
+To run the production ingestion and assessment flow with Ollama local text reasoning, local embeddings, and durable Qdrant storage:
 ```bash
 python run_step1_step2_ollama.py
 ```
 
-This runner requires `LLM_PROVIDER=ollama`. It uses the same upload, quality validation, and submission functions as the API. It indexes chunks before marking a source ready, preserves original provenance, and persists simulated answers, grading results, the learning profile, and the video-target blueprint. It does not provide a fully offline embedding path.
+This runner requires `LLM_PROVIDER=ollama`. It uses the same upload, quality validation, and submission functions as the API. It indexes chunks before marking a source ready, preserves original provenance, and persists simulated answers, grading results, the learning profile, and the video-target blueprint.
 
 ---
 
@@ -467,17 +472,23 @@ make audit        # Dependency security audit
 
 - [x] **Step 1: Multimodal Ingestion & Knowledge Graph**
   - PyMuPDF text & bounding box extraction
-  - Multimodal Gemini Vision for complex diagrams
+  - Local Ollama Vision for diagrams and images
   - Video pipeline: FFmpeg audio rip + faster-whisper ASR + OpenCV keyframes + timeline fusion
   - Knowledge graph prerequisite mapping
-  - Qdrant Layer A authoritative vector storage
+  - Qdrant Layer A authoritative vector storage with `nomic-embed-text`
 - [x] **Step 2: Diagnostic Assessment & Knowledge Profiling**
   - Adaptive cold-start planning (30/40/30 distribution)
   - Grounded question generation with grounding validation
   - Anti-loop kill switch (>3 failures flags `REQUIRES_HUMAN_FALLBACK`)
-  - Pluggable LLM providers (Gemini, local Ollama, Mock)
+  - Local Ollama LLM provider (`llama3.2:3b`) + Mock Provider for offline testing
   - Student learning profile tracking & hidden answer key safety
   - `VideoTargetMatrix` handoff contract generation
+- [x] **Step 3: Deterministic Video Engine**
+  - Scene-by-scene VideoPlan generation consuming `VideoTargetMatrix`
+  - Neural text-to-speech (EdgeTTS) voiceover synthesis
+  - Faster-Whisper word-level alignment
+  - Deterministic Manim scene rendering (title, equation, diagrams, summary)
+  - Audio/video compositing via FFmpeg
 - [x] **Web Dashboard & Instructor Portal**
   - Embedded interactive web console at `/`
   - Cohort analytics, mastery heatmaps, and kill-switch resolution workflows

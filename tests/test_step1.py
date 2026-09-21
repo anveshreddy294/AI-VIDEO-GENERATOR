@@ -1,4 +1,4 @@
-﻿"""Automated test script for Step 1 Ingestion Pipeline."""
+"""Automated test script for Step 1 Ingestion Pipeline."""
 
 import sys
 from pathlib import Path
@@ -15,7 +15,16 @@ from app.services.validator import validate_ingestion_quality
 
 def run_test():
     print("--- Testing Step 1 Pipeline ---")
-    
+    from app.core.config import settings
+    orig_provider = getattr(settings, "llm_provider", "ollama")
+    settings.llm_provider = "mock"
+    try:
+        _do_run_test()
+    finally:
+        settings.llm_provider = orig_provider
+
+
+def _do_run_test():
     # 1. Create a dummy test file
     test_dir = Path(__file__).resolve().parent.parent / "storage" / "runtime" / "test_scratch"
     test_dir.mkdir(parents=True, exist_ok=True)
@@ -62,7 +71,12 @@ def run_test():
         upserted_count=len(rich_chunks),
     )
     print(f"   Validation Report Passed: {val_report['passed']}")
+    assert val_report['passed'] is True, "Ingestion quality validation should pass"
     print("--- STEP 1 PIPELINE TEST PASSED SUCCESSFULLY ---")
+
+
+def test_step1_pipeline():
+    run_test()
 
 
 if __name__ == "__main__":

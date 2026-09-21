@@ -1,12 +1,11 @@
 """Video Matrix — Phase 3a: The Keyframe Vision Pipeline (The Visuals).
 
 OpenCV grabs one frame every `frame_interval_seconds` (default 12s) from the
-video. A cheap perceptual dedupe guards the Gemini bills: consecutive frames
-whose mean pixel difference is below the similarity threshold represent the
-same static slide/board and are skipped — a 1-hour lecture of writing on a
-board usually collapses from ~300 candidate frames to well under half.
+video. Perceptual dedupe ensures consecutive frames whose mean pixel difference
+is below the similarity threshold represent the same static slide/board and are
+skipped — a 1-hour lecture of writing on a board collapses efficiently.
 
-Each kept frame is handed to `describe_frame` (Gemini Vision) which transcribes
+Each kept frame is handed to `describe_frame` (Vision Engine) which transcribes
 equations, bullet points and diagrams, and the result is tagged with the exact
 clock time the frame was captured.
 """

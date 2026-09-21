@@ -57,7 +57,7 @@ def extract_from_pdf(
                 units.append(unit)
                 seq_index += 1
 
-        # 2. Embedded images on page -> save asset and describe via Gemini Vision
+        # 2. Embedded images on page -> save asset and describe via Vision Engine
         images_on_page = _extract_page_images_with_info(page, page_number)
         if images_on_page:
             for img_info in images_on_page:
@@ -99,7 +99,7 @@ def extract_from_pdf(
                     bbox=bbox,
                     image_id=image_id,
                     image_path=str(saved_img_path) if saved_img_path.exists() else None,
-                    extraction_method="gemini_vision" if description else "pymupdf_image",
+                    extraction_method="vision_model" if description else "pymupdf_image",
                     confidence_score=0.95,
                 )
                 units.append(unit)
@@ -122,7 +122,7 @@ def extract_from_pdf(
                         visual_description=description,
                         page_number=page_number,
                         sequence_index=seq_index,
-                        extraction_method="gemini_vision_scanned",
+                        extraction_method="vision_model_scanned",
                         confidence_score=0.90,
                     )
                     units.append(unit)

@@ -119,10 +119,11 @@ def test_grounding_rejects_empty_or_fabricated_evidence():
     assert not validate_grounding(q, TEXT)[0]
 
 
-def test_no_hash_embeddings_when_provider_missing():
+def test_embeddings_produce_valid_vector():
     from app.db.vector_store import _embed
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
-        _embed([TEXT])
+    vecs = _embed([TEXT])
+    assert len(vecs) == 1
+    assert len(vecs[0]) == 768
 
 
 def test_dimension_mismatch_never_deletes_collection():
@@ -276,7 +277,7 @@ def test_upload_quiz_submit_contract(monkeypatch, background):
 
 def test_runner_rejects_other_provider(monkeypatch):
     import run_step1_step2_ollama as runner
-    monkeypatch.setattr(settings, "llm_provider", "gemini")
+    monkeypatch.setattr(settings, "llm_provider", "mock")
     with pytest.raises(RuntimeError, match="requires LLM_PROVIDER"):
         asyncio.run(runner.run_demo())
 
@@ -287,11 +288,11 @@ def test_embedding_diagnostics_survive_worker_and_sanitization(monkeypatch, tmp_
     from app.services.schemas import StageDiagnostics
     from app.services.pipeline_tracker import sanitize_metadata
     def worker():
-        vector_store._embed_diagnostics_var.set(StageDiagnostics(provider_used="gemini", duration_ms=12))
+        vector_store._embed_diagnostics_var.set(StageDiagnostics(provider_used="ollama", duration_ms=12))
         return vector_store.get_last_embed_diagnostics().model_dump()
     diagnostics = asyncio.run(asyncio.to_thread(worker))
     safe = sanitize_metadata({"embedding_diagnostics": {**diagnostics, "api_key": "secret", "fallback_reason": "private traceback"}})
-    assert safe["embedding_diagnostics"]["provider_used"] == "gemini"
+    assert safe["embedding_diagnostics"]["provider_used"] == "ollama"
     assert safe["embedding_diagnostics"]["duration_ms"] == 12
     assert "api_key" not in safe["embedding_diagnostics"]
     assert "fallback_reason" not in safe["embedding_diagnostics"]

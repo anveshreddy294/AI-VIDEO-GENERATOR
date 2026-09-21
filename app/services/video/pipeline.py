@@ -1,7 +1,7 @@
 """Video Matrix — orchestrator returning normalized ContentUnits.
 
-Chains FFmpeg audio extraction, Whisper ASR, OpenCV keyframes, Gemini Vision,
-and multimodal fusion into normalized ContentUnits.
+Chains FFmpeg audio extraction, Whisper ASR, OpenCV keyframes, Vision Engine,
+and speech-frame alignment into a single ContentUnit stream.
 """
 
 import logging
@@ -50,7 +50,7 @@ def process_video_units(
             logger.warning("[video] Phase 3 FAILED (frame extraction): %s", exc)
             captures = []
 
-        # Phase 3b: Describe keyframes via Gemini Vision
+        # Phase 3b: Describe keyframes via Vision Engine
         described: list[FrameCapture] = []
         for i, cap in enumerate(captures):
             if cap.frame_bytes is not None:

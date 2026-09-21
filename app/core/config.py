@@ -12,15 +12,14 @@ load_dotenv(BASE_DIR / ".env")
 class Settings:
     def __init__(self) -> None:
         # --- API keys & services ---
-        self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
         self.qdrant_path: Path = BASE_DIR / os.getenv("QDRANT_PATH", "storage/runtime/qdrant")
-        self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_gemini_v1")
+        self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_v1")
 
         # --- Models ---
-        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "models/gemini-embedding-2")
-        self.generation_model: str = os.getenv("GENERATION_MODEL", "qwen3:8b")
+        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+        self.generation_model: str = os.getenv("GENERATION_MODEL", "llama3.2:3b")
 
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
         self.storage_dir: Path = BASE_DIR / os.getenv("STORAGE_DIR", "storage")
@@ -74,22 +73,34 @@ class Settings:
         self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
         self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
         self.llm_provider: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-        self.ollama_url: str = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
-        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "qwen3:8b")
+        self.ollama_base_url: str = (os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
+        self.ollama_url: str = self.ollama_base_url
+        self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         self.ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
         self.ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
+
+        # --- Step 3: Video Engine Directories & Configuration ---
+        self.video_plans_dir: Path = BASE_DIR / os.getenv("VIDEO_PLANS_DIR", "storage/runtime/video_plans")
+        self.renders_dir: Path = BASE_DIR / os.getenv("RENDERS_DIR", "storage/runtime/renders")
+        self.audio_dir: Path = BASE_DIR / os.getenv("AUDIO_DIR", "storage/runtime/audio")
+        self.captions_dir: Path = BASE_DIR / os.getenv("CAPTIONS_DIR", "storage/runtime/captions")
+
+        self.video_plans_dir.mkdir(parents=True, exist_ok=True)
+        self.renders_dir.mkdir(parents=True, exist_ok=True)
+        self.audio_dir.mkdir(parents=True, exist_ok=True)
+        self.captions_dir.mkdir(parents=True, exist_ok=True)
+
+        self.video_default_fps: int = int(os.getenv("VIDEO_DEFAULT_FPS", "30"))
+        self.video_resolution: str = os.getenv("VIDEO_RESOLUTION", "720p")
+        self.tts_provider: str = os.getenv("TTS_PROVIDER", "edge_tts").strip().lower()
+        self.whisper_model: str = os.getenv("WHISPER_MODEL", "base").strip().lower()
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
         ext = Path(filename).suffix.lstrip(".").lower()
         return ext in self.allowed_extensions
 
-    def require_gemini(self) -> None:
-        """Ensure Gemini API credentials exist."""
-        if not self.gemini_api_key:
-            raise RuntimeError(
-                "GEMINI_API_KEY is not set. Please set GEMINI_API_KEY in your .env file."
-            )
+
 
 
 settings = Settings()

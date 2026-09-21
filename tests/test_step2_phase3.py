@@ -19,7 +19,6 @@ from unittest.mock import MagicMock, patch
 from app.core.config import settings
 from app.services.assessment.generator import generate_question
 from app.services.assessment.providers import (
-    GeminiProvider,
     LLMProvider,
     MockProvider,
     OllamaProvider,
@@ -90,37 +89,25 @@ def test_generator_accepts_injected_provider():
     print(f"   [PASS] Generator correctly accepted and executed injected provider: stem='{q.stem}'")
 
 
-def test_generator_does_not_require_gemini_when_mock_provider_used():
-    print("\n--- Running Test C: test_generator_does_not_require_gemini_when_mock_provider_used ---")
-    orig_key = settings.gemini_api_key
-    try:
-        # Wipe gemini_api_key
-        settings.gemini_api_key = ""
-
-        mock = MockProvider()
-        concept = _sample_concept()
-        # Must not raise RuntimeError("GEMINI_API_KEY is not set.")
-        q = generate_question(concept=concept, source_id="SRC_TEST", llm_provider=mock)
-
-        assert q is not None, "Question should generate successfully without Gemini API key"
-        assert len(q.options) == 4
-        print("   [PASS] Question generated successfully without requiring GEMINI_API_KEY when MockProvider used.")
-    finally:
-        settings.gemini_api_key = orig_key
+def test_generator_does_not_require_cloud_when_mock_provider_used():
+    print("\n--- Running Test C: test_generator_does_not_require_cloud_when_mock_provider_used ---")
+    mock = MockProvider()
+    concept = _sample_concept()
+    q = generate_question(concept=concept, source_id="SRC_TEST", llm_provider=mock)
+    assert q is not None, "Question should generate successfully with MockProvider"
+    assert len(q.options) == 4
+    print("   [PASS] Question generated successfully offline when MockProvider used.")
 
 
-def test_gemini_provider_isolated_from_generator():
-    print("\n--- Running Test D: test_gemini_provider_isolated_from_generator ---")
-    import app.services.assessment.generator as gen_mod
+def test_gemini_provider_strictly_removed():
+    print("\n--- Running Test D: test_gemini_provider_strictly_removed ---")
+    import app.services.assessment.providers as prov_mod
+    import app.core.llm as llm_mod
 
-    # Assert google.generativeai is not directly imported in generator module dict
-    assert "genai" not in gen_mod.__dict__, "generator.py should not directly expose 'genai'"
-    assert "google.generativeai" not in gen_mod.__dict__, "generator.py should not directly expose google.generativeai"
-
-    # Assert GeminiProvider is cleanly isolated in providers.py
-    gemini_prov = GeminiProvider(api_key="test_key")
-    assert hasattr(gemini_prov, "generate_content"), "GeminiProvider must implement generate_content"
-    print("   [PASS] Gemini SDK is strictly encapsulated in GeminiProvider and decoupled from generator.py.")
+    # Assert GeminiProvider is completely absent
+    assert not hasattr(prov_mod, "GeminiProvider"), "GeminiProvider must not exist in providers.py"
+    assert not hasattr(llm_mod, "GeminiProvider"), "GeminiProvider must not exist in llm.py"
+    print("   [PASS] GeminiProvider is completely deleted from the codebase.")
 
 
 def test_provider_failure_reaches_grounded_fallback():
@@ -160,9 +147,11 @@ def test_provider_selection_from_settings():
         assert isinstance(p_ollama, OllamaProvider), f"Expected OllamaProvider, got {type(p_ollama)}"
 
         settings.llm_provider = "gemini"
-        p_gemini = get_default_provider()
-        assert isinstance(p_gemini, GeminiProvider), f"Expected GeminiProvider, got {type(p_gemini)}"
-        assert p_gemini.model_name == "gemini-3.5-flash", f"Expected gemini-3.5-flash, got {p_gemini.model_name}"
+        try:
+            get_default_provider()
+            assert False, "Should raise RuntimeError when gemini is requested"
+        except RuntimeError as exc:
+            assert "completely removed" in str(exc) or "Unsupported" in str(exc)
 
         settings.llm_provider = "unsupported_provider_xyz"
         try:
@@ -171,7 +160,7 @@ def test_provider_selection_from_settings():
         except RuntimeError:
             pass
 
-        print("   [PASS] Provider factory properly selects MockProvider, OllamaProvider, and GeminiProvider explicitly, failing on unknown.")
+        print("   [PASS] Provider factory properly selects MockProvider and OllamaProvider, strictly rejecting gemini/unknown.")
     finally:
         settings.llm_provider = orig_prov
 
@@ -221,8 +210,8 @@ def main():
 
     test_mock_provider_generates_question()
     test_generator_accepts_injected_provider()
-    test_generator_does_not_require_gemini_when_mock_provider_used()
-    test_gemini_provider_isolated_from_generator()
+    test_generator_does_not_require_cloud_when_mock_provider_used()
+    test_gemini_provider_strictly_removed()
     test_provider_failure_reaches_grounded_fallback()
     test_provider_selection_from_settings()
     test_ollama_provider_if_implemented()

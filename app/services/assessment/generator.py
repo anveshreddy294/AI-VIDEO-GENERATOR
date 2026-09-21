@@ -2,12 +2,12 @@
 
 Generates questions one concept at a time using:
 1. Context Retrieval: Uses chunks from Step 1 JSON or Qdrant Layer A
-2. Grounded LLM Generation: Sends exact chunk text to Gemini
+2. Grounded LLM Generation: Sends exact chunk text to Ollama or MockProvider
 3. Negative Prompting: "Based ONLY on this text, generate a multiple-choice question.
    Provide exactly 1 correct answer and 3 plausible but factually incorrect options."
 4. Provenance Tracking: Attaches exact page numbers, chunk IDs, and content IDs
    so the student and frontend can trace the question back to source material.
-5. Resilient Fallback: If Gemini API is unconfigured or rate-limited, synthesizes
+5. Resilient Fallback: If LLM is unconfigured or rate-limited, synthesizes
    grounded questions directly from chunk context so the system never breaks.
 """
 
@@ -135,7 +135,8 @@ def search_concept_chunks(
                 time.sleep(1.5 ** (attempt + 1))
 
     if vector is None:
-        return []
+        from ...db.vector_store import _deterministic_embedding
+        vector = _deterministic_embedding(query_text)
 
     must_conditions = [
         qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A")),

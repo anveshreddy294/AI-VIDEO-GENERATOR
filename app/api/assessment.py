@@ -100,7 +100,7 @@ def start_assessment(
        - Balanced Cold Start (foundational, intermediate, advanced)
        - Prerequisite Pairing (foundational queued before dependent concepts)
     3. Grounded Question Generation:
-       - Sends text chunk to Gemini with strict negative prompting
+       - Sends text chunk to Ollama with strict negative prompting
        - Provenance tracking (page numbers, chunk IDs, content IDs)
     4. Validation & Safe Quiz Dispatch:
        - Pydantic schema validation (exactly 4 options, non-empty)

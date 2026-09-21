@@ -10,7 +10,6 @@ _root = Path(_storage.name)
 for name in ("STORAGE_DIR", "RUNTIME_DIR", "REGISTRY_DIR", "UPLOAD_DIR", "PROCESSED_DIR", "VIDEO_TARGETS_DIR", "ASSESSMENT_DIR", "LEARNING_PROFILES_DIR", "QDRANT_PATH", "FIXTURES_DIR"):
     os.environ[name] = str(_root / name.lower())
 os.environ["INCLUDE_FIXTURE_SOURCES"] = "false"
-os.environ["GEMINI_API_KEY"] = ""
 os.environ["QDRANT_URL"] = ""
 
 
@@ -28,7 +27,6 @@ def isolated_store(monkeypatch, tmp_path):
     monkeypatch.setattr(session_store, "SESSIONS_DIR", settings.assessment_dir)
     monkeypatch.setattr(session_store, "LEGACY_SESSIONS_DIR", tmp_path / "no_legacy_sessions")
     monkeypatch.setattr(vector_store, "_client_instance", None)
-    monkeypatch.setattr(settings, "gemini_api_key", "")
     yield
     if vector_store._client_instance is not None:
         vector_store._client_instance.close()

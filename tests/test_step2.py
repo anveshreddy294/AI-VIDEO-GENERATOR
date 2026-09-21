@@ -44,6 +44,13 @@ def test_step2_flow():
     print("       TESTING STEP 2 MASTER EXECUTION FLOW (END-TO-END)         ")
     print("=================================================================")
 
+    from app.core.config import settings
+    orig_provider = getattr(settings, "llm_provider", "ollama")
+    settings.llm_provider = "mock"
+    test_profile = settings.learning_profiles_dir / "STU_INTEGRATION_01_SRC_TEST_PHYSICS_101.json"
+    if test_profile.exists():
+        test_profile.unlink()
+
     # -------------------------------------------------------------
     # 1. Simulate Step 1 JSON Output Handoff
     # -------------------------------------------------------------

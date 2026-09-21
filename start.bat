@@ -26,14 +26,11 @@ REM --- Install dependencies ---
 echo [SETUP] Installing/updating dependencies...
 pip install -q -r requirements.txt
 
-REM --- Check .env ---
 if not exist ".env" (
     echo [SETUP] No .env found — copying from .env.example
     copy .env.example .env >nul
-    echo [ACTION] Edit .env and add your GEMINI_API_KEY before uploading files.
+    echo [ACTION] Setup complete. Ensure Ollama is running (`ollama serve`).
 )
-
-REM --- Check FFmpeg ---
 where ffmpeg >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo [OK] FFmpeg found.

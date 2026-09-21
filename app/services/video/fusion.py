@@ -86,7 +86,7 @@ def fuse_units(
             timestamp_end=seg.end,
             frame_id=frame_id,
             sequence_index=seq_index,
-            extraction_method="whisper_gemini_fusion",
+            extraction_method="whisper_vision_fusion",
             confidence_score=0.95,
         )
         units.append(unit)
