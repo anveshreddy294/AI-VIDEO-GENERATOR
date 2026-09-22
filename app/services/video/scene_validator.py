@@ -57,8 +57,8 @@ def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
         except Exception as exc:
             raise SceneValidationError(f"Invalid scene type '{scene.scene_type}'. Allowed: {[t.value for t in SceneType]}") from exc
 
-    if scene.duration_seconds <= 0 or scene.duration_seconds > 120:
-        raise SceneValidationError(f"Scene duration {scene.duration_seconds}s is outside valid range (1–120s)")
+    if scene.duration_seconds <= 0 or scene.duration_seconds > 300:
+        raise SceneValidationError(f"Scene duration {scene.duration_seconds}s is outside valid range (1–300s)")
 
     # Validate LaTeX equation if present
     if scene.equation:
@@ -87,7 +87,7 @@ def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
     return scene
 
 
-def validate_video_plan(plan: VideoPlan, max_duration_tolerance: float = 6.0) -> VideoPlan:
+def validate_video_plan(plan: VideoPlan, max_duration_tolerance: float | None = None) -> VideoPlan:
     """Validate full VideoPlan including scene count, narration alignment, durations, and provenance."""
     if not plan.concept_id or not plan.concept_name:
         raise SceneValidationError("VideoPlan must contain non-empty concept_id and concept_name")
@@ -107,10 +107,11 @@ def validate_video_plan(plan: VideoPlan, max_duration_tolerance: float = 6.0) ->
 
     # Validate duration contract against target_seconds / duration_seconds
     target = float(plan.target_seconds or plan.duration_seconds or 45)
-    if abs(total_scene_duration - target) > max_duration_tolerance:
+    allowed_tolerance = max_duration_tolerance if max_duration_tolerance is not None else max(6.0, target * 0.08)
+    if abs(total_scene_duration - target) > allowed_tolerance:
         raise SceneValidationError(
             f"Total scene duration ({total_scene_duration:.1f}s) deviates significantly "
-            f"from target duration ({target:.1f}s, tolerance: ±{max_duration_tolerance:.1f}s)"
+            f"from target duration ({target:.1f}s, tolerance: ±{allowed_tolerance:.1f}s)"
         )
 
     # Validate narration segments

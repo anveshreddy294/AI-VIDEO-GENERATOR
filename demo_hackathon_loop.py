@@ -226,7 +226,7 @@ async def run_hackathon_demo():
     print("   [5/5] Compositor: Merging video track + voice track + subtitles via FFmpeg...")
 
     t0 = time.time()
-    artifact = await execute_video_generation_job(target, mock_mode=True)
+    artifact = await execute_video_generation_job(target, mock_mode=True, mock_tts=False, force=True)
     dur = time.time() - t0
 
     if artifact.status != "COMPLETED":

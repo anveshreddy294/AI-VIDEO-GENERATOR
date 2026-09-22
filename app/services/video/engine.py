@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -64,6 +65,7 @@ async def execute_video_generation_job(
     job_id: str | None = None,
     mock_mode: bool = False,
     force: bool = False,
+    mock_tts: bool | None = None,
 ) -> VideoArtifact:
     """Execute complete end-to-end Step 3 generation pipeline asynchronously."""
     jid = job_id or f"JOB_{uuid4().hex[:10].upper()}"
@@ -141,13 +143,40 @@ async def execute_video_generation_job(
 
         script = extract_narration_script(plan)
         audio_path = settings.audio_dir / f"{jid}.wav"
-        tts = get_tts_provider("mock" if mock_mode else None)
+
+        # Determine TTS provider: use mock only if explicitly requested or running under automated pytest fixture
+        if mock_tts is True:
+            tts = get_tts_provider("mock")
+        elif mock_tts is False:
+            tts = get_tts_provider()
+        elif getattr(settings, "tts_provider", "") in ("mock", "test") or os.environ.get("PYTEST_CURRENT_TEST"):
+            tts = get_tts_provider("mock")
+        else:
+            tts = get_tts_provider()
+
         await tts.generate_audio(
             text=script.full_text,
             output_path=audio_path,
             target_seconds=float(plan.duration_seconds),
         )
         artifact.audio_path = str(audio_path)
+
+        # Inspect generated audio duration and sync visual scenes if audio took slightly longer
+        try:
+            import wave
+            with wave.open(str(audio_path), "rb") as wf:
+                actual_audio_dur = wf.getnframes() / float(wf.getframerate())
+            if actual_audio_dur > float(plan.duration_seconds):
+                logger.info(
+                    "%s Audio duration (%.2fs) exceeds planned visual duration (%ds); scaling visual scenes...",
+                    log_prefix, actual_audio_dur, plan.duration_seconds
+                )
+                ratio = actual_audio_dur / float(plan.duration_seconds)
+                for s in plan.scenes:
+                    s.duration_seconds = round(s.duration_seconds * ratio, 2)
+                plan.duration_seconds = int(actual_audio_dur)
+        except Exception as exc:
+            logger.debug("%s Could not inspect audio duration: %s", log_prefix, exc)
 
         # 3. Whisper Alignment & Subtitle Generation
         artifact.status = VideoJobStatus.ALIGNING

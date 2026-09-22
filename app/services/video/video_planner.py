@@ -20,6 +20,7 @@ from ..assessment.schemas import VideoTarget
 from ..registry import load_rich_chunks
 from .scene_schema import NarrationSegment, ScenePlan, SceneType, VideoPlan
 from .scene_validator import validate_video_plan
+from .script_generator import shorten_narration_to_budget
 
 logger = logging.getLogger(__name__)
 
@@ -129,116 +130,145 @@ def _synthesize_grounded_fallback_plan(
     target: VideoTarget,
     evidence_chunks: list[dict[str, Any]],
 ) -> VideoPlan:
-    """Deterministic fallback synthesis if LLM is offline or output is invalid."""
+    """Deterministic fallback synthesis supporting multi-minute educational video plans (30s to 600s)."""
     dur = float(target.target_seconds or (30 if target.difficulty == "foundational" else (60 if target.difficulty == "advanced" else 45)))
-    
-    # Proportional durations across 5 pedagogical scenes (Section 9)
-    weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+
+    # Detect equation if present
+    name_lower = target.concept_name.lower()
+    eq = "F = ma" if "force" in name_lower or "second law" in name_lower else (
+        "p = mv" if "momentum" in name_lower else (
+            "v = d / t" if "speed" in name_lower or "velocity" in name_lower else (
+                "E = mc^2" if "energy" in name_lower or "mass" in name_lower else f"Concept: {target.concept_name}"
+            )
+        )
+    )
+
+    first_chunk_text = evidence_chunks[0].get("text", "") if evidence_chunks else target.directive
+    clean_snippet = first_chunk_text[:300].replace("\n", " ").strip()
+    chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence_chunks if c.get("chunk_id")]
+
+    # Multi-tier pedagogical scene allocation based on target duration
+    if dur <= 50:
+        # Standard compact video (30s - 45s): 5 scenes
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Core Pedagogical Concept Review", None, None),
+            (SceneType.EXPLANATION, f"Understanding {target.concept_name}", None, clean_snippet[:120], None),
+            (SceneType.EQUATION if " = " in eq else SceneType.DIAGRAM, f"Governing Principle: {target.concept_name}", None, None, eq if " = " in eq else None),
+            (SceneType.EXAMPLE, f"Concrete Example: {target.concept_name}", "Real-World Application", f"Observing {target.concept_name} in action demonstrates direct proportional response.", None),
+            (SceneType.SUMMARY, "Key Takeaways", None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this remedial lesson on {target.concept_name}. Let's break down the fundamental physics and governing principles.",
+            f"Here is the authoritative definition from the course materials: {clean_snippet[:100]}. Notice how each element relates to the physical state of the system.",
+            f"The governing relation {eq} quantifies this exact interaction, demonstrating how changes in applied force cause direct acceleration.",
+            f"In everyday physical scenarios, observing these laws in action makes the theoretical concepts immediate and intuitive.",
+            f"To achieve full mastery, remember the core equation and always review prerequisite definitions before your next assessment.",
+        ]
+    elif dur <= 110:
+        # Medium lesson (~1 minute to 1.5 minutes: 60s - 90s): 6 scenes
+        weights = [0.10, 0.22, 0.22, 0.20, 0.14, 0.12]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Deep Dive Conceptual Lesson", None, None),
+            (SceneType.EXPLANATION, f"Foundation & Definition of {target.concept_name}", None, clean_snippet[:150], None),
+            (SceneType.EQUATION, f"Mathematical Law: {eq}", None, None, eq if " = " in eq else "F = ma"),
+            (SceneType.DIAGRAM, f"Force & State Interaction", "Vector Simulation", None, None),
+            (SceneType.EXAMPLE, f"Practical Real-World Demonstration", "Applied Scenario", f"Applying {target.concept_name} to accelerating vehicles and everyday objects.", None),
+            (SceneType.SUMMARY, "Mastery Summary & Review Checklist", None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this focused study module on {target.concept_name}. In this video, we will walk through the core definitions, mathematical formulation, and physical demonstrations.",
+            f"Let's review the fundamental definition established in your textbook: {clean_snippet[:130]}. Understanding the exact terminology is essential for tackling diagnostic problems.",
+            f"Next, examine the governing equation {eq}. In this relationship, each variable plays an indispensable role in determining how the system responds to external influences.",
+            f"Look at the dynamic visual model on screen. When an external net force acts upon a massive body, it induces an acceleration directly proportional to the applied force vector.",
+            f"Consider a concrete example such as a car accelerating on a highway. Increasing the engine force produces greater acceleration, whereas a heavier mass requires proportionally more force to move.",
+            f"In summary, remember the relationship {eq}, keep units consistent, and connect every equation back to physical intuition to solidify your mastery.",
+        ]
+    elif dur <= 230:
+        # Comprehensive lesson (~2 to 3 minutes: 120s - 180s): 7 scenes
+        weights = [0.08, 0.18, 0.18, 0.18, 0.16, 0.12, 0.10]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Comprehensive Academic Tutorial", None, None),
+            (SceneType.EXPLANATION, f"Physical Intuition & Motivation", None, f"Why do objects accelerate or resist motion? {target.concept_name} provides the exact dynamical foundation.", None),
+            (SceneType.EXPLANATION, f"Authoritative Definition & Scope", None, clean_snippet[:160], None),
+            (SceneType.EQUATION, f"Governing Equation & Parameter Breakdown", None, None, eq if " = " in eq else "F = ma"),
+            (SceneType.DIAGRAM, f"Visual Dynamics: Free-Body Analysis", "Force Interaction", None, None),
+            (SceneType.EXAMPLE, f"Case Study & Numerical Walkthrough", "Worked Example", f"Analyzing real physical measurements governed by {target.concept_name}.", None),
+            (SceneType.SUMMARY, "Formula Reference & Self-Assessment Guide", None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this comprehensive tutorial on {target.concept_name}. Over the next few minutes, we will thoroughly explore the underlying principles, governing mathematical formulas, and concrete applications.",
+            f"To build strong intuition, consider how objects in the universe behave when forces act upon them. Without an external influence, objects maintain their state; but when an unbalanced force intervenes, acceleration is inevitable.",
+            f"Turning to the verified study text: {clean_snippet[:140]}. This formal definition is the cornerstone of classical dynamics and forms the foundation for solving complex multi-step problems.",
+            f"The central mathematical formulation is expressed as {eq}. Here, force is a vector quantity that scales directly with acceleration. Notice that doubling the force doubles the acceleration for a fixed mass.",
+            f"Observe the dynamic diagram illustrating the force vector acting on the mass block. The direction of the resulting acceleration aligns exactly with the net force vector.",
+            f"Let us connect this to a real-world engineering case study. Rocket propulsion, automobile braking, and planetary motion all adhere strictly to these proportional dynamics.",
+            f"As we conclude, review these key takeaways: first, remember {eq}; second, ensure vector directions are carefully tracked; and third, practice applying these principles to diagnostic questions.",
+        ]
+    else:
+        # Full masterclass lesson (4 to 10 minutes: 240s - 600s): 8 scenes
+        weights = [0.08, 0.14, 0.14, 0.16, 0.16, 0.14, 0.10, 0.08]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "In-Depth Masterclass Lecture", None, None),
+            (SceneType.EXPLANATION, f"Historical Context & Physical Intuition", None, f"Tracing the foundational discoveries that established {target.concept_name} in modern science.", None),
+            (SceneType.EXPLANATION, f"Formal Definition & Boundary Conditions", None, clean_snippet[:180], None),
+            (SceneType.EQUATION, f"Mathematical Derivation: {eq}", None, None, eq if " = " in eq else "F = ma"),
+            (SceneType.DIAGRAM, f"Free-Body Dynamics & Vector Analysis", "Dynamic Simulation", None, None),
+            (SceneType.EXAMPLE, f"Real-World Engineering Case Studies", "Applied Physics", f"Practical applications across modern mechanics, automotive safety, and aerospace engineering.", None),
+            (SceneType.EXPLANATION, f"Common Misconceptions & Diagnostic Pitfalls", None, "Differentiating between velocity, net force, and acceleration to prevent common exam errors.", None),
+            (SceneType.SUMMARY, "Complete Formula Reference & Review", None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this in-depth masterclass on {target.concept_name}. In this extended lecture, we will deeply investigate the theoretical origins, mathematical rigor, dynamic simulations, and practical engineering applications.",
+            f"Before examining the mathematical laws, let us appreciate the physical motivation. Historically, understanding why and how massive bodies alter their velocity transformed our comprehension of natural phenomena.",
+            f"Let us examine the authoritative definitions presented in your course curriculum: {clean_snippet[:150]}. Notice that mass acts as an intrinsic resistance to changes in motion, known universally as inertia.",
+            f"The governing physical equation is formalized as {eq}. When working through numerical problems, always verify units: force in Newtons, mass in kilograms, and acceleration in meters per second squared.",
+            f"Look closely at the vector simulation on screen. The net force arrow indicates the magnitude and direction of the external interaction, which dictates the instantaneous acceleration of the body.",
+            f"Consider practical engineering applications: civil engineers calculate structural load forces, automotive designers calibrate crumple zones, and aeronautical engineers calculate rocket thrust based directly on these relationships.",
+            f"A common student pitfall is confusing constant velocity with zero net force. Remember: an object moving at high constant speed experiences zero net force; only changes in velocity require net external forces.",
+            f"In conclusion, master the core formula {eq}, visualize the free-body diagram, verify units, and practice diagnosing conceptual questions with confidence.",
+        ]
+
     durations = [max(1.0, round(dur * w, 1)) for w in weights]
     diff = round(dur - sum(durations), 1)
     durations[-1] = max(1.0, round(durations[-1] + diff, 1))
 
-    first_chunk_text = evidence_chunks[0].get("text", "") if evidence_chunks else target.directive
-    clean_snippet = first_chunk_text[:180].replace("\n", " ")
+    scenes: list[ScenePlan] = []
+    narration: list[NarrationSegment] = []
 
-    # Detect equation if present
-    eq = "F = ma" if "force" in target.concept_name.lower() or "second law" in target.concept_name.lower() else (
-        "p = mv" if "momentum" in target.concept_name.lower() else f"Concept: {target.concept_name}"
-    )
-
-    chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence_chunks if c.get("chunk_id")]
-
-    scenes = [
-        ScenePlan(
-            scene_index=0,
-            scene_type=SceneType.TITLE,
-            title=target.concept_name,
-            subtitle="Core Pedagogical Concept Review",
-            duration_seconds=durations[0],
-            source_chunk_ids=chunk_ids,
-            page_start=target.page_start,
-            page_end=target.page_end,
-        ),
-        ScenePlan(
-            scene_index=1,
-            scene_type=SceneType.EXPLANATION,
-            title=f"Understanding {target.concept_name}",
-            text=clean_snippet,
-            label=f"Core Concept: {target.concept_name}",
-            duration_seconds=durations[1],
-            source_chunk_ids=chunk_ids,
-            page_start=target.page_start,
-            page_end=target.page_end,
-        ),
-        ScenePlan(
-            scene_index=2,
-            scene_type=SceneType.EQUATION if " = " in eq else SceneType.DIAGRAM,
-            title=f"Governing Principle: {target.concept_name}",
-            equation=eq if " = " in eq else None,
-            diagram_type="force_box" if " = " not in eq else None,
-            object_label="Object / State",
-            force_label="Applied Force",
-            acceleration_label="Resulting Change",
-            label=f"Governing Relation: {eq}",
-            duration_seconds=durations[2],
-            source_chunk_ids=chunk_ids,
-            page_start=target.page_start,
-            page_end=target.page_end,
-        ),
-        ScenePlan(
-            scene_index=3,
-            scene_type=SceneType.EXAMPLE,
-            title=f"Concrete Example: {target.concept_name}",
-            text=f"Consider a physical scenario governed by {target.concept_name}, demonstrating direct proportional response.",
-            label="Real-World Application",
-            duration_seconds=durations[3],
-            source_chunk_ids=chunk_ids,
-            page_start=target.page_start,
-            page_end=target.page_end,
-        ),
-        ScenePlan(
-            scene_index=4,
-            scene_type=SceneType.SUMMARY,
-            title="Key Takeaways",
-            summary_points=[
-                f"Core foundation: {target.concept_name}",
-                "Key relationship observed directly in study material",
-                "Review foundational prerequisites to solidify understanding",
-            ],
-            duration_seconds=durations[4],
-            source_chunk_ids=chunk_ids,
-            page_start=target.page_start,
-            page_end=target.page_end,
-        ),
-    ]
-
-    narration = [
-        NarrationSegment(
-            scene_index=0,
-            text=f"Welcome to this remedial lesson on {target.concept_name}.",
-            target_seconds=durations[0],
-        ),
-        NarrationSegment(
-            scene_index=1,
-            text=f"Let's focus on the authoritative definition: {clean_snippet[:90]}.",
-            target_seconds=durations[1],
-        ),
-        NarrationSegment(
-            scene_index=2,
-            text=f"Notice how the governing relation {eq} describes the system behavior.",
-            target_seconds=durations[2],
-        ),
-        NarrationSegment(
-            scene_index=3,
-            text=f"In practice, observing these principles clarifies the underlying physical laws.",
-            target_seconds=durations[3],
-        ),
-        NarrationSegment(
-            scene_index=4,
-            text=f"Remember these core takeaways to master {target.concept_name}.",
-            target_seconds=durations[4],
-        ),
-    ]
+    for idx, ((stype, title, sub, text, eq_val), seg_dur, narr_text) in enumerate(zip(scene_configs, durations, narration_templates)):
+        scenes.append(
+            ScenePlan(
+                scene_index=idx,
+                scene_type=stype,
+                title=title,
+                subtitle=sub,
+                text=text,
+                equation=eq_val,
+                label=sub or title,
+                diagram_type="force_box" if stype == SceneType.DIAGRAM else None,
+                object_label="Mass (m)" if stype == SceneType.DIAGRAM else None,
+                force_label="Force (F)" if stype == SceneType.DIAGRAM else None,
+                acceleration_label="Acceleration (a)" if stype == SceneType.DIAGRAM else None,
+                summary_points=[
+                    f"Mastery: {target.concept_name}",
+                    f"Governing Relation: {eq}",
+                    "Apply vector analysis to avoid conceptual pitfalls",
+                ] if stype == SceneType.SUMMARY else [],
+                duration_seconds=seg_dur,
+                source_chunk_ids=chunk_ids,
+                page_start=target.page_start,
+                page_end=target.page_end,
+            )
+        )
+        fitted_narr = shorten_narration_to_budget(narr_text, seg_dur, wpm=140)
+        narration.append(
+            NarrationSegment(
+                scene_index=idx,
+                text=fitted_narr,
+                target_seconds=seg_dur,
+            )
+        )
 
     return VideoPlan(
         student_id=target.student_id or "STU_DEFAULT",

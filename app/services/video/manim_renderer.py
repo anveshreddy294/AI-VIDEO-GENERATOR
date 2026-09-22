@@ -12,8 +12,10 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import tempfile
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +29,12 @@ def render_video_plan(plan: VideoPlan, output_mp4: Path) -> Path:
     """Render a VideoPlan to an MP4 video file."""
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
 
-    # Attempt Manim rendering first
+    # For multi-minute videos (>60s) or fast quality settings, use high-speed OpenCV/Pillow engine
+    # which renders in seconds with dynamic on-screen captions and zero display/LaTeX overhead
+    if plan.duration_seconds > 60 or getattr(settings, "manim_quality", "") in ("fast", "pillow", "opencv"):
+        return _render_with_pillow_opencv(plan, output_mp4)
+
+    # Attempt Manim rendering first for short videos <= 60s
     try:
         return _render_with_manim(plan, output_mp4)
     except Exception as exc:
@@ -155,7 +162,7 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
     """Guaranteed deterministic offline renderer using Pillow + OpenCV.
 
     Renders identical 1280x720 animation frames for each scene type
-    with zero reliance on LaTeX, display servers, or external binaries.
+    with dynamic on-screen captions burned in and zero reliance on LaTeX or external display servers.
     """
     import cv2
     import numpy as np
@@ -166,6 +173,14 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_mp4), fourcc, float(fps), (width, height))
 
+    # Pre-index narration text by scene_index
+    narration_by_scene: dict[int, str] = {}
+    if plan.narration:
+        for seg in plan.narration:
+            s_idx = seg.scene_index
+            existing = narration_by_scene.get(s_idx, "")
+            narration_by_scene[s_idx] = (existing + " " + seg.text).strip() if existing else seg.text.strip()
+
     # Dark slate background color
     bg_color = (17, 24, 39)  # #111827
 
@@ -173,6 +188,18 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
         stype = scene.scene_type
         dur = max(1.0, scene.duration_seconds)
         total_frames = int(dur * fps)
+
+        # Extract narration sentences for this scene
+        scene_narr = (
+            narration_by_scene.get(scene.scene_index)
+            or scene.narration
+            or scene.text
+            or scene.title
+            or plan.concept_name
+        )
+        sentences = [s.strip() for s in re.split(r"(?<=[.?!])\s+", scene_narr) if s.strip()]
+        if not sentences:
+            sentences = [scene_narr]
 
         for f in range(total_frames):
             img = Image.new("RGB", (width, height), bg_color)
@@ -186,25 +213,33 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
             if stype == SceneType.TITLE:
                 title = scene.title or plan.concept_name
                 sub = scene.subtitle or "Core Concept Review"
-                draw.text((width // 2 - len(title) * 10, height // 2 - 40), title, fill=(250, 204, 21))
-                draw.text((width // 2 - len(sub) * 6, height // 2 + 20), sub, fill=(229, 231, 235))
+                draw.text((width // 2 - len(title) * 10, height // 2 - 50), title, fill=(250, 204, 21))
+                draw.text((width // 2 - len(sub) * 6, height // 2 + 10), sub, fill=(229, 231, 235))
 
             elif stype == SceneType.EQUATION:
                 eq = scene.equation or "F = ma"
                 lbl = scene.label or f"Governing Formula: {plan.concept_name}"
-                draw.text((width // 2 - len(lbl) * 7, height // 2 - 60), lbl, fill=(96, 165, 250))
+                draw.text((width // 2 - len(lbl) * 7, height // 2 - 70), lbl, fill=(96, 165, 250))
                 # Draw highlighted equation box
                 box_w = max(260, len(eq) * 24)
-                draw.rectangle([width // 2 - box_w // 2, height // 2 - 10, width // 2 + box_w // 2, height // 2 + 70],
-                               outline=(250, 204, 21), width=3)
-                draw.text((width // 2 - len(eq) * 11, height // 2 + 15), eq, fill=(250, 204, 21))
+                draw.rectangle(
+                    [width // 2 - box_w // 2, height // 2 - 20, width // 2 + box_w // 2, height // 2 + 60],
+                    outline=(250, 204, 21),
+                    width=3,
+                )
+                draw.text((width // 2 - len(eq) * 11, height // 2 + 5), eq, fill=(250, 204, 21))
 
             elif stype == SceneType.DIAGRAM:
                 # Animate a box moving across with force arrow
                 x_pos = int(250 + t_ratio * 400)
-                y_pos = height // 2 - 50
+                y_pos = height // 2 - 60
                 # Mass box
-                draw.rectangle([x_pos, y_pos, x_pos + 120, y_pos + 100], fill=(59, 130, 246), outline=(147, 197, 253), width=2)
+                draw.rectangle(
+                    [x_pos, y_pos, x_pos + 120, y_pos + 100],
+                    fill=(59, 130, 246),
+                    outline=(147, 197, 253),
+                    width=2,
+                )
                 draw.text((x_pos + 25, y_pos + 40), "Mass (m)", fill=(255, 255, 255))
                 # Force arrow
                 draw.line([x_pos - 100, y_pos + 50, x_pos - 10, y_pos + 50], fill=(250, 204, 21), width=4)
@@ -214,21 +249,44 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
                 draw.text((x_pos + 10, y_pos + 115), "--> Acceleration (a)", fill=(52, 211, 153))
 
             elif stype == SceneType.SUMMARY:
-                draw.text((80, 120), "Key Takeaways & Conceptual Summary", fill=(250, 204, 21))
+                draw.text((80, 100), "Key Takeaways & Conceptual Summary", fill=(250, 204, 21))
                 points = scene.summary_points or [
                     f"Core definition: {plan.concept_name}",
-                    "Understand how force, mass, and acceleration relate",
+                    "Understand how governing laws and relationships interact",
                     "Prerequisite mastery prevents persistent misconceptions",
                 ]
                 for p_idx, pt in enumerate(points[:4]):
-                    draw.text((100, 200 + p_idx * 60), f"•  {pt}", fill=(243, 244, 246))
+                    draw.text((100, 160 + p_idx * 50), f"•  {pt}", fill=(243, 244, 246))
 
             else:
                 txt = scene.text or plan.concept_name
-                draw.text((width // 2 - len(txt) * 6, height // 2), txt, fill=(255, 255, 255))
+                draw.text((width // 2 - len(txt) * 6, height // 2 - 30), txt, fill=(255, 255, 255))
+
+            # --- Synchronized On-Screen Caption Card ---
+            sent_idx = min(len(sentences) - 1, int(t_ratio * len(sentences)))
+            active_sentence = sentences[sent_idx]
+            wrapped_lines = textwrap.wrap(active_sentence, width=68)
+            card_y1 = height - 110
+            card_y2 = height - 20
+            # Draw sleek translucent rounded box
+            draw.rounded_rectangle(
+                [100, card_y1, width - 100, card_y2],
+                radius=10,
+                fill=(15, 23, 42),
+                outline=(59, 130, 246),
+                width=1,
+            )
+            # CC badge
+            draw.rectangle([115, card_y1 + 10, 145, card_y1 + 26], fill=(59, 130, 246))
+            draw.text((120, card_y1 + 12), "CC", fill=(255, 255, 255))
+            # Center active caption lines
+            for line_i, line_text in enumerate(wrapped_lines[:2]):
+                bbox = draw.textbbox((0, 0), line_text)
+                txt_w = bbox[2] - bbox[0]
+                draw.text((width // 2 - txt_w // 2, card_y1 + 10 + line_i * 24), line_text, fill=(255, 255, 255))
 
             # Progress bar at bottom
-            draw.rectangle([0, height - 8, int(width * t_ratio), height], fill=(59, 130, 246))
+            draw.rectangle([0, height - 6, int(width * t_ratio), height], fill=(59, 130, 246))
 
             frame_bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
             out.write(frame_bgr)

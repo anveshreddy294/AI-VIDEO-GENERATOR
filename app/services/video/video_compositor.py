@@ -43,6 +43,13 @@ async def composite_remedial_video(
         shutil.copy2(video_mp4, output_mp4)
         return output_mp4
 
+    # Build primary ffmpeg composition command with H.264 (yuv420p), AAC (44.1kHz), and embedded subtitles
+    has_subtitles = bool(
+        subtitles_srt
+        and Path(subtitles_srt).exists()
+        and Path(subtitles_srt).stat().st_size > 0
+    )
+
     cmd = [
         ffmpeg_bin,
         "-y",
@@ -50,19 +57,44 @@ async def composite_remedial_video(
         str(video_mp4),
         "-i",
         str(audio_wav),
+    ]
+
+    if has_subtitles:
+        cmd.extend(["-i", str(subtitles_srt)])
+
+    cmd.extend([
         "-c:v",
-        "copy",
+        "libx264",
+        "-preset",
+        "fast",
+        "-pix_fmt",
+        "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
         "192k",
+        "-ar",
+        "44100",
         "-map",
         "0:v:0",
         "-map",
         "1:a:0",
+    ])
+
+    if has_subtitles:
+        cmd.extend([
+            "-c:s",
+            "mov_text",
+            "-map",
+            "2:s:0",
+            "-metadata:s:s:0",
+            "language=eng",
+        ])
+
+    cmd.extend([
         "-shortest",
         str(output_mp4),
-    ]
+    ])
 
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -72,15 +104,18 @@ async def composite_remedial_video(
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode == 0 and output_mp4.exists() and output_mp4.stat().st_size > 0:
-            logger.info(f"[compositor] Successfully composited video: {output_mp4}")
+            logger.info(f"[compositor] Successfully composited video with H.264/AAC (subtitles={has_subtitles}): {output_mp4}")
             return output_mp4
         else:
-            logger.warning(f"[compositor] Direct stream copy failed; attempting transcoding re-encode: {stderr.decode()[:300]}")
+            logger.warning(
+                f"[compositor] Primary composition failed (code {proc.returncode}); attempting without subtitle stream: "
+                f"{stderr.decode()[:300]}"
+            )
     except Exception as exc:
-        logger.warning(f"[compositor] Composition attempt 1 failed: {exc}")
+        logger.warning(f"[compositor] Primary composition attempt failed: {exc}")
 
-    # Fallback with standard re-encoding
-    reencode_cmd = [
+    # Fallback attempt: composite without subtitle stream (pure audio + video)
+    fallback_cmd = [
         ffmpeg_bin,
         "-y",
         "-i",
@@ -89,22 +124,35 @@ async def composite_remedial_video(
         str(audio_wav),
         "-c:v",
         "libx264",
+        "-preset",
+        "fast",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
+        "-b:a",
+        "192k",
+        "-ar",
+        "44100",
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
         "-shortest",
         str(output_mp4),
     ]
-    proc2 = await asyncio.create_subprocess_exec(
-        *reencode_cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    await proc2.communicate()
-
-    if output_mp4.exists() and output_mp4.stat().st_size > 0:
-        return output_mp4
+    try:
+        proc2 = await asyncio.create_subprocess_exec(
+            *fallback_cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await proc2.communicate()
+        if output_mp4.exists() and output_mp4.stat().st_size > 0:
+            logger.info(f"[compositor] Successfully composited video via fallback: {output_mp4}")
+            return output_mp4
+    except Exception as exc:
+        logger.warning(f"[compositor] Fallback composition failed: {exc}")
 
     # Ultimate fallback: copy video track
     shutil.copy2(video_mp4, output_mp4)
