@@ -22,16 +22,21 @@ from pydantic import BaseModel, Field
 from ..core.config import settings
 from ..services.chunker import create_rich_chunks
 from ..services.dispatcher import UnsupportedFileType, dispatch
+from ..services.ingestion.normalizer import normalize_content_units
 from ..services.pipeline_tracker import ProgressEvent, job_manager
 from ..services.registry import (
     get_source_record,
     load_knowledge_graph,
     register_source,
     save_content_units,
+    save_normalized_records,
+    save_quarantine_records,
     save_rich_chunks,
+    save_sanitized_records,
     save_knowledge_graph,
     update_source_status,
 )
+from ..services.security.content_sanitizer import sanitize_content_records
 from ..services.structurer import process_structure_and_concepts
 from ..services.validator import ValidationFailed, validate_ingestion_quality
 
@@ -150,10 +155,35 @@ async def _execute_upload_and_assess(
             job_id=job_id,
             stage="normalizing_units",
             status="running",
-            message="Normalizing ContentUnits and anchoring structural lineage...",
+            message="Normalizing ContentUnits, running prompt-injection sanitization, and anchoring structural lineage...",
             progress_percent=30,
             metadata={"source_id": source_id},
         )
+
+        # 3a. Canonical Normalization
+        normalized_records = normalize_content_units(raw_units, source_version=source_record.source_version)
+        save_normalized_records(student_id, source_id, source_record.source_version, [r.model_dump() for r in normalized_records])
+
+        # 3b. Prompt-Injection Quarantine and Sanitization
+        sanitized_records = sanitize_content_records(normalized_records)
+        save_sanitized_records(student_id, source_id, source_record.source_version, [r.model_dump() for r in sanitized_records])
+
+        quarantined = [r.model_dump() for r in sanitized_records if not r.retrieval_allowed]
+        if quarantined:
+            save_quarantine_records(student_id, source_id, source_record.source_version, quarantined)
+            logger.warning("[pipeline] Quarantined %d prompt-injection segments for source %s", len(quarantined), source_id)
+
+        # Filter units: only allow clean/sanitized text to reach structure & knowledge graph
+        clean_map = {r.content_id: r.sanitized_text for r in sanitized_records if r.retrieval_allowed}
+        units_to_process = []
+        for u in raw_units:
+            if u.content_id in clean_map:
+                stext = clean_map[u.content_id]
+                if stext:
+                    u.text = stext
+                    units_to_process.append(u)
+        if not units_to_process:
+            units_to_process = raw_units  # Graceful fallback if entire input was quarantined
 
         await job_manager.emit_event(
             job_id=job_id,
@@ -161,11 +191,11 @@ async def _execute_upload_and_assess(
             status="running",
             message="Analyzing document outline and extracting conceptual relationships...",
             progress_percent=40,
-            metadata={"source_id": source_id},
+            metadata={"source_id": source_id, "sanitized_units_count": len(units_to_process), "quarantined_count": len(quarantined)},
         )
 
         try:
-            enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, raw_units)
+            enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, units_to_process)
         except Exception as exc:
             await job_manager.fail_job(
                 job_id=job_id,
@@ -211,7 +241,13 @@ async def _execute_upload_and_assess(
             metadata={"source_id": source_id},
         )
 
-        rich_chunks = create_rich_chunks(enriched_units, knowledge_graph)
+        rich_chunks = create_rich_chunks(
+            enriched_units,
+            knowledge_graph,
+            user_id=student_id,
+            source_version=source_record.source_version,
+            source_hash=source_record.file_hash,
+        )
         save_rich_chunks(source_id, rich_chunks)
         blueprint.chunk_count = len(rich_chunks)
 

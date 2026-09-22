@@ -17,6 +17,7 @@ from uuid import uuid4
 
 from ...core.config import settings
 from ..assessment.schemas import VideoTarget, VideoTargetMatrix
+from ..schemas import LayerBVideoSceneChunk
 from .artifact_store import find_existing_video, store_video_artifacts
 from .manim_renderer import render_video_plan
 from .narration import extract_narration_script
@@ -206,6 +207,46 @@ async def execute_video_generation_job(
             tts_provider=getattr(settings, "tts_provider", "edge_tts"),
             model=getattr(settings, "ollama_model", "llama3.2:3b"),
         )
+
+        # 7. Upsert validated Layer B video scenes into Qdrant for timecode Q&A
+        try:
+            from ...db.vector_store import upsert_layer_b_scenes
+            cumulative_time = 0.0
+            layer_b_chunks = []
+            for s_idx, scene in enumerate(plan.scenes):
+                dur = float(scene.duration_seconds or 5.0)
+                t_start = round(cumulative_time, 2)
+                t_end = round(cumulative_time + dur, 2)
+                cumulative_time = t_end
+
+                chunk_ids = scene.source_chunk_ids or plan.source_chunk_ids or target.chunk_ids or []
+                pg_start = scene.page_start or plan.page_start or target.page_start
+                pg_end = scene.page_end or plan.page_end or target.page_end
+
+                layer_b_chunk = LayerBVideoSceneChunk(
+                    scene_id=scene.scene_id or f"scene_{s_idx + 1}",
+                    video_id=jid,
+                    user_id=student_id,
+                    source_id=source_id,
+                    source_version="v1",
+                    concept_id=target.concept_id,
+                    scene_type=scene.scene_type,
+                    title=scene.title or f"Scene {s_idx + 1}",
+                    narration_text=scene.narration or "",
+                    timestamp_start=t_start,
+                    timestamp_end=t_end,
+                    source_chunk_ids=chunk_ids,
+                    page_start=pg_start,
+                    page_end=pg_end,
+                    approval_status="approved",
+                    grounding_status="verified_grounded",
+                )
+                layer_b_chunks.append(layer_b_chunk)
+
+            upserted_scenes_count = upsert_layer_b_scenes(layer_b_chunks)
+            logger.info("%s Upserted %d Layer B scene chunks into Qdrant", log_prefix, upserted_scenes_count)
+        except Exception as vec_exc:
+            logger.warning("%s Failed to sync Layer B scene chunks to Qdrant: %s", log_prefix, vec_exc)
 
         artifact.video_path = str(final_mp4_path)
         artifact.status = VideoJobStatus.COMPLETED

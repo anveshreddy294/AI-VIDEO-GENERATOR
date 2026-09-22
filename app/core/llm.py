@@ -232,6 +232,30 @@ class MockProvider:
                 ],
             })
 
+        if "verified_source_context" in lower or "pedagogically rigorous teaching assistant" in lower:
+            import re
+            cids = re.findall(r"\[Chunk ID:\s*([a-zA-Z0-9_\-]+)", prompt)
+            cid = cids[0] if cids else "chunk_mock_1"
+            src_sample = "Force equals mass times acceleration (F = ma)."
+            if "<VERIFIED_SOURCE_CONTEXT>" in prompt:
+                ctx = prompt.split("<VERIFIED_SOURCE_CONTEXT>")[1].split("</VERIFIED_SOURCE_CONTEXT>")[0]
+                lines = [l.strip() for l in ctx.splitlines() if l.strip() and not l.startswith("[Chunk ID") and not l.startswith("---")]
+                if lines:
+                    src_sample = lines[0]
+
+            return json.dumps({
+                "answer": f"According to the verified study materials: {src_sample}",
+                "citations": [
+                    {
+                        "chunk_id": cid,
+                        "quote": src_sample[:100],
+                        "page_number": 1,
+                    }
+                ],
+                "grounding_confidence": 0.95,
+                "refusal": False,
+            })
+
         if "concept" in lower and "definition" in lower and ("curriculum" in lower or "structure" in lower):
             import re
             found_cu = re.findall(r"\[(CU_[a-zA-Z0-9_\-]+)\]", prompt)

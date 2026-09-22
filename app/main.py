@@ -14,6 +14,7 @@ from .api.assessment import router as assessment_router
 from .api.pipeline import router as pipeline_router
 from .api.instructor import router as instructor_router
 from .api.video import router as video_router
+from .api.qa import router as qa_router
 
 # ---------------------------------------------------------------------------
 # Allowed origins — override via VISUALAI_CORS_ORIGINS env var (comma-sep)
@@ -29,9 +30,10 @@ app = FastAPI(
         "System extracts content, builds knowledge graph, stores in vector DB.\n\n"
         "**Step 2 — Assessment:** Generate grounded quiz questions from uploaded material. "
         "Grade submissions, detect prerequisite gaps, track student mastery.\n\n"
-        "**Step 3 — Video Engine:** Deterministic Manim animations + local TTS + Whisper alignment."
+        "**Step 3 — Video Engine:** Deterministic Manim animations + local TTS + Whisper alignment.\n\n"
+        "**Step 4 — Grounded Q&A:** Multi-layer source and video timestamp-aware question answering."
     ),
-    version="0.3.0",
+    version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -51,6 +53,7 @@ app.include_router(assessment_router)
 app.include_router(pipeline_router)
 app.include_router(instructor_router)
 app.include_router(video_router)
+app.include_router(qa_router)
 
 
 @app.get("/health")

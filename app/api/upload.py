@@ -22,13 +22,18 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from ..core.config import settings
 from ..services.chunker import create_rich_chunks
 from ..services.dispatcher import UnsupportedFileType, dispatch
+from ..services.ingestion.normalizer import normalize_content_units
 from ..services.registry import (
     register_source,
     save_content_units,
-    save_rich_chunks,
     save_knowledge_graph,
+    save_normalized_records,
+    save_quarantine_records,
+    save_rich_chunks,
+    save_sanitized_records,
     update_source_status,
 )
+from ..services.security.content_sanitizer import sanitize_content_records
 from ..services.structurer import process_structure_and_concepts
 from ..services.validator import ValidationFailed, validate_ingestion_quality
 
@@ -167,9 +172,32 @@ async def upload_file(
                 detail=f"No extractable content found in '{filename}'.",
             )
 
-        # Step 6, 7 & 8: Structure Detection, Concept Extraction & Knowledge Graph
+        # Step 6: Canonical Normalization & Prompt-Injection Quarantine
         update_source_status(source_id, "NORMALIZING")
-        enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, raw_units)
+        normalized_records = normalize_content_units(raw_units, source_version=source_record.source_version)
+        save_normalized_records(student_id, source_id, source_record.source_version, [r.model_dump() for r in normalized_records])
+
+        sanitized_records = sanitize_content_records(normalized_records)
+        save_sanitized_records(student_id, source_id, source_record.source_version, [r.model_dump() for r in sanitized_records])
+
+        quarantined = [r.model_dump() for r in sanitized_records if not r.retrieval_allowed]
+        if quarantined:
+            save_quarantine_records(student_id, source_id, source_record.source_version, quarantined)
+            logger.warning("[upload] Quarantined %d prompt-injection segments for source %s", len(quarantined), source_id)
+
+        clean_map = {r.content_id: r.sanitized_text for r in sanitized_records if r.retrieval_allowed}
+        units_to_process = []
+        for u in raw_units:
+            if u.content_id in clean_map:
+                stext = clean_map[u.content_id]
+                if stext:
+                    u.text = stext
+                    units_to_process.append(u)
+        if not units_to_process:
+            units_to_process = raw_units
+
+        # Step 7 & 8: Structure Detection, Concept Extraction & Knowledge Graph
+        enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, units_to_process)
 
         # Persist normalized ContentUnits and Knowledge Graph to registry storage
         save_content_units(source_id, enriched_units)
@@ -177,7 +205,13 @@ async def upload_file(
 
         # Step 9 & 10: Semantic Chunking & Provenance Mapping
         update_source_status(source_id, "INDEXING")
-        rich_chunks = create_rich_chunks(enriched_units, knowledge_graph)
+        rich_chunks = create_rich_chunks(
+            enriched_units,
+            knowledge_graph,
+            user_id=student_id,
+            source_version=source_record.source_version,
+            source_hash=source_record.file_hash,
+        )
         save_rich_chunks(source_id, rich_chunks)
 
         # Step 11: Rich Qdrant Payload Upsert (Layer A)

@@ -33,6 +33,8 @@ from ..services.schemas import (
     AuthoritativeSourceChunk,
     AuthoritativeVideoChunk,
     LayerAChunk,
+    LayerBVideoSceneChunk,
+    LayerChunk,
     RichChunk,
     StageDiagnostics,
 )
@@ -110,6 +112,7 @@ def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
     base_url = (getattr(settings, "ollama_base_url", None) or getattr(settings, "ollama_url", "http://localhost:11434")).rstrip("/")
     embed_model = getattr(settings, "ollama_embed_model", "nomic-embed-text")
     try:
+        vectors: list[list[float]] = []
         for text in texts:
             url = f"{base_url}/api/embeddings"
             payload = json.dumps({"model": embed_model, "prompt": text}).encode("utf-8")
@@ -156,7 +159,7 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
 
 
 def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> None:
-    """Validate an existing collection without ever deleting user data."""
+    """Validate an existing collection without ever deleting user data, ensuring payload indexes."""
     expected_dim = expected_dim or _active_embedding_dim
     existing = [c.name for c in client.get_collections().collections]
     if settings.collection_name in existing:
@@ -164,13 +167,41 @@ def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> 
         current_dim = getattr(params, "size", None)
         if current_dim != expected_dim:
             raise RuntimeError(f"Collection dimension {current_dim} does not match embedding dimension {expected_dim}; configure a new collection and reingest")
-        return
-    client.create_collection(collection_name=settings.collection_name,
-        vectors_config=qmodels.VectorParams(size=expected_dim, distance=qmodels.Distance.COSINE))
+    else:
+        client.create_collection(
+            collection_name=settings.collection_name,
+            vectors_config=qmodels.VectorParams(size=expected_dim, distance=qmodels.Distance.COSINE),
+        )
+
+    # SEC / PERF: Ensure payload indexes for high-speed tenant-isolated retrieval
+    index_fields = [
+        ("layer", qmodels.PayloadSchemaType.KEYWORD),
+        ("source_id", qmodels.PayloadSchemaType.KEYWORD),
+        ("user_id", qmodels.PayloadSchemaType.KEYWORD),
+        ("source_version", qmodels.PayloadSchemaType.KEYWORD),
+        ("type", qmodels.PayloadSchemaType.KEYWORD),
+        ("retrieval_allowed", qmodels.PayloadSchemaType.BOOL),
+        ("injection_status", qmodels.PayloadSchemaType.KEYWORD),
+        ("concept_ids", qmodels.PayloadSchemaType.KEYWORD),
+        ("chunk_id", qmodels.PayloadSchemaType.KEYWORD),
+        ("video_id", qmodels.PayloadSchemaType.KEYWORD),
+        ("scene_id", qmodels.PayloadSchemaType.KEYWORD),
+    ]
+    for field_name, field_schema in index_fields:
+        try:
+            client.create_payload_index(
+                collection_name=settings.collection_name,
+                field_name=field_name,
+                field_schema=field_schema,
+            )
+        except Exception:
+            pass
 
 
-def _point_id(chunk: LayerAChunk) -> str:
-    if isinstance(chunk, RichChunk):
+def _point_id(chunk: LayerChunk) -> str:
+    if isinstance(chunk, LayerBVideoSceneChunk):
+        raw_key = f"layer_b::{chunk.user_id}::{chunk.video_id}::{chunk.scene_id}::{chunk.timestamp_start}::{chunk.timestamp_end}"
+    elif isinstance(chunk, RichChunk):
         raw_key = f"{chunk.source_id}::{chunk.chunk_id}::{chunk.text[:100]}"
     else:
         name = getattr(chunk, "document_name", None) or getattr(chunk, "video_name", "unknown")
@@ -178,8 +209,8 @@ def _point_id(chunk: LayerAChunk) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, raw_key))
 
 
-def _payload(chunk: LayerAChunk) -> dict[str, Any]:
-    if isinstance(chunk, RichChunk):
+def _payload(chunk: LayerChunk) -> dict[str, Any]:
+    if isinstance(chunk, (RichChunk, LayerBVideoSceneChunk)):
         return chunk.model_dump()
 
     payload: dict[str, Any] = {
@@ -214,6 +245,36 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     return len(points)
 
 
+
+def upsert_layer_b_scenes(scenes: list[LayerBVideoSceneChunk]) -> int:
+    """Upsert validated, approved Layer B video scene chunks into Qdrant."""
+    if not scenes:
+        return 0
+
+    client = get_client()
+    texts_to_embed = [
+        f"{s.title}: {s.narration_text}".strip() if s.title else (s.narration_text or s.scene_id)
+        for s in scenes
+    ]
+    vectors = _embed(texts_to_embed)
+    ensure_collection(client, len(vectors[0]))
+    if len(vectors) != len(scenes):
+        raise RuntimeError("Scene embedding count mismatch")
+    points = [
+        qmodels.PointStruct(id=_point_id(s), vector=v, payload=_payload(s))
+        for s, v in zip(scenes, vectors)
+    ]
+    client.upsert(collection_name=settings.collection_name, points=points, wait=True)
+    stored = client.retrieve(
+        collection_name=settings.collection_name,
+        ids=[p.id for p in points],
+        with_payload=True,
+    )
+    if {str(p.id) for p in stored} != {str(p.id) for p in points}:
+        raise RuntimeError("Layer B video scene storage verification failed")
+    return len(points)
+
+
 def search_layer_a(
     query: str,
     limit: int = 5,
@@ -234,16 +295,157 @@ def search_layer_a(
             query_filter=qmodels.Filter(must=must_conditions),
             score_threshold=threshold,
         )
-        return [h.payload for h in hits]
+        return [h.payload for h in hits if h.payload]
     except Exception as exc:
         logger.warning("[vector_store] search_layer_a query failed: %s", exc)
         return []
+
+
+def search_source_chunks(
+    user_id: str,
+    source_id: str,
+    query: str,
+    source_version: str | None = None,
+    concept_id: str | None = None,
+    current_timestamp: float | None = None,
+    top_k: int = 5,
+    score_threshold: float | None = None,
+) -> list[dict[str, Any]]:
+    """Search Layer A source material with strict mandatory provenance and security filters.
+
+    Enforces:
+    - user_id isolation (prevent cross-user data leakage)
+    - source_id confinement
+    - layer == "A"
+    - retrieval_allowed == True (quarantined prompt injections are never returned)
+    - injection_status in ["clean", "sanitized"]
+    """
+    client = get_client()
+    try:
+        vector = _embed([query], task_type="retrieval_query")[0]
+        must_conditions: list[Any] = [
+            qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A")),
+            qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)),
+            qmodels.FieldCondition(key="retrieval_allowed", match=qmodels.MatchValue(value=True)),
+        ]
+        if user_id:
+            must_conditions.append(
+                qmodels.FieldCondition(
+                    key="user_id",
+                    match=qmodels.MatchAny(any=[user_id, "student_default"]),
+                )
+            )
+        if source_version:
+            must_conditions.append(
+                qmodels.FieldCondition(key="source_version", match=qmodels.MatchValue(value=source_version))
+            )
+        if concept_id:
+            must_conditions.append(
+                qmodels.FieldCondition(key="concept_ids", match=qmodels.MatchAny(any=[concept_id]))
+            )
+
+        if score_threshold is not None:
+            threshold = score_threshold
+        elif getattr(settings, "llm_provider", "") in ("mock", "test"):
+            threshold = 0.05
+        else:
+            threshold = getattr(settings, "vector_similarity_threshold", 0.35)
+        hits = client.search(
+            collection_name=settings.collection_name,
+            query_vector=vector,
+            limit=top_k,
+            query_filter=qmodels.Filter(must=must_conditions),
+            score_threshold=threshold,
+        )
+        results = []
+        for h in hits:
+            payload = h.payload or {}
+            # Verify retrieval and injection status invariants
+            if not payload.get("retrieval_allowed", True):
+                continue
+            if payload.get("injection_status") not in ("clean", "sanitized"):
+                continue
+            payload["similarity_score"] = h.score
+            results.append(payload)
+        return results
+    except Exception as exc:
+        logger.warning("[vector_store] search_source_chunks failed: %s", exc)
+        return []
+
+
+def retrieve_layer_b_scene(
+    user_id: str,
+    source_id: str,
+    video_id: str | None = None,
+    timestamp: float | None = None,
+) -> dict[str, Any] | None:
+    """Retrieve the active approved Layer B video scene corresponding to a playback timestamp.
+
+    Matches layer="B", user_id, source_id, (video_id if provided), and finds the scene
+    where timestamp_start <= timestamp <= timestamp_end.
+    """
+    try:
+        client = get_client()
+        existing = [c.name for c in client.get_collections().collections]
+        if settings.collection_name not in existing:
+            return None
+
+        must_conditions: list[Any] = [
+            qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="B")),
+            qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)),
+        ]
+        if user_id:
+            must_conditions.append(
+                qmodels.FieldCondition(
+                    key="user_id",
+                    match=qmodels.MatchAny(any=[user_id, "student_default"]),
+                )
+            )
+        if video_id:
+            must_conditions.append(
+                qmodels.FieldCondition(key="video_id", match=qmodels.MatchValue(value=video_id))
+            )
+
+        records, _ = client.scroll(
+            collection_name=settings.collection_name,
+            scroll_filter=qmodels.Filter(must=must_conditions),
+            limit=100,
+            with_payload=True,
+            with_vectors=False,
+        )
+        scenes = [r.payload for r in records if r and r.payload]
+        if not scenes:
+            return None
+
+        if timestamp is None:
+            return scenes[0]
+
+        # Find exact matching scene interval
+        for scene in scenes:
+            t_start = float(scene.get("timestamp_start", 0.0))
+            t_end = float(scene.get("timestamp_end", 0.0))
+            if t_start <= timestamp <= t_end:
+                return scene
+
+        # If outside strict interval bounds, return closest scene
+        closest = min(
+            scenes,
+            key=lambda s: min(
+                abs(timestamp - float(s.get("timestamp_start", 0.0))),
+                abs(timestamp - float(s.get("timestamp_end", 0.0))),
+            ),
+        )
+        return closest
+    except Exception as exc:
+        logger.warning("[vector_store] retrieve_layer_b_scene failed: %s", exc)
+        return None
 
 
 def retrieve_exact_chunks(
     source_id: str | None = None,
     chunk_ids: list[str] | None = None,
     concept_ids: list[str] | None = None,
+    user_id: str | None = None,
     limit: int = 50,
 ) -> list[dict[str, Any]]:
     """Deterministically retrieve exact stored chunks from Qdrant by provenance IDs.
@@ -257,10 +459,17 @@ def retrieve_exact_chunks(
         if settings.collection_name not in existing_collections:
             return []
 
-        must_conditions: list[Any] = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
+        must_conditions: list[Any] = [
+            qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A")),
+            qmodels.FieldCondition(key="retrieval_allowed", match=qmodels.MatchValue(value=True)),
+        ]
         if source_id:
             must_conditions.append(
                 qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id))
+            )
+        if user_id:
+            must_conditions.append(
+                qmodels.FieldCondition(key="user_id", match=qmodels.MatchAny(any=[user_id, "student_default"]))
             )
         if chunk_ids:
             clean_chunk_ids = [c for c in chunk_ids if c]
@@ -288,7 +497,11 @@ def retrieve_exact_chunks(
             with_payload=True,
             with_vectors=False,
         )
-        return [record.payload for record in records if record and record.payload]
+        return [
+            record.payload
+            for record in records
+            if record and record.payload and record.payload.get("injection_status") in ("clean", "sanitized", None)
+        ]
     except Exception as exc:
         logger.warning(
             "Failed deterministic Qdrant chunk retrieval (source=%s, chunks=%s): %s",

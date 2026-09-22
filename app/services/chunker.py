@@ -19,7 +19,11 @@ def _token_len(text: str) -> int:
 
 
 def create_rich_chunks(
-    units: list[ContentUnit], kg: KnowledgeGraph
+    units: list[ContentUnit],
+    kg: KnowledgeGraph,
+    user_id: str = "student_default",
+    source_version: str = "v1",
+    source_hash: str | None = None,
 ) -> list[RichChunk]:
     """Group ContentUnits by section/concept boundaries into RAG-ready RichChunks."""
     if not units:
@@ -39,17 +43,38 @@ def create_rich_chunks(
     )
     chunks = []
     for unit in units:
-        for index, text in enumerate(splitter.split_text(unit.text)):
+        unit_text = unit.text.strip() if unit.text else ""
+        if not unit_text:
+            continue
+        for index, text in enumerate(splitter.split_text(unit_text)):
             if not text.strip():
                 continue
             chunks.append(RichChunk(
                 chunk_id="CHUNK_" + uuid5(NAMESPACE_URL, f"{unit.source_id}:{unit.content_id}:{index}:{text}").hex,
-                source_id=unit.source_id, asset_id=unit.asset_id, text=text.strip(),
-                layer="A", type="rich_chunk", modality=unit.modality,
-                chapter=unit.chapter, section=unit.section,
+                source_id=unit.source_id,
+                asset_id=unit.asset_id,
+                user_id=user_id,
+                source_version=source_version,
+                source_hash=source_hash,
+                trust_status="user_uploaded_source",
+                injection_status="clean",
+                retrieval_allowed=True,
+                parser_version="v1",
+                text=text.strip(),
+                layer="A",
+                type="rich_chunk",
+                modality=unit.modality,
+                chapter=unit.chapter,
+                section=unit.section,
                 concept_ids=sorted(cu_to_concepts.get(unit.content_id, [])),
-                content_ids=[unit.content_id], page_start=unit.page_number, page_end=unit.page_number,
-                timestamp_start=unit.timestamp_start, timestamp_end=unit.timestamp_end,
+                content_ids=[unit.content_id],
+                page_start=getattr(unit, "page_start", None) or unit.page_number,
+                page_end=getattr(unit, "page_end", None) or unit.page_number,
+                slide_start=getattr(unit, "slide_number", None),
+                slide_end=getattr(unit, "slide_number", None),
+                speaker=getattr(unit, "speaker", None),
+                timestamp_start=unit.timestamp_start,
+                timestamp_end=unit.timestamp_end,
                 extraction_method=unit.extraction_method,
             ))
     return chunks

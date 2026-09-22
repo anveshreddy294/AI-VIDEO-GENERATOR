@@ -161,7 +161,11 @@ def find_latest_by_filename(filename: str) -> SourceRecord | None:
 
 @serialized
 def register_source(
-    temp_path: Path, filename: str, uploaded_by: str = "student_default"
+    temp_path: Path,
+    filename: str,
+    uploaded_by: str = "student_default",
+    user_id: str | None = None,
+    title: str | None = None,
 ) -> tuple[SourceRecord, Path]:
     """Validate file, compute hash, create SourceRecord with versioning, and persist original file."""
     source_type, mime_type = validate_file(temp_path, filename)
@@ -176,30 +180,70 @@ def register_source(
     latest_record = existing_by_name or existing_by_hash
     version = (latest_record.version + 1) if latest_record else 1
     parent_id = latest_record.source_id if latest_record else None
+    effective_user = user_id or uploaded_by or "student_default"
+    source_ver = f"v{version}"
 
     record = SourceRecord(
         filename=filename,
+        title=title or Path(filename).stem.replace("_", " ").title(),
         source_type=source_type,  # type: ignore
         mime_type=mime_type,
         file_hash=file_hash,
+        sha256=file_hash,
         file_size=file_size,
         uploaded_by=uploaded_by,
+        user_id=effective_user,
+        owner_user_id=effective_user,
         version=version,
+        source_version=source_ver,
         parent_source_id=parent_id,
         status="UPLOADED",
     )
 
-    # Persistent original file location
-    source_dir = settings.upload_dir / record.source_id
-    source_dir.mkdir(parents=True, exist_ok=True)
+    # 1. Canonical runtime upload location: storage/runtime/uploads/{user_id}/{source_id}/
+    user_source_dir = settings.upload_dir / effective_user / record.source_id
+    user_source_dir.mkdir(parents=True, exist_ok=True)
     ext = Path(filename).suffix.lower()
-    persistent_file = source_dir / f"original{ext}"
+    persistent_file = user_source_dir / f"original{ext}"
 
-    # Copy file to persistent location
+    # Also link/copy to legacy storage/runtime/uploads/{source_id}/ for backward compatibility
+    legacy_source_dir = settings.upload_dir / record.source_id
+    legacy_source_dir.mkdir(parents=True, exist_ok=True)
+    legacy_file = legacy_source_dir / f"original{ext}"
+
     shutil.copyfile(temp_path, persistent_file)
+    if persistent_file != legacy_file:
+        try:
+            shutil.copyfile(temp_path, legacy_file)
+        except Exception:
+            pass
 
     save_source_record(record)
+    _record_source_version(record)
     return record, persistent_file
+
+
+def _record_source_version(record: SourceRecord) -> None:
+    """Record immutable version entry in source_versions.json."""
+    versions_file = get_registry_dir() / "source_versions.json"
+    data: dict[str, list[dict[str, Any]]] = {}
+    if versions_file.exists():
+        try:
+            data = json.loads(versions_file.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+    entry = {
+        "source_id": record.source_id,
+        "version": record.version,
+        "source_version": record.source_version,
+        "user_id": record.user_id,
+        "file_hash": record.file_hash,
+        "sha256": record.sha256,
+        "filename": record.filename,
+        "created_at": record.created_at,
+    }
+    data.setdefault(record.source_id, []).append(entry)
+    atomic_json(versions_file, data)
 
 
 @serialized
@@ -317,3 +361,54 @@ def load_rich_chunks(source_id: str) -> list[dict]:
     if not path.exists():
         return []
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+# --- Partitioned Ingestion Storage Helpers ---
+
+def save_normalized_records(user_id: str, source_id: str, version: str, records: list[dict[str, Any]]) -> Path:
+    """Save normalized content records under storage/runtime/normalized/{user_id}/{source_id}/{version}/normalized.json."""
+    norm_dir = settings.runtime_dir / "normalized" / validate_id(user_id) / validate_id(source_id) / validate_id(version)
+    norm_dir.mkdir(parents=True, exist_ok=True)
+    norm_file = norm_dir / "normalized.json"
+    atomic_json(norm_file, records)
+    return norm_file
+
+
+def load_normalized_records(user_id: str, source_id: str, version: str = "v1") -> list[dict[str, Any]]:
+    norm_file = settings.runtime_dir / "normalized" / validate_id(user_id) / validate_id(source_id) / validate_id(version) / "normalized.json"
+    if not norm_file.exists():
+        return []
+    return json.loads(norm_file.read_text(encoding="utf-8"))
+
+
+def save_sanitized_records(user_id: str, source_id: str, version: str, records: list[dict[str, Any]]) -> Path:
+    """Save sanitized content records under storage/runtime/sanitized/{user_id}/{source_id}/{version}/sanitized.json."""
+    san_dir = settings.runtime_dir / "sanitized" / validate_id(user_id) / validate_id(source_id) / validate_id(version)
+    san_dir.mkdir(parents=True, exist_ok=True)
+    san_file = san_dir / "sanitized.json"
+    atomic_json(san_file, records)
+    return san_file
+
+
+def load_sanitized_records(user_id: str, source_id: str, version: str = "v1") -> list[dict[str, Any]]:
+    san_file = settings.runtime_dir / "sanitized" / validate_id(user_id) / validate_id(source_id) / validate_id(version) / "sanitized.json"
+    if not san_file.exists():
+        return []
+    return json.loads(san_file.read_text(encoding="utf-8"))
+
+
+def save_quarantine_records(user_id: str, source_id: str, version: str, records: list[dict[str, Any]]) -> Path:
+    """Save quarantined prompt-injection records under storage/runtime/quarantine/{user_id}/{source_id}/{version}/quarantine.json."""
+    quar_dir = settings.runtime_dir / "quarantine" / validate_id(user_id) / validate_id(source_id) / validate_id(version)
+    quar_dir.mkdir(parents=True, exist_ok=True)
+    quar_file = quar_dir / "quarantine.json"
+    atomic_json(quar_file, records)
+    return quar_file
+
+
+def load_quarantine_records(user_id: str, source_id: str, version: str = "v1") -> list[dict[str, Any]]:
+    quar_file = settings.runtime_dir / "quarantine" / validate_id(user_id) / validate_id(source_id) / validate_id(version) / "quarantine.json"
+    if not quar_file.exists():
+        return []
+    return json.loads(quar_file.read_text(encoding="utf-8"))
+
