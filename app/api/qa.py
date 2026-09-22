@@ -1,4 +1,4 @@
-"""Step 4 API — Source-Grounded Q&A with Dual-Traceability.
+"""Step 4 API - Source-Grounded Q&A with Dual-Traceability.
 
 Endpoints:
 - POST /qa/answer                          -> Generate grounded answer with source & video citations
@@ -15,7 +15,7 @@ from ..services.schemas import QARequest, QAResponse
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/qa", tags=["Step 4 — Grounded Q&A"])
+router = APIRouter(prefix="/qa", tags=["Step 4 - Grounded Q&A"])
 
 
 @router.post(

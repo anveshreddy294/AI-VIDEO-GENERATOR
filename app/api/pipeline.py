@@ -1,4 +1,4 @@
-"""Observable pipeline API routes — Background Job Creation & Real-Time SSE Telemetry.
+"""Observable pipeline API routes - Background Job Creation & Real-Time SSE Telemetry.
 
 Routes:
 - POST /pipeline/upload-and-assess: Start background upload + assessment job.
@@ -67,6 +67,20 @@ async def _execute_upload_and_assess(
     """Execute complete Step 1 & Step 2 pipeline emitting deterministic operational events."""
     start_time = time.time()
     source_record = None
+
+    sem = job_manager.get_semaphore()
+    if sem.locked():
+        await job_manager.emit_event(
+            job_id=job_id,
+            stage="queued",
+            status="pending",
+            message=f"Queued behind active jobs. Waiting for execution slot (max concurrency: {getattr(settings, 'max_background_jobs', 2)})...",
+            progress_percent=0,
+            metadata={"filename": original_filename},
+        )
+    acquired_sem = False
+    await sem.acquire()
+    acquired_sem = True
 
     try:
         # Stage 1: Validating Source
@@ -197,13 +211,9 @@ async def _execute_upload_and_assess(
         try:
             enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, units_to_process)
         except Exception as exc:
-            await job_manager.fail_job(
-                job_id=job_id,
-                stage="extracting_concepts",
-                error_message=f"Concept extraction failed: {exc}",
-                metadata={"source_id": source_id},
-            )
-            return
+            logger.warning("[pipeline] LLM structure extraction failed, falling back to rule-based extraction: %s", exc)
+            from ..services.structurer import _fallback_outputs
+            enriched_units, knowledge_graph, blueprint = _fallback_outputs(units_to_process, fallback_reason=str(exc))
 
         if not knowledge_graph or not knowledge_graph.concepts:
             await job_manager.fail_job(
@@ -213,6 +223,7 @@ async def _execute_upload_and_assess(
                 metadata={"source_id": source_id},
             )
             return
+
 
         save_content_units(source_id, enriched_units)
         save_knowledge_graph(source_id, knowledge_graph)
@@ -506,11 +517,15 @@ async def _execute_upload_and_assess(
             error_message=f"Internal pipeline failure: {unhandled_exc}",
         )
     finally:
-        if source_record:
-            current = get_source_record(source_record.source_id)
-            if current and current.status != "READY":
-                update_source_status(current.source_id, "FAILED", error_message="Ingestion did not complete; see pipeline diagnostics")
-        temp_path.unlink(missing_ok=True)
+        try:
+            if source_record:
+                current = get_source_record(source_record.source_id)
+                if current and current.status != "READY":
+                    update_source_status(current.source_id, "FAILED", error_message="Ingestion did not complete; see pipeline diagnostics")
+            temp_path.unlink(missing_ok=True)
+        finally:
+            if acquired_sem:
+                sem.release()
 
 
 async def _execute_assess_existing(
@@ -521,6 +536,20 @@ async def _execute_assess_existing(
 ) -> None:
     """Execute assessment generation for an existing source emitting operational progress."""
     start_time = time.time()
+    sem = job_manager.get_semaphore()
+    if sem.locked():
+        await job_manager.emit_event(
+            job_id=job_id,
+            stage="queued",
+            status="pending",
+            message=f"Queued behind active jobs. Waiting for execution slot (max concurrency: {getattr(settings, 'max_background_jobs', 2)})...",
+            progress_percent=0,
+            metadata={"source_id": source_id},
+        )
+    acquired_sem = False
+    await sem.acquire()
+    acquired_sem = True
+
     try:
         await job_manager.emit_event(
             job_id=job_id,
@@ -652,6 +681,9 @@ async def _execute_assess_existing(
             error_message=f"Assessment generation failed: {exc}",
             metadata={"source_id": source_id},
         )
+    finally:
+        if acquired_sem:
+            sem.release()
 
 
 @router.post("/upload-and-assess", response_model=JobCreationResponse)
@@ -662,6 +694,13 @@ async def create_upload_job(
     max_questions: int = 5,
 ) -> JobCreationResponse:
     """Create background ingestion + assessment job and return job_id for SSE progress tracking."""
+    if not job_manager.can_accept_job():
+        raise HTTPException(
+            status_code=429,
+            detail=f"System job capacity reached ({settings.max_pending_jobs} active/queued jobs). Please retry later.",
+            headers={"Retry-After": "30"},
+        )
+
     filename = file.filename or "unnamed"
     temp_name = f"{uuid4().hex}_{Path(filename).name}"
     temp_path = settings.upload_dir / temp_name
@@ -704,6 +743,13 @@ async def create_assess_existing_job(
     background_tasks: BackgroundTasks,
 ) -> JobCreationResponse:
     """Create background assessment generation job for existing source and return job_id."""
+    if not job_manager.can_accept_job():
+        raise HTTPException(
+            status_code=429,
+            detail=f"System job capacity reached ({settings.max_pending_jobs} active/queued jobs). Please retry later.",
+            headers={"Retry-After": "30"},
+        )
+
     job = job_manager.create_job(job_type="assess_existing")
     background_tasks.add_task(
         _execute_assess_existing,

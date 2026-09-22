@@ -166,71 +166,152 @@ class MockProvider:
 
         # Detect prompt intent
         lower = prompt.lower()
+        if "diagram" in lower or "image reader" in lower or "lecture video frame" in lower:
+            return "Visual study and instructional media asset from source material."
+
         if "scene" in lower or "animation planner" in lower or "videoplan" in lower:
-            return json.dumps({
-                "concept_id": "CONCEPT_NEWTON_2",
-                "concept_name": "Newton's Second Law",
-                "duration_seconds": 45,
-                "learning_objective": "Understand how force, mass, and acceleration relate via F = ma.",
-                "key_points": [
-                    "Net force accelerates mass",
-                    "Greater mass requires greater force",
-                    "Mathematical formula is F = ma",
-                ],
-                "scenes": [
-                    {
-                        "scene_type": "TITLE",
-                        "title": "Newton's Second Law",
-                        "subtitle": "Force, Mass, and Acceleration",
-                        "duration_seconds": 5,
-                    },
-                    {
-                        "scene_type": "EQUATION",
-                        "equation": "F = ma",
-                        "label": "Fundamental Law of Dynamics",
-                        "duration_seconds": 10,
-                    },
-                    {
-                        "scene_type": "DIAGRAM",
-                        "diagram_type": "force_box",
-                        "object_label": "Mass (m = 2 kg)",
-                        "force_label": "Force (F = 6 N)",
-                        "acceleration_label": "Acceleration (a = 3 m/s^2)",
-                        "duration_seconds": 18,
-                    },
-                    {
-                        "scene_type": "SUMMARY",
-                        "summary_points": [
-                            "Force causes acceleration",
-                            "Mass resists acceleration",
-                            "F = ma connects them all",
-                        ],
-                        "duration_seconds": 12,
-                    },
-                ],
-                "narration": [
-                    {
-                        "scene_index": 0,
-                        "text": "Welcome to this review of Newton's Second Law of Motion.",
-                        "target_seconds": 5,
-                    },
-                    {
-                        "scene_index": 1,
-                        "text": "At its heart is a simple formula: Force equals mass times acceleration.",
-                        "target_seconds": 10,
-                    },
-                    {
-                        "scene_index": 2,
-                        "text": "When you apply a net force to an object, it accelerates in the direction of the force.",
-                        "target_seconds": 18,
-                    },
-                    {
-                        "scene_index": 3,
-                        "text": "Remember: more mass requires more force, governed strictly by F equals m a.",
-                        "target_seconds": 12,
-                    },
-                ],
-            })
+            import re
+            c_name_match = re.search(r"CONCEPT:\s*([^\n]+)", prompt)
+            c_name = c_name_match.group(1).strip() if c_name_match else "Core Concept"
+            cid_match = re.search(r'"concept_id":\s*"([^"]+)"', prompt)
+            cid = cid_match.group(1).strip() if cid_match else "CONCEPT_01"
+
+            is_physics = any(
+                k in c_name.lower()
+                for k in ("newton", "force", "acceleration", "second law", "momentum", "gravity", "kinematics", "velocity")
+            )
+
+            if is_physics:
+                return json.dumps({
+                    "concept_id": cid or "CONCEPT_NEWTON_2",
+                    "concept_name": c_name or "Newton's Second Law",
+                    "duration_seconds": 45,
+                    "learning_objective": f"Understand how principles relate in {c_name}.",
+                    "key_points": [
+                        "Net force accelerates mass",
+                        "Greater mass requires greater force",
+                        "Mathematical formula is F = ma",
+                    ],
+                    "scenes": [
+                        {
+                            "scene_type": "TITLE",
+                            "title": c_name,
+                            "subtitle": "Force, Mass, and Acceleration",
+                            "duration_seconds": 5,
+                        },
+                        {
+                            "scene_type": "EQUATION",
+                            "equation": "F = ma",
+                            "label": "Fundamental Law of Dynamics",
+                            "duration_seconds": 10,
+                        },
+                        {
+                            "scene_type": "DIAGRAM",
+                            "diagram_type": "force_box",
+                            "object_label": "Mass (m = 2 kg)",
+                            "force_label": "Force (F = 6 N)",
+                            "acceleration_label": "Acceleration (a = 3 m/s^2)",
+                            "duration_seconds": 18,
+                        },
+                        {
+                            "scene_type": "SUMMARY",
+                            "summary_points": [
+                                "Force causes acceleration",
+                                "Mass resists acceleration",
+                                "F = ma connects them all",
+                            ],
+                            "duration_seconds": 12,
+                        },
+                    ],
+                    "narration": [
+                        {
+                            "scene_index": 0,
+                            "text": f"Welcome to this review of {c_name}.",
+                            "target_seconds": 5,
+                        },
+                        {
+                            "scene_index": 1,
+                            "text": "At its heart is a simple formula: Force equals mass times acceleration.",
+                            "target_seconds": 10,
+                        },
+                        {
+                            "scene_index": 2,
+                            "text": "When you apply a net force to an object, it accelerates in the direction of the force.",
+                            "target_seconds": 18,
+                        },
+                        {
+                            "scene_index": 3,
+                            "text": "Remember: more mass requires more force, governed strictly by F equals m a.",
+                            "target_seconds": 12,
+                        },
+                    ],
+                })
+            else:
+                return json.dumps({
+                    "concept_id": cid,
+                    "concept_name": c_name,
+                    "duration_seconds": 45,
+                    "learning_objective": f"Understand the core architecture and principles of {c_name}.",
+                    "key_points": [
+                        f"Foundational structure of {c_name}",
+                        "Component interaction and operational workflow",
+                        "Practical execution and verification",
+                    ],
+                    "scenes": [
+                        {
+                            "scene_type": "TITLE",
+                            "title": c_name,
+                            "subtitle": "Core Conceptual Architecture",
+                            "duration_seconds": 5,
+                        },
+                        {
+                            "scene_type": "EXPLANATION",
+                            "title": f"Understanding {c_name}",
+                            "text": f"Foundational overview and definitions governing {c_name}.",
+                            "duration_seconds": 12,
+                        },
+                        {
+                            "scene_type": "DIAGRAM",
+                            "diagram_type": "concept_flow",
+                            "title": f"{c_name} Structural Flow",
+                            "label": "Process & Architecture",
+                            "summary_points": ["Context & Inputs", "Processing Engine", "Verified Outcomes"],
+                            "duration_seconds": 16,
+                        },
+                        {
+                            "scene_type": "SUMMARY",
+                            "title": "Key Takeaways",
+                            "summary_points": [
+                                f"Master core definitions of {c_name}",
+                                "Follow systematic execution rules",
+                                "Verify prerequisite constraints",
+                            ],
+                            "duration_seconds": 12,
+                        },
+                    ],
+                    "narration": [
+                        {
+                            "scene_index": 0,
+                            "text": f"Welcome to this focused study module on {c_name}.",
+                            "target_seconds": 5,
+                        },
+                        {
+                            "scene_index": 1,
+                            "text": f"Let us examine the foundational definitions and core principles of {c_name}.",
+                            "target_seconds": 12,
+                        },
+                        {
+                            "scene_index": 2,
+                            "text": f"Analyzing the structural flow reveals how components coordinate within {c_name}.",
+                            "target_seconds": 16,
+                        },
+                        {
+                            "scene_index": 3,
+                            "text": f"In summary, remember these essential principles of {c_name} for your diagnostic review.",
+                            "target_seconds": 12,
+                        },
+                    ],
+                })
 
         if "verified_source_context" in lower or "pedagogically rigorous teaching assistant" in lower:
             import re

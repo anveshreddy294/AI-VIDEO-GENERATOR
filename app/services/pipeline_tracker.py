@@ -119,9 +119,55 @@ class JobManager:
     def __init__(self):
         self._jobs: dict[str, PipelineJob] = {}
         self._subscribers: dict[str, set[asyncio.Queue]] = {}
+        self._semaphore: asyncio.Semaphore | None = None
         self._lock = asyncio.Lock()
 
+    def get_semaphore(self) -> asyncio.Semaphore:
+        """Return per-process concurrency control semaphore for background tasks."""
+        if self._semaphore is None:
+            from ..core.config import settings
+            limit = max(1, int(getattr(settings, "max_background_jobs", 2)))
+            self._semaphore = asyncio.Semaphore(limit)
+        return self._semaphore
+
+    def reset_semaphore(self, limit: int | None = None) -> None:
+        """Reset or reinitialize the concurrency semaphore (for test isolation and reconfig)."""
+        from ..core.config import settings
+        val = limit if limit is not None else max(1, int(getattr(settings, "max_background_jobs", 2)))
+        self._semaphore = asyncio.Semaphore(val)
+
+    def can_accept_job(self) -> bool:
+        """Admission control check: ensure active/queued jobs do not exceed backlog limit."""
+        from ..core.config import settings
+        max_pending = max(1, int(getattr(settings, "max_pending_jobs", 20)))
+        active_count = sum(
+            1 for j in self._jobs.values() if j.status in ("pending", "running") and not j.is_finished
+        )
+        return active_count < max_pending
+
+    def active_jobs_count(self) -> int:
+        """Count of currently active (pending or running) jobs."""
+        return sum(
+            1 for j in self._jobs.values() if j.status in ("pending", "running") and not j.is_finished
+        )
+
+    def _cleanup_retention(self) -> None:
+        """Prune oldest completed/failed jobs if total jobs exceed job_retention_max."""
+        from ..core.config import settings
+        retention_max = max(1, int(getattr(settings, "job_retention_max", 100)))
+        if len(self._jobs) <= retention_max:
+            return
+
+        finished = [(jid, j) for jid, j in self._jobs.items() if j.is_finished]
+        finished.sort(key=lambda x: x[1].created_at)
+
+        to_remove = len(self._jobs) - retention_max
+        for jid, _ in finished[:to_remove]:
+            self._jobs.pop(jid, None)
+            self._subscribers.pop(jid, None)
+
     def create_job(self, job_type: str, job_id: str | None = None) -> PipelineJob:
+        self._cleanup_retention()
         jid = job_id or f"JOB_{uuid4().hex[:12]}"
         job = PipelineJob(job_id=jid, job_type=job_type)
         self._jobs[jid] = job

@@ -1,4 +1,4 @@
-"""Step 3 API Endpoints — Remedial Video Generation & Diagnostics.
+"""Step 3 API Endpoints - Remedial Video Generation & Diagnostics.
 
 Endpoints:
 - POST /video/generate         → Enqueue asynchronous video generation job
@@ -31,13 +31,19 @@ from ..services.assessment.profile import get_learning_profile
 from ..services.assessment.schemas import VideoTarget
 from ..services.assessment.video_target import get_video_target_matrix
 from ..services.registry import get_source
-from ..services.video.artifact_store import find_existing_video, get_metadata
+from ..services.pipeline_tracker import job_manager
+from ..services.video.artifact_store import (
+    InvalidIdentifierError,
+    find_existing_video,
+    get_metadata,
+    validate_path_component,
+)
 from ..services.video.engine import execute_video_generation_job, get_video_job
 from ..services.video.scene_schema import VideoArtifact, VideoJobStatus
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/video", tags=["Step 3 — Video Generation"])
+router = APIRouter(prefix="/video", tags=["Step 3 - Video Generation"])
 
 
 def range_requests_response(
@@ -129,6 +135,23 @@ async def generate_video(
     background_tasks: BackgroundTasks,
 ) -> VideoGenerateResponse:
     """Trigger asynchronous remedial video generation for an identified knowledge gap."""
+    # 0. Strict path component validation against directory traversal
+    try:
+        validate_path_component(payload.student_id, "student_id")
+        validate_path_component(payload.source_id, "source_id")
+        if payload.concept_id:
+            validate_path_component(payload.concept_id, "concept_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    # 0b. Admission control: reject if system backlog is full
+    if not job_manager.can_accept_job():
+        raise HTTPException(
+            status_code=429,
+            detail=f"System job capacity reached ({settings.max_pending_jobs} active/queued jobs). Please retry later.",
+            headers={"Retry-After": "30"},
+        )
+
     # 1. Verify source existence if real source_id is specified
     if payload.source_id and not payload.mock_mode and not payload.source_id.startswith(("SRC_DEFAULT", "SRC_TEST", "SRC_API_TEST", "SRC_FULFILL_TEST")):
         src = get_source(payload.source_id)
@@ -242,6 +265,11 @@ def get_status(
     job_id: Annotated[str, FPath(description="Job identifier returned from /video/generate")],
 ) -> VideoArtifact:
     """Query progress, stage, and completion status of a video job."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
     artifact = get_video_job(job_id)
     if not artifact:
         raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")
@@ -253,6 +281,11 @@ def download_video(
     job_id: Annotated[str, FPath(description="Job identifier")],
 ):
     """Download the completed remedial MP4 video."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
     artifact = get_video_job(job_id)
     if not artifact:
         raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")
@@ -278,6 +311,11 @@ def stream_video(
     request: Request,
 ):
     """Stream MP4 video with HTTP 206 Partial Content byte range support."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
     artifact = get_video_job(job_id)
     if not artifact:
         raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")
@@ -298,6 +336,11 @@ def get_video_metadata(
     job_id: Annotated[str, FPath(description="Job identifier")],
 ) -> dict[str, Any]:
     """Retrieve structured metadata including provenance, duration, and model details."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
     artifact = get_video_job(job_id)
     if not artifact:
         raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")
@@ -313,6 +356,11 @@ def get_captions(
     job_id: Annotated[str, FPath(description="Job identifier")],
 ) -> PlainTextResponse:
     """Retrieve the Whisper-generated SRT caption track."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
     artifact = get_video_job(job_id)
     if not artifact:
         raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")

@@ -604,3 +604,49 @@ def test_20_end_to_end_single_concept_video_generation():
     assert meta["concept_id"] == cid
     assert meta["status"] == "COMPLETED"
     assert "source_chunk_ids" in meta
+
+
+# ===========================================================================
+# 21. Non-physics grounded video plan generation & rendering
+# ===========================================================================
+def test_21_non_physics_grounded_video_plan(tmp_path: Path):
+    """Test 21: Non-physics concepts do not contain hardcoded physics formulas or force boxes."""
+    target = VideoTarget(
+        concept_id="CONCEPT_CURRICULUM_REP",
+        concept_name="Curriculum Representation",
+        difficulty="intermediate",
+        score=35.0,
+        target_seconds=45,
+        directive="Textbook diagram of educational curriculum nodes, competency matrices, and prerequisites.",
+        chunk_ids=["CHUNK_CURR_01"],
+        source_content_ids=["CU_CURR_01"],
+        student_id="STU_TEST_NON_PHYSICS",
+        source_id="SRC_TEST_NON_PHYSICS",
+    )
+
+    plan = plan_video_for_target(target)
+    assert plan.concept_name == "Curriculum Representation"
+    assert plan.target_seconds == 45
+    total_dur = sum(s.duration_seconds for s in plan.scenes)
+    assert 42.0 <= total_dur <= 48.0
+
+    # Verify no hardcoded physics terms in any narration or diagram
+    full_narr = " ".join(seg.text for seg in plan.narration).lower()
+    assert "f = ma" not in full_narr
+    assert "mass (m)" not in full_narr
+    assert "net force" not in full_narr
+    assert "applied force" not in full_narr
+    assert "automobile braking" not in full_narr
+    assert "rocket propulsion" not in full_narr
+
+    for scene in plan.scenes:
+        assert scene.diagram_type != "force_box"
+        assert scene.force_label is None
+        assert scene.object_label is None
+
+    # Verify rendering completes without errors
+    out_mp4 = tmp_path / "non_physics.mp4"
+    rendered = render_video_plan(plan, out_mp4)
+    assert rendered.exists()
+    assert rendered.stat().st_size > 0
+

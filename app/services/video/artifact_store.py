@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,11 +29,77 @@ from .scene_schema import VideoArtifact, VideoJobStatus, VideoPlan
 
 logger = logging.getLogger(__name__)
 
+SAFE_IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9_\-\.]{1,128}$")
+
+
+class InvalidIdentifierError(ValueError):
+    """Raised when an identifier contains invalid characters, path traversal, or escapes the base directory."""
+    pass
+
+
+def validate_path_component(identifier: str, name: str = "identifier") -> str:
+    """Validate a single path component against directory traversal and dangerous characters.
+
+    Enforces:
+    - Must be a non-empty string with length <= 128
+    - Allowed characters: A-Z, a-z, 0-9, _, -, .
+    - Rejects relative path segments ('.', '..') and substrings containing '..'
+    - Rejects path separators ('/', '\\'), colons/drive prefixes, control characters
+    - Rejects Unicode / non-ASCII characters outside the safe alphanumeric set
+    """
+    if not isinstance(identifier, str):
+        raise InvalidIdentifierError(f"Invalid {name}: must be a string, got {type(identifier).__name__}")
+
+    ident = identifier.strip()
+    if not ident:
+        raise InvalidIdentifierError(f"Invalid {name}: cannot be empty")
+
+    if len(ident) > 128:
+        raise InvalidIdentifierError(
+            f"Invalid {name}: length ({len(ident)}) exceeds maximum allowed (128 characters)"
+        )
+
+    if ident in (".", "..") or ".." in ident:
+        raise InvalidIdentifierError(f"Invalid {name}: directory traversal attempt detected in '{identifier}'")
+
+    if "/" in ident or "\\" in ident or ":" in ident:
+        raise InvalidIdentifierError(
+            f"Invalid {name}: path separators or drive prefixes detected in '{identifier}'"
+        )
+
+    if any(ord(c) < 32 or ord(c) == 127 for c in ident):
+        raise InvalidIdentifierError(f"Invalid {name}: control characters detected in '{identifier}'")
+
+    if not SAFE_IDENTIFIER_PATTERN.fullmatch(ident):
+        raise InvalidIdentifierError(
+            f"Invalid {name}: contains disallowed characters in '{identifier}'. Only [A-Za-z0-9_.-] are permitted."
+        )
+
+    return ident
+
 
 def get_video_dir(student_id: str, source_id: str, concept_id: str) -> Path:
-    """Get or create the canonical artifact directory for a concept video."""
-    base_dir = Path(getattr(settings, "video_output_dir", settings.renders_dir.parent / "videos"))
-    target_dir = base_dir / student_id / source_id / concept_id
+    """Get or create the canonical artifact directory for a concept video.
+
+    Validates identifiers against path traversal and verifies that the resolved
+    directory remains strictly inside the canonical base directory.
+    """
+    valid_student = validate_path_component(student_id, "student_id")
+    valid_source = validate_path_component(source_id, "source_id")
+    valid_concept = validate_path_component(concept_id, "concept_id")
+
+    base_dir = Path(getattr(settings, "video_output_dir", settings.renders_dir.parent / "videos")).resolve()
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    target_dir = (base_dir / valid_student / valid_source / valid_concept).resolve()
+
+    try:
+        target_dir.relative_to(base_dir)
+    except ValueError as exc:
+        raise InvalidIdentifierError(
+            f"Path traversal detected: {target_dir} escapes base directory {base_dir}"
+        ) from exc
+
     target_dir.mkdir(parents=True, exist_ok=True)
     return target_dir
 

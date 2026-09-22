@@ -76,35 +76,38 @@ class LocalTTSProvider:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if self._say_bin and not text.strip().startswith("[mock]"):
             try:
+                from .video_compositor import run_subprocess_bounded
                 # Use macOS `say` to render uncompressed AIFF/WAV
                 tmp_aiff = output_path.with_suffix(".aiff")
-                proc = await asyncio.create_subprocess_exec(
-                    self._say_bin,
-                    "-o",
-                    str(tmp_aiff),
-                    text,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                await run_subprocess_bounded(
+                    [self._say_bin, "-o", str(tmp_aiff), text],
+                    timeout=30.0,
+                    output_path=tmp_aiff,
+                    log_prefix="[tts][say]",
                 )
-                await proc.communicate()
                 if tmp_aiff.exists() and tmp_aiff.stat().st_size > 0:
                     # Convert AIFF to WAV via ffmpeg if ffmpeg is available
                     ffmpeg_bin = shutil.which("ffmpeg")
                     if ffmpeg_bin:
-                        conv_proc = await asyncio.create_subprocess_exec(
-                            ffmpeg_bin,
-                            "-y",
-                            "-i",
-                            str(tmp_aiff),
-                            "-ar",
-                            "24000",
-                            "-ac",
-                            "1",
-                            str(output_path),
-                            stdout=asyncio.subprocess.PIPE,
-                            stderr=asyncio.subprocess.PIPE,
+                        await run_subprocess_bounded(
+                            [
+                                ffmpeg_bin,
+                                "-y",
+                                "-nostats",
+                                "-loglevel",
+                                "error",
+                                "-i",
+                                str(tmp_aiff),
+                                "-ar",
+                                "24000",
+                                "-ac",
+                                "1",
+                                str(output_path),
+                            ],
+                            timeout=30.0,
+                            output_path=output_path,
+                            log_prefix="[tts][ffmpeg_convert]",
                         )
-                        await conv_proc.communicate()
                         tmp_aiff.unlink(missing_ok=True)
                         if output_path.exists() and output_path.stat().st_size > 0:
                             return output_path
@@ -138,20 +141,26 @@ class EdgeTTSProvider:
                 # Transcode MP3 to WAV using ffmpeg for predictable Whisper/Manim alignment
                 ffmpeg_bin = shutil.which("ffmpeg")
                 if ffmpeg_bin:
-                    proc = await asyncio.create_subprocess_exec(
-                        ffmpeg_bin,
-                        "-y",
-                        "-i",
-                        str(tmp_mp3),
-                        "-ar",
-                        "24000",
-                        "-ac",
-                        "1",
-                        str(output_path),
-                        stdout=asyncio.subprocess.PIPE,
-                        stderr=asyncio.subprocess.PIPE,
+                    from .video_compositor import run_subprocess_bounded
+                    await run_subprocess_bounded(
+                        [
+                            ffmpeg_bin,
+                            "-y",
+                            "-nostats",
+                            "-loglevel",
+                            "error",
+                            "-i",
+                            str(tmp_mp3),
+                            "-ar",
+                            "24000",
+                            "-ac",
+                            "1",
+                            str(output_path),
+                        ],
+                        timeout=30.0,
+                        output_path=output_path,
+                        log_prefix="[tts][edge_ffmpeg]",
                     )
-                    await proc.communicate()
                     tmp_mp3.unlink(missing_ok=True)
                     if output_path.exists() and output_path.stat().st_size > 0:
                         return output_path

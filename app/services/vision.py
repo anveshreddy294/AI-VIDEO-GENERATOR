@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -68,37 +69,122 @@ def _generate_with_ollama(prompt: str, image_b64: str) -> str | None:
     return None
 
 
+def _extract_ocr_text(image_bytes: bytes) -> str:
+    """Best-effort local OCR using tesseract CLI with contrast enhancement if installed."""
+    import shutil
+    import subprocess
+    import tempfile
+    tess = shutil.which("tesseract") or "/opt/homebrew/bin/tesseract"
+    if os.path.exists(tess):
+        try:
+            # Preprocess image with PIL to improve OCR on colored/stylized backgrounds
+            try:
+                import io
+                from PIL import Image, ImageEnhance
+                pil_img = Image.open(io.BytesIO(image_bytes)).convert("L")
+                enh = ImageEnhance.Contrast(pil_img).enhance(2.5)
+                buf = io.BytesIO()
+                enh.save(buf, format="PNG")
+                processed_bytes = buf.getvalue()
+            except Exception:
+                processed_bytes = image_bytes
+
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp.write(processed_bytes)
+                tmp_path = tmp.name
+
+            detected_words: list[str] = []
+            for psm in ("6", "11"):
+                res = subprocess.run(
+                    [tess, tmp_path, "stdout", "--psm", psm],
+                    capture_output=True,
+                    text=True,
+                    timeout=3.0,
+                )
+                raw_ocr = res.stdout.strip()
+                lines = [l.strip() for l in raw_ocr.splitlines() if len(l.strip()) >= 2]
+                for line in lines:
+                    for w in line.split():
+                        cleaned_w = "".join(ch for ch in w if ch.isalnum() or ch in "-_")
+                        if len(cleaned_w) >= 3 and cleaned_w.lower() not in [x.lower() for x in detected_words]:
+                            detected_words.append(cleaned_w)
+
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+            if detected_words:
+                return " ".join(detected_words)
+        except Exception:
+            pass
+    return ""
+
+
 def describe_image(image_bytes: bytes, source: str = "image") -> str:
-    """Analyze diagram or document image bytes."""
+    """Analyze diagram or document image bytes using model_manager with fallback."""
     if not isinstance(image_bytes, bytes):
         raise TypeError(f"describe_image expects raw bytes, got {type(image_bytes).__name__}")
 
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
 
-    # 1. Try local Ollama vision
-    res = _generate_with_ollama(_DIAGRAM_PROMPT, b64_data)
-    if res:
-        return res
+    # 1. Try model_manager with active model and fallback chain
+    try:
+        from ..core.model_manager import model_manager
+        # Only query model if active model or fallback model has vision capability
+        available_models = model_manager.get_available_models()
+        has_vision = any(m.get("supports_vision") and m.get("provider") == "ollama" for m in available_models)
+        if has_vision:
+            res, model_used = model_manager.generate_with_fallback(
+                _DIAGRAM_PROMPT,
+                images=[b64_data],
+                is_json=False,
+                timeout=15.0,
+            )
+            if res and res.strip() and not res.startswith("Textbook diagram/figure") and not res.strip().startswith("{"):
+                return res.strip()
+    except Exception as exc:
+        logger.info("[vision] Model fallback chain could not describe image (%s)", exc)
 
-    # 2. Resilient local fallback: describe image metadata and structure
+    # 2. Try OCR transcription if available
+    ocr_text = _extract_ocr_text(image_bytes)
+    if ocr_text:
+        return f"Image asset '{source}' with visible text: {ocr_text}"
+
+    # 3. Resilient grounded fallback based strictly on source identity
     size_kb = max(1, len(image_bytes) // 1024)
-    return f"Textbook diagram/figure asset from {source} ({size_kb} KB). Contains graphical curriculum representation and structural relations."
+    clean_src = Path(source).stem.replace("_", " ").title() if source else "Visual Asset"
+    return f"Image asset for '{clean_src}' ({size_kb} KB). Visual study reference material from uploaded media."
 
 
 def describe_frame(image_bytes: bytes, source: str = "frame") -> str:
-    """Analyze lecture video keyframe bytes."""
+    """Analyze lecture video keyframe bytes using model_manager with fallback."""
     if not isinstance(image_bytes, bytes):
         raise TypeError(f"describe_frame expects raw bytes, got {type(image_bytes).__name__}")
 
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
 
-    # 1. Try local Ollama vision
-    res = _generate_with_ollama(_FRAME_PROMPT, b64_data)
-    if res:
-        return res
+    # 1. Try model_manager with active model and fallback chain
+    try:
+        from ..core.model_manager import model_manager
+        res, model_used = model_manager.generate_with_fallback(
+            _FRAME_PROMPT,
+            images=[b64_data],
+            is_json=False,
+            timeout=15.0,
+        )
+        if res and res.strip():
+            return res.strip()
+    except Exception as exc:
+        logger.info("[vision] Model fallback chain could not describe frame (%s)", exc)
 
-    # 2. Resilient local fallback
-    return f"Lecture video keyframe {source}: visual board contents and structural learning notes."
+    # 2. Try OCR transcription
+    ocr_text = _extract_ocr_text(image_bytes)
+    if ocr_text:
+        return f"Lecture video keyframe {source} with visible board text: {ocr_text}"
+
+    return f"Lecture video keyframe {source}: visual board contents and instructional notes."
+
 
 
 def describe_image_file(file_path: Path) -> str:

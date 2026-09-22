@@ -17,7 +17,79 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from ...core.config import settings
+
 logger = logging.getLogger(__name__)
+
+
+class FFmpegTimeoutError(TimeoutError):
+    """Raised when an FFmpeg process exceeds its configured timeout."""
+    pass
+
+
+async def run_subprocess_bounded(
+    cmd: list[str],
+    timeout: float,
+    output_path: Path | None = None,
+    log_prefix: str = "[subprocess]",
+) -> tuple[int, bytes, bytes]:
+    """Execute a subprocess with strict timeout, clean termination, and bounded stderr.
+
+    On timeout:
+    1. Log error with PID and timeout duration
+    2. proc.terminate()
+    3. wait up to 3.0s for graceful shutdown
+    4. proc.kill() if still running
+    5. proc.wait() to reap zombie process
+    6. remove partial output file if requested
+    7. raise FFmpegTimeoutError
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    try:
+        _, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        bounded_stderr = (stderr or b"")[-32768:]
+        return proc.returncode, b"", bounded_stderr
+    except (asyncio.TimeoutError, TimeoutError) as to_err:
+        logger.error(
+            "%s Process PID %s timed out after %.1fs; terminating...",
+            log_prefix,
+            proc.pid,
+            timeout,
+        )
+        try:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=3.0)
+            except (asyncio.TimeoutError, TimeoutError):
+                logger.warning(
+                    "%s Process PID %s did not terminate cleanly; killing...",
+                    log_prefix,
+                    proc.pid,
+                )
+                proc.kill()
+                await proc.wait()
+        except ProcessLookupError:
+            pass
+
+        if output_path and output_path.exists():
+            try:
+                output_path.unlink(missing_ok=True)
+            except Exception as clean_err:
+                logger.warning(
+                    "%s Could not remove partial output %s: %s",
+                    log_prefix,
+                    output_path,
+                    clean_err,
+                )
+
+        raise FFmpegTimeoutError(
+            f"Process '{cmd[0]}' timed out after {timeout:.1f}s"
+        ) from to_err
 
 
 async def composite_remedial_video(
@@ -25,9 +97,11 @@ async def composite_remedial_video(
     audio_wav: Path,
     output_mp4: Path,
     subtitles_srt: Path | None = None,
+    timeout: float | None = None,
 ) -> Path:
     """Merge video, audio, and optional subtitles using ffmpeg into a production MP4."""
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
+    video_timeout = timeout or float(getattr(settings, "video_timeout", 120.0))
     ffmpeg_bin = shutil.which("ffmpeg")
 
     if not ffmpeg_bin:
@@ -53,6 +127,9 @@ async def composite_remedial_video(
     cmd = [
         ffmpeg_bin,
         "-y",
+        "-nostats",
+        "-loglevel",
+        "error",
         "-i",
         str(video_mp4),
         "-i",
@@ -66,7 +143,7 @@ async def composite_remedial_video(
         "-c:v",
         "libx264",
         "-preset",
-        "fast",
+        getattr(settings, "ffmpeg_preset", "fast"),
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -97,27 +174,38 @@ async def composite_remedial_video(
     ])
 
     try:
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        returncode, _, stderr = await run_subprocess_bounded(
+            cmd,
+            timeout=video_timeout,
+            output_path=output_mp4,
+            log_prefix="[compositor][primary]",
         )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode == 0 and output_mp4.exists() and output_mp4.stat().st_size > 0:
-            logger.info(f"[compositor] Successfully composited video with H.264/AAC (subtitles={has_subtitles}): {output_mp4}")
+        if returncode == 0 and output_mp4.exists() and output_mp4.stat().st_size > 0:
+            logger.info(
+                "[compositor] Successfully composited video with H.264/AAC (subtitles=%s): %s",
+                has_subtitles,
+                output_mp4,
+            )
             return output_mp4
         else:
             logger.warning(
-                f"[compositor] Primary composition failed (code {proc.returncode}); attempting without subtitle stream: "
-                f"{stderr.decode()[:300]}"
+                "[compositor] Primary composition failed (code %d); attempting fallback: %s",
+                returncode,
+                stderr.decode(errors="replace")[:300],
             )
+    except FFmpegTimeoutError:
+        logger.error("[compositor] Primary composition exceeded timeout of %.1fs", video_timeout)
+        raise
     except Exception as exc:
-        logger.warning(f"[compositor] Primary composition attempt failed: {exc}")
+        logger.warning("[compositor] Primary composition attempt failed: %s", exc)
 
     # Fallback attempt: composite without subtitle stream (pure audio + video)
     fallback_cmd = [
         ffmpeg_bin,
         "-y",
+        "-nostats",
+        "-loglevel",
+        "error",
         "-i",
         str(video_mp4),
         "-i",
@@ -125,7 +213,7 @@ async def composite_remedial_video(
         "-c:v",
         "libx264",
         "-preset",
-        "fast",
+        getattr(settings, "ffmpeg_preset", "fast"),
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -142,17 +230,26 @@ async def composite_remedial_video(
         str(output_mp4),
     ]
     try:
-        proc2 = await asyncio.create_subprocess_exec(
-            *fallback_cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+        returncode2, _, stderr2 = await run_subprocess_bounded(
+            fallback_cmd,
+            timeout=video_timeout,
+            output_path=output_mp4,
+            log_prefix="[compositor][fallback]",
         )
-        await proc2.communicate()
-        if output_mp4.exists() and output_mp4.stat().st_size > 0:
-            logger.info(f"[compositor] Successfully composited video via fallback: {output_mp4}")
+        if returncode2 == 0 and output_mp4.exists() and output_mp4.stat().st_size > 0:
+            logger.info("[compositor] Successfully composited video via fallback: %s", output_mp4)
             return output_mp4
+        else:
+            logger.warning(
+                "[compositor] Fallback composition failed (code %d): %s",
+                returncode2,
+                stderr2.decode(errors="replace")[:300],
+            )
+    except FFmpegTimeoutError:
+        logger.error("[compositor] Fallback composition exceeded timeout of %.1fs", video_timeout)
+        raise
     except Exception as exc:
-        logger.warning(f"[compositor] Fallback composition failed: {exc}")
+        logger.warning("[compositor] Fallback composition failed: %s", exc)
 
     # Ultimate fallback: copy video track
     shutil.copy2(video_mp4, output_mp4)

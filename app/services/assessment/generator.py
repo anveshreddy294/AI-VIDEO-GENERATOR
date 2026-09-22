@@ -111,6 +111,10 @@ def search_concept_chunks(
                 matched.append(ch)
         if matched:
             return matched[:limit]
+        # Robust fallback: If concept wasn't explicitly tagged in chunks, pick available source chunks
+        available = [ch for ch in provided_chunks if not ch.get("source_id") or ch.get("source_id") == source_id]
+        if available:
+            return available[:limit]
         return []
 
     # 2. Qdrant vector retrieval
@@ -274,106 +278,114 @@ def generate_question(
     last_error: str | None = None
     provider_failed = False
 
-    # Attempt LLM generation via provider
-    for attempt in range(retries + 1):
-        try:
-            raw = provider.generate_content(prompt)
-        except Exception as exc:
-            provider_failed = True
-            err = str(exc).lower()
-            last_error = str(exc)
-            logger.warning(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
-            if "exceeded your current quota" in err or "quota_value" in err:
-                logger.warning("[generator] Quota reached; question generation stopped.")
-                break
-            if "not set" in err or "unconfigured" in err or "not found" in err:
-                break
-            if attempt < retries and ("429" in err or "rate" in err):
-                time.sleep(1.0)
-            continue
+    # Set fast 8.0s timeout on provider so question generation never hangs
+    old_timeout = getattr(provider, "timeout", None)
+    try:
+        if hasattr(provider, "timeout"):
+            provider.timeout = 8.0
 
-        try:
-            data = _parse_json(raw)
-
-            raw_options = data.get("options", [])
-            if len(raw_options) != 4 or not data.get("question", "").strip():
+        # Attempt LLM generation via provider (max 1 retry for speed)
+        for attempt in range(min(retries, 1) + 1):
+            try:
+                raw = provider.generate_content(prompt)
+            except Exception as exc:
+                provider_failed = True
+                err = str(exc).lower()
+                last_error = str(exc)
+                logger.warning(f"[generator] LLM attempt {attempt+1} failed for '{concept.name}': {exc}")
+                if "exceeded your current quota" in err or "quota_value" in err:
+                    logger.warning("[generator] Quota reached; question generation stopped.")
+                    break
+                if "not set" in err or "unconfigured" in err or "not found" in err or "timed out" in err:
+                    break
                 continue
 
-            raw_corr_int = data.get("correct_index")
-            if type(raw_corr_int) is not int or raw_corr_int not in range(4):
-                raise ValueError("Invalid correct_index")
-            if {opt.get("index") for opt in raw_options} != {0, 1, 2, 3}:
-                raise ValueError("Options must have unique indices 0–3")
-            raw_options = sorted(raw_options, key=lambda opt: opt["index"])
-            resolved_quote = _verify_and_resolve_quote(data.get("evidence_quote", ""), chunks)
-            if not resolved_quote:
-                # Pick a grounded quote directly from chunks for this concept
-                first_chunk = chunks[0].get("text", "") if chunks else ""
-                for line in first_chunk.splitlines():
-                    clean_l = line.strip().strip("*- \t`")
-                    if len(clean_l) >= 15 and concept.name.lower() in clean_l.lower():
-                        resolved_quote = clean_l[:200]
-                        break
-                if not resolved_quote and first_chunk:
+            try:
+                data = _parse_json(raw)
+
+                raw_options = data.get("options", [])
+                if len(raw_options) != 4 or not data.get("question", "").strip():
+                    continue
+
+                raw_corr_int = data.get("correct_index")
+                if type(raw_corr_int) is not int or raw_corr_int not in range(4):
+                    raise ValueError("Invalid correct_index")
+                if {opt.get("index") for opt in raw_options} != {0, 1, 2, 3}:
+                    raise ValueError("Options must have unique indices 0–3")
+                raw_options = sorted(raw_options, key=lambda opt: opt["index"])
+                resolved_quote = _verify_and_resolve_quote(data.get("evidence_quote", ""), chunks)
+                if not resolved_quote:
+                    # Pick a grounded quote directly from chunks for this concept
+                    first_chunk = chunks[0].get("text", "") if chunks else ""
                     for line in first_chunk.splitlines():
                         clean_l = line.strip().strip("*- \t`")
-                        if len(clean_l) >= 15:
+                        if len(clean_l) >= 15 and concept.name.lower() in clean_l.lower():
                             resolved_quote = clean_l[:200]
                             break
-            if not resolved_quote:
-                raise ValueError("Missing or fabricated supporting quote")
-            quote = resolved_quote
+                    if not resolved_quote and first_chunk:
+                        for line in first_chunk.splitlines():
+                            clean_l = line.strip().strip("*- \t`")
+                            if len(clean_l) >= 15:
+                                resolved_quote = clean_l[:200]
+                                break
+                if not resolved_quote:
+                    raise ValueError("Missing or fabricated supporting quote")
+                quote = resolved_quote
 
-            if len({opt.get("text", "").strip().casefold() for opt in raw_options}) != 4:
-                raise ValueError("Duplicate options")
+                if len({opt.get("text", "").strip().casefold() for opt in raw_options}) != 4:
+                    raise ValueError("Duplicate options")
 
-            # Authoritative correct answer text before shuffling
-            correct_answer_text = raw_options[raw_corr_int].get("text", "").strip()
+                # Authoritative correct answer text before shuffling
+                correct_answer_text = raw_options[raw_corr_int].get("text", "").strip()
 
-            # Randomize option placement across 0-3 while strictly maintaining correct_index mapping
-            import random
-            texts = [opt.get("text", "").strip() for opt in raw_options]
-            random.shuffle(texts)
-            new_correct_index = texts.index(correct_answer_text) if correct_answer_text in texts else 0
+                # Randomize option placement across 0-3 while strictly maintaining correct_index mapping
+                import random
+                texts = [opt.get("text", "").strip() for opt in raw_options]
+                random.shuffle(texts)
+                new_correct_index = texts.index(correct_answer_text) if correct_answer_text in texts else 0
 
-            options = [
-                AssessmentOption(index=i, text=t)
-                for i, t in enumerate(texts)
-            ]
+                options = [
+                    AssessmentOption(index=i, text=t)
+                    for i, t in enumerate(texts)
+                ]
 
-            duration_ms = round((time.time() - t0) * 1000, 2)
-            diagnostics = StageDiagnostics(
-                provider_used=getattr(provider, "model_name", settings.llm_provider),
-                fallback_used=False,
-                fallback_reason=None,
-                grounding_verified=True,
-                duration_ms=duration_ms,
-            )
+                duration_ms = round((time.time() - t0) * 1000, 2)
+                diagnostics = StageDiagnostics(
+                    provider_used=getattr(provider, "model_name", settings.llm_provider),
+                    fallback_used=False,
+                    fallback_reason=None,
+                    grounding_verified=True,
+                    duration_ms=duration_ms,
+                )
 
-            return Question(
-                concept_id=concept.concept_id,
-                concept_name=concept.name,
-                stem=data.get("question", "").strip(),
-                options=options,
-                correct_index=new_correct_index,
-                explanation=data.get("explanation", f"Based on source definition of {concept.name}"),
-                evidence_quote=quote,
-                evidence_text="\n\n".join(ch.get("text", "") for ch in chunks),
-                chunk_ids=chunk_ids,
-                content_ids=content_ids,
-                page_start=page_start,
-                page_end=page_end,
-                timestamp_start=timestamp_start,
-                timestamp_end=timestamp_end,
-                source_id=source_id,
-                difficulty=difficulty,
-                variant_type=variant_type,
-                diagnostics=diagnostics,
-            )
+                return Question(
+                    concept_id=concept.concept_id,
+                    concept_name=concept.name,
+                    stem=data.get("question", "").strip(),
+                    options=options,
+                    correct_index=new_correct_index,
+                    explanation=data.get("explanation", f"Based on source definition of {concept.name}"),
+                    evidence_quote=quote,
+                    evidence_text="\n\n".join(ch.get("text", "") for ch in chunks),
+                    chunk_ids=chunk_ids,
+                    content_ids=content_ids,
+                    page_start=page_start,
+                    page_end=page_end,
+                    timestamp_start=timestamp_start,
+                    timestamp_end=timestamp_end,
+                    source_id=source_id,
+                    difficulty=difficulty,
+                    variant_type=variant_type,
+                    diagnostics=diagnostics,
+                )
 
-        except Exception as exc:
-            last_error = str(exc)
-            logger.warning(f"[generator] LLM output validation attempt {attempt+1} failed for '{concept.name}': {exc}")
+            except Exception as exc:
+                last_error = str(exc)
+                logger.warning(f"[generator] LLM output validation attempt {attempt+1} failed for '{concept.name}': {exc}")
+
+    finally:
+        if hasattr(provider, "timeout") and old_timeout is not None:
+            provider.timeout = old_timeout
 
     # Resilient grounded fallback generation (fast & deterministic)
     duration_ms = round((time.time() - t0) * 1000, 2)
@@ -485,6 +497,23 @@ def _generate_grounded_fallback(
         for i, text in enumerate(option_texts)
     ]
 
+    # Extract grounded evidence quote and text for validation pass
+    evidence_quote = ""
+    if chunks:
+        for ch in chunks:
+            text = ch.get("text", "")
+            for line in text.splitlines():
+                cl = line.strip().strip("*- \t`")
+                if len(cl) >= 15:
+                    evidence_quote = cl[:200]
+                    break
+            if evidence_quote:
+                break
+    if not evidence_quote:
+        evidence_quote = definition[:180] if definition else concept.name
+
+    evidence_text = "\n\n".join(ch.get("text", "") for ch in chunks) if chunks else definition
+
     return Question(
         concept_id=concept.concept_id,
         concept_name=concept.name,
@@ -492,6 +521,8 @@ def _generate_grounded_fallback(
         options=options,
         correct_index=correct_index,
         explanation=explanation,
+        evidence_quote=evidence_quote,
+        evidence_text=evidence_text,
         chunk_ids=chunk_ids,
         content_ids=content_ids,
         page_start=page_start,

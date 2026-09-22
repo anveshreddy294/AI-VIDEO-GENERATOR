@@ -103,6 +103,11 @@ class Settings:
         self.reasoning_model: str = self.ollama_model
         self.qdrant_collection: str = self.collection_name
 
+        # --- Concurrency & Admission Control (BUG-002) ---
+        self.max_background_jobs: int = int(os.getenv("MAX_BACKGROUND_JOBS", "2"))
+        self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
+        self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
+
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:

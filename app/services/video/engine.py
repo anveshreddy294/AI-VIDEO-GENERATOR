@@ -18,6 +18,7 @@ from uuid import uuid4
 
 from ...core.config import settings
 from ..assessment.schemas import VideoTarget, VideoTargetMatrix
+from ..pipeline_tracker import job_manager
 from ..schemas import LayerBVideoSceneChunk
 from .artifact_store import find_existing_video, store_video_artifacts
 from .manim_renderer import render_video_plan
@@ -115,6 +116,11 @@ async def execute_video_generation_job(
         page_end=target.page_end,
     )
     _save_video_artifact(artifact)
+
+    sem = job_manager.get_semaphore()
+    acquired_sem = False
+    await sem.acquire()
+    acquired_sem = True
 
     try:
         # 1. Video Planning (LLM reasoning)
@@ -293,3 +299,6 @@ async def execute_video_generation_job(
         artifact.error = str(exc)
         _save_video_artifact(artifact)
         return artifact
+    finally:
+        if acquired_sem:
+            sem.release()

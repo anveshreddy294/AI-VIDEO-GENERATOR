@@ -1,4 +1,4 @@
-"""VisualAI Dashboard — Interactive Assessment Console & Pipeline Documentation.
+"""VisualAI Dashboard - Interactive Assessment Console & Pipeline Documentation.
 
 Neomorphic Charcoal (#333333) & Peach Green (#32805b) theme on porcelain canvas (#f4f6fa)
 with live telemetry, transparent quiz grading, video player with downloads,
@@ -15,7 +15,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisualAI — Interactive Assessment Console | STUDY WITH YOUR VISION</title>
+    <title>VisualAI - Interactive Assessment Console | STUDY WITH YOUR VISION</title>
     <!-- Google Fonts: Editorial Serif + Humanist Sans -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,21 +27,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             --bg-page: #f4f6fa;
             --bg-card: #f4f6fa;
-            --bg-surface: #ffffff;
+            --bg-surface: #f8f9fa;
             --bg-subtle: #e9edf5;
 
             --text-ink: #333333;
             --text-body: #4b5563;
             --text-muted: #6b7280;
 
-            /* 🌿 Peach Green & Botanical Color Palette */
+            /*  Peach Green & Botanical Color Palette */
             --peach-green: #2e7d5e;
             --peach-green-hover: #24664c;
             --peach-green-soft: #edf6f2;
             --peach-green-border: #9ecab4;
             --peach-green-shadow: rgba(46, 125, 94, 0.32);
 
-            /* 🍑 Warm Peach Accents */
+            /*  Warm Peach Accents */
             --peach: #df7456;
             --peach-hover: #c96245;
             --peach-soft: #fdf2ec;
@@ -70,18 +70,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             --blue-soft: #eff6ff;
             --blue-border: #bfdbfe;
 
-            /* 🪨 Tactile Neomorphism Shadows (Light Mode) */
-            --neo-raised: 7px 7px 16px rgba(180, 192, 210, 0.45), -7px -7px 16px rgba(255, 255, 255, 0.95);
-            --neo-raised-sm: 4px 4px 10px rgba(180, 192, 210, 0.4), -4px -4px 10px rgba(255, 255, 255, 0.95);
-            --neo-raised-lg: 12px 12px 28px rgba(180, 192, 210, 0.5), -12px -12px 28px rgba(255, 255, 255, 0.95);
-            --neo-inset: inset 3px 3px 7px rgba(180, 192, 210, 0.4), inset -3px -3px 7px rgba(255, 255, 255, 0.95);
-            --neo-btn: 5px 5px 12px rgba(180, 192, 210, 0.45), -5px -5px 12px rgba(255, 255, 255, 0.9);
-            --neo-btn-active: inset 2px 2px 5px rgba(180, 192, 210, 0.5), inset -2px -2px 5px rgba(255, 255, 255, 0.9);
+            /*  Tactile Neomorphism Shadows (Light Mode) */
+            --neo-raised: none;
+            --neo-raised-sm: none;
+            --neo-raised-lg: none;
+            --neo-inset: none;
+            --neo-btn: none;
+            --neo-btn-active: none;
             --border-card: rgba(226, 232, 240, 0.6);
 
-            --radius-sm: 10px;
-            --radius-md: 16px;
-            --radius-lg: 24px;
+            --radius-sm: 2px;
+            --radius-md: 4px;
+            --radius-lg: 4px;
         }
 
         [data-theme="dark"] {
@@ -94,14 +94,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             --text-body: #d1d5db;
             --text-muted: #9ca3af;
 
-            /* 🌿 Peach Green & Botanical Color Palette (Dark Mode) */
+            /*  Peach Green & Botanical Color Palette (Dark Mode) */
             --peach-green: #4ecb94;
             --peach-green-hover: #3db882;
             --peach-green-soft: rgba(78, 203, 148, 0.16);
             --peach-green-border: rgba(78, 203, 148, 0.38);
             --peach-green-shadow: rgba(78, 203, 148, 0.28);
 
-            /* 🍑 Warm Peach Accents (Dark Mode) */
+            /*  Warm Peach Accents (Dark Mode) */
             --peach: #f09a80;
             --peach-hover: #e28468;
             --peach-soft: rgba(240, 154, 128, 0.16);
@@ -125,13 +125,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             --blue-soft: rgba(37, 99, 235, 0.15);
             --blue-border: rgba(37, 99, 235, 0.4);
 
-            /* 🪨 Tactile Neomorphism Shadows (Dark Mode) */
-            --neo-raised: 6px 6px 15px #101114, -6px -6px 15px #2c2f3a;
-            --neo-raised-sm: 3px 3px 8px #101114, -3px -3px 8px #2c2f3a;
-            --neo-raised-lg: 12px 12px 28px #101114, -12px -12px 28px #2c2f3a;
-            --neo-inset: inset 3px 3px 6px #101114, inset -3px -3px 6px #2c2f3a;
-            --neo-btn: 4px 4px 10px #101114, -4px -4px 10px #2c2f3a;
-            --neo-btn-active: inset 2px 2px 5px #101114, inset -2px -2px 5px #2c2f3a;
+            /*  Tactile Neomorphism Shadows (Dark Mode) */
+            --neo-raised: none;
+            --neo-raised-sm: none;
+            --neo-raised-lg: none;
+            --neo-inset: none;
+            --neo-btn: none;
+            --neo-btn-active: none;
             --border-card: rgba(255, 255, 255, 0.06);
         }
 
@@ -150,17 +150,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        /* 🌟 Fixed Top Navigation Bar */
+        /*  Fixed Top Navigation Bar */
         .header {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
             z-index: 50;
-            background: rgba(244, 246, 250, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--border-card);
+            background: var(--bg-card);
+            -webkit-border-bottom: 1px solid var(--border-card);
             padding: 14px 28px;
             display: flex;
             align-items: center;
@@ -169,7 +167,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         [data-theme="dark"] .header {
-            background: rgba(24, 25, 30, 0.85);
+            background: var(--bg-card);
         }
 
         .header-brand {
@@ -181,9 +179,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         .brand-monogram {
             width: 42px;
             height: 42px;
-            border-radius: 12px;
+            border-radius: var(--radius-sm);
             background: var(--bg-card);
-            box-shadow: var(--neo-raised-sm);
+            
             border: 1px solid var(--peach-green-border);
             display: flex;
             align-items: center;
@@ -233,56 +231,53 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            box-shadow: var(--neo-btn);
+            
             transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
             text-decoration: none;
         }
 
         .neo-btn:hover {
-            transform: translateY(-1px);
             color: var(--peach-green);
         }
 
         .neo-btn:active {
             transform: translateY(0);
-            box-shadow: var(--neo-btn-active);
+            
         }
 
         .neo-btn-gold, .neo-btn-peach-green {
-            background: linear-gradient(135deg, var(--peach-green), var(--peach-green-hover));
+            background: var(--peach-green);
             color: #ffffff;
             border: none;
-            box-shadow: 0 4px 14px var(--peach-green-shadow);
+            
         }
 
         .neo-btn-gold:hover, .neo-btn-peach-green:hover {
             color: #ffffff;
             filter: brightness(1.08);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 18px var(--peach-green-shadow);
+            
         }
 
         .neo-btn-peach {
-            background: linear-gradient(135deg, var(--peach), var(--peach-hover));
+            background: var(--peach);
             color: #ffffff;
             border: none;
-            box-shadow: 0 4px 14px rgba(223, 116, 86, 0.32);
+            
         }
 
         .neo-btn-peach:hover {
             color: #ffffff;
             filter: brightness(1.08);
-            transform: translateY(-1px);
-        }
+            }
 
         .neo-icon-btn {
             width: 40px;
             height: 40px;
-            border-radius: 12px;
+            border-radius: var(--radius-sm);
             background: var(--bg-card);
             color: var(--text-ink);
             border: 1px solid var(--border-card);
-            box-shadow: var(--neo-btn);
+            
             display: flex;
             align-items: center;
             justify-content: center;
@@ -295,17 +290,108 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         .neo-icon-btn:active {
-            box-shadow: var(--neo-btn-active);
+            
         }
 
-        /* 🚀 Main Page Container */
+        /* Model Switcher & Fallback UI */
+        .model-switch-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 6px 12px;
+            font-size: 12px;
+            font-family: var(--font-sans);
+            color: var(--text-ink);
+        }
+
+        .model-pill-label {
+            font-weight: 700;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            font-size: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        .header-model-select {
+            background: transparent;
+            border: none;
+            color: var(--peach-green);
+            font-weight: 700;
+            font-size: 12px;
+            font-family: var(--font-sans);
+            cursor: pointer;
+            outline: none;
+        }
+
+        .header-fallback-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 2px;
+            background: var(--peach-green-soft);
+            color: var(--peach-green);
+            border: 1px solid var(--peach-green-border);
+        }
+
+        .model-card-box {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            margin-bottom: 16px;
+        }
+
+        .model-card-header {
+            margin-bottom: 10px;
+        }
+
+        .model-card-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-ink);
+        }
+
+        .model-card-desc {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        .model-card-controls {
+            display: flex;
+            gap: 14px;
+            align-items: flex-end;
+        }
+
+        .chain-display-box {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--peach-green);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-height: 38px;
+            box-sizing: border-box;
+        }
+
+        /*  Main Page Container */
         .container {
             max-width: 1140px;
             margin: 0 auto;
             padding: 104px 24px 60px;
         }
 
-        /* 🏛 Hero Section & Animated Stat Counters */
+        /*  Hero Section & Animated Stat Counters */
         .hero {
             text-align: center;
             padding: 30px 10px 40px;
@@ -316,9 +402,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             align-items: center;
             gap: 8px;
             padding: 6px 14px;
-            border-radius: 999px;
+            border-radius: var(--radius-sm);
             background: var(--bg-card);
-            box-shadow: var(--neo-raised-sm);
+            
             border: 1px solid var(--peach-green-border);
             font-size: 11px;
             font-weight: 700;
@@ -358,14 +444,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             border: 1px solid var(--border-card);
             border-radius: var(--radius-md);
             padding: 22px;
-            box-shadow: var(--neo-raised);
+            
             text-align: center;
             transition: transform 0.2s ease;
         }
 
         .stat-card:hover {
-            transform: translateY(-2px);
-        }
+            }
 
         .stat-number {
             font-family: var(--font-display);
@@ -383,13 +468,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             color: var(--text-muted);
         }
 
-        /* 🪟 Neomorphic Main Console Card */
+        /*  Neomorphic Main Console Card */
         .console-card {
             background: var(--bg-card);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-lg);
             padding: 36px;
-            box-shadow: var(--neo-raised-lg);
+            
             margin-bottom: 50px;
         }
 
@@ -415,12 +500,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             margin-top: 2px;
         }
 
-        /* 🎚 Neomorphic Tab Switcher */
+        /*  Neomorphic Tab Switcher */
         .tab-switcher {
             display: inline-flex;
             background: var(--bg-card);
-            box-shadow: var(--neo-inset);
-            border-radius: 12px;
+            
+            border-radius: var(--radius-sm);
             padding: 4px;
             gap: 4px;
         }
@@ -429,7 +514,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             background: transparent;
             border: none;
             padding: 8px 18px;
-            border-radius: 10px;
+            border-radius: var(--radius-sm);
             font-family: var(--font-sans);
             font-size: 13px;
             font-weight: 600;
@@ -441,7 +526,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         .tab-btn.active {
             background: var(--bg-surface);
             color: var(--text-ink);
-            box-shadow: var(--neo-raised-sm);
+            
         }
 
         [data-theme="dark"] .tab-btn.active {
@@ -449,7 +534,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             color: var(--peach-green);
         }
 
-        /* 📥 Forms & Inset Inputs */
+        /*  Forms & Inset Inputs */
         .form-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -479,7 +564,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             font-family: var(--font-sans);
             font-size: 14px;
             color: var(--text-ink);
-            box-shadow: var(--neo-inset);
+            
             outline: none;
             transition: border-color 0.2s ease;
             width: 100%;
@@ -492,7 +577,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         .dropzone-area {
             border: 2px dashed var(--peach-green-border);
             background: var(--bg-card);
-            box-shadow: var(--neo-inset);
+            
             border-radius: var(--radius-md);
             padding: 36px 20px;
             text-align: center;
@@ -511,14 +596,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             margin-bottom: 8px;
         }
 
-        /* 🚀 Live Pipeline Telemetry Timeline Card */
+        /*  Live Pipeline Telemetry Timeline Card */
         .timeline-card {
             background: var(--bg-card);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-md);
             padding: 24px;
             margin: 28px 0;
-            box-shadow: var(--neo-raised);
+            
             animation: fadeIn 0.3s ease-out;
         }
 
@@ -536,33 +621,30 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         .timeline-pulse-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
+            width: 8px;
+            height: 8px;
+            border-radius: var(--radius-sm);
             background: var(--peach-green);
-            box-shadow: 0 0 0 0 var(--peach-green-shadow);
             animation: pulse-ring 1.8s infinite;
         }
-
         @keyframes pulse-ring {
-            0% { transform: scale(0.95); box-shadow: 0 0 0 0 var(--peach-green-shadow); }
-            70% { transform: scale(1.1); box-shadow: 0 0 0 8px rgba(46, 125, 94, 0); }
-            100% { transform: scale(0.95); box-shadow: 0 0 0 0 var(--peach-green-shadow); }
+            0%, 100% { opacity: 0.4; }
+            50% { opacity: 1.0; }
         }
 
         .progress-bar-bg {
             background: var(--bg-card);
-            box-shadow: var(--neo-inset);
-            border-radius: 999px;
+            
+            border-radius: var(--radius-sm);
             height: 10px;
             overflow: hidden;
             margin-bottom: 20px;
         }
 
         .progress-bar-fill {
-            background: linear-gradient(90deg, var(--peach-green), #4ecb94);
+            background: var(--peach-green);
             height: 100%;
-            border-radius: 999px;
+            border-radius: var(--radius-sm);
             transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -579,7 +661,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             padding: 12px 14px;
             border-radius: var(--radius-sm);
             background: var(--bg-surface);
-            box-shadow: var(--neo-raised-sm);
+            
             font-size: 13px;
         }
 
@@ -599,13 +681,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         .status-completed .stage-icon { background: var(--emerald-soft); color: var(--emerald); }
         .status-failed .stage-icon { background: var(--rose-soft); color: var(--rose); }
 
-        /* 📋 Diagnostic Assessment Quiz Section */
+        /*  Diagnostic Assessment Quiz Section */
         .quiz-card {
             background: var(--bg-card);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-md);
             padding: 28px;
-            box-shadow: var(--neo-raised);
+            
             margin-top: 28px;
         }
 
@@ -641,13 +723,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             border-radius: var(--radius-sm);
             background: var(--bg-card);
             border: 1px solid var(--border-card);
-            box-shadow: var(--neo-raised-sm);
+            
             cursor: pointer;
             transition: all 0.2s ease;
         }
 
         .option-item:hover {
-            transform: translateX(2px);
             border-color: var(--peach-green);
         }
 
@@ -661,7 +742,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             align-items: center;
             gap: 4px;
             padding: 4px 10px;
-            border-radius: 999px;
+            border-radius: var(--radius-sm);
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
@@ -675,26 +756,26 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         .badge-amber { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border); }
         .badge-blue { background: var(--blue-soft); color: var(--blue); border: 1px solid var(--blue-border); }
 
-        /* 🔍 Transparent Question Review Cards */
+        /*  Transparent Question Review Cards */
         .review-card {
             border-radius: var(--radius-sm);
             padding: 20px;
             margin-bottom: 16px;
             background: var(--bg-card);
-            box-shadow: var(--neo-raised-sm);
+            
             border: 1px solid var(--border-card);
         }
 
-        .review-correct { border-left: 5px solid var(--emerald); }
-        .review-incorrect { border-left: 5px solid var(--rose); }
+        .review-correct { border: 1px solid var(--emerald); }
+        .review-incorrect { border: 1px solid var(--rose); }
 
-        /* 🎥 Video Target Matrix Cards */
+        /*  Video Target Matrix Cards */
         .target-card {
             background: var(--bg-card);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-sm);
             padding: 20px;
-            box-shadow: var(--neo-raised-sm);
+            
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -702,7 +783,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             margin-bottom: 14px;
         }
 
-        /* 🎥 Video Modal Overlay */
+        /*  Video Modal Overlay */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -710,7 +791,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             right: 0;
             bottom: 0;
             background: rgba(15, 23, 42, 0.75);
-            backdrop-filter: blur(8px);
             z-index: 100;
             display: none;
             align-items: center;
@@ -726,13 +806,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             max-width: 860px;
             max-height: 90vh;
             overflow-y: auto;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            
             padding: 28px;
         }
 
         .meta-chip {
             background: var(--bg-card);
-            box-shadow: var(--neo-raised-sm);
+            
             border: 1px solid var(--border-card);
             border-radius: 6px;
             padding: 3px 8px;
@@ -740,7 +820,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             color: var(--text-body);
         }
 
-        /* 🗺 Flow Architecture Documentation */
+        /*  Flow Architecture Documentation */
         .flow-section {
             margin-top: 60px;
         }
@@ -761,16 +841,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             border: 1px solid var(--border-card);
             border-radius: var(--radius-md);
             margin-bottom: 16px;
-            box-shadow: var(--neo-raised);
+            
         }
 
         .step-num {
             flex-shrink: 0;
             width: 44px;
             height: 44px;
-            border-radius: 12px;
+            border-radius: var(--radius-sm);
             background: var(--bg-card);
-            box-shadow: var(--neo-raised-sm);
+            
             border: 1px solid var(--peach-green-border);
             display: flex;
             align-items: center;
@@ -781,13 +861,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             color: var(--peach-green);
         }
 
-        /* ❓ FAQ Accordion */
+        /*  FAQ Accordion */
         .faq-item {
             background: var(--bg-card);
             border: 1px solid var(--border-card);
             border-radius: var(--radius-sm);
             margin-bottom: 12px;
-            box-shadow: var(--neo-raised-sm);
+            
             overflow: hidden;
         }
 
@@ -819,7 +899,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             line-height: 1.6;
         }
 
-        /* 🏛 Multi-Column Luxury Footer */
+        /*  Multi-Column Luxury Footer */
         .footer {
             margin-top: 80px;
             padding-top: 40px;
@@ -833,15 +913,70 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             color: var(--text-muted);
         }
 
+        /*  Remedial Video & Dual-Layer RAG Styles */
+        .video-target-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-card);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            
+            transition: all 0.2s ease;
+        }
+        .video-target-card:hover {
+            
+        }
+        .video-rag-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 20px;
+            align-items: start;
+        }
+        @media (max-width: 900px) {
+            .video-rag-grid {
+                grid-template-columns: 1fr !important;
+            }
+            .video-target-card {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+        .pulse-dot {
+            animation: pulseAnim 1.5s infinite;
+        }
+        @keyframes pulseAnim {
+            0% { opacity: 0.3; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.1); }
+            100% { opacity: 0.3; transform: scale(0.8); }
+        }
+
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(6px); }
+            from { opacity: 0; }
             to { opacity: 1; transform: translateY(0); }
         }
+    
+        /* Skeleton loaders for state transitions */
+        .skeleton {
+            background: #e5e7eb;
+            border-radius: var(--radius-sm);
+            animation: skeleton-pulse 1.5s ease-in-out infinite;
+        }
+        [data-theme="dark"] .skeleton {
+            background: #2d3748;
+        }
+        @keyframes skeleton-pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 0.3; }
+        }
+    
     </style>
 </head>
 <body>
 
-    <!-- 🌟 Fixed Top Navigation Bar -->
+    <!--  Fixed Top Navigation Bar -->
     <header class="header">
         <div class="header-brand">
             <div class="brand-monogram">V</div>
@@ -851,11 +986,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             </div>
         </div>
         <div class="nav-actions">
+            <div class="model-switch-pill" title="Current Active LLM &amp; Automatic Fallback Routing">
+                <span class="model-pill-label">Model:</span>
+                <select id="headerModelSelect" class="header-model-select" onchange="switchModel(this.value)">
+                    <option value="llama3.2:3b">llama3.2:3b (Ollama)</option>
+                    <option value="mock">mock (Deterministic)</option>
+                </select>
+                <span id="headerFallbackBadge" class="header-fallback-badge" title="Automatic Fallback Routing Active">Fallback: ON</span>
+            </div>
             <button id="themeToggleBtn" class="neo-icon-btn" onclick="toggleTheme()" title="Toggle Theme (Light / Dark)">
-                <span id="themeIcon">🌓</span>
+                <span id="themeIcon">Dark</span>
             </button>
             <a href="/instructor" target="_blank" class="neo-btn">
-                <span>👩‍🏫 Instructor Portal</span>
+                <span> Instructor Portal</span>
             </a>
             <a href="/docs" target="_blank" class="neo-btn">
                 <span>API Docs</span>
@@ -868,7 +1011,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
     <main class="container">
 
-        <!-- 🏛 Hero Overview -->
+        <!--  Hero Overview -->
         <section class="hero">
             <div class="hero-badge">Adaptive Pedagogical Pipeline</div>
             <h1 class="hero-title">Study With Your Vision</h1>
@@ -876,7 +1019,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 Transform static study materials into programmatic, personalized visual lessons grounded strictly in authoritative textbooks without hallucination loops.
             </p>
 
-            <!-- 📊 Animated Statistics Counters -->
+            <!--  Animated Statistics Counters -->
             <div class="stats-grid">
                 <div class="stat-card">
                     <div class="stat-number" data-target="4">0</div>
@@ -897,7 +1040,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             </div>
         </section>
 
-        <!-- 🪟 Neomorphic Main Console Card -->
+        <!--  Neomorphic Main Console Card -->
         <section class="console-card">
             <div class="console-header">
                 <div class="console-title-area">
@@ -905,15 +1048,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <p>Execute end-to-end multimodal ingestion, diagnostic profiling, and video synthesis</p>
                 </div>
                 <div class="tab-switcher">
-                    <button class="tab-btn active" id="tabUpload" onclick="switchTab('upload')">📁 Ingest New Material</button>
-                    <button class="tab-btn" id="tabExisting" onclick="switchTab('existing')">📚 Existing Course</button>
+                    <button class="tab-btn active" id="tabUpload" onclick="switchTab('upload')"> Ingest New Material</button>
+                    <button class="tab-btn" id="tabExisting" onclick="switchTab('existing')"> Existing Course</button>
                 </div>
             </div>
 
             <!-- Pane 1: Upload Material -->
             <div id="paneUpload">
                 <div class="dropzone-area" onclick="document.getElementById('fileInput').click()">
-                    <div class="dropzone-icon">📄</div>
+                    <div class="dropzone-icon"></div>
                     <div style="font-weight:700;font-size:15px;color:var(--text-ink);margin-bottom:4px;">
                         Drop Course PDF, Notes, Images, or Video Here
                     </div>
@@ -927,6 +1070,33 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
                 <div id="selectedFileInfo" style="display:none;margin-bottom:16px;font-size:13px;font-weight:600;color:var(--peach-green);"></div>
 
+                <div class="model-card-box">
+                    <div class="model-card-header">
+                        <div class="model-card-title">
+                            <span>Active AI Model &amp; Automatic Fallback</span>
+                            <span id="modelChainBadge" class="header-fallback-badge">Fallback Active</span>
+                        </div>
+                        <div class="model-card-desc">
+                            If the active model cannot provide the info, times out, or lacks vision support, the next model in the fallback chain will automatically generate the info.
+                        </div>
+                    </div>
+                    <div class="model-card-controls">
+                        <div class="form-group" style="flex:1;margin-bottom:0;">
+                            <label class="form-label" for="formModelSelect">Select Active Model</label>
+                            <select id="formModelSelect" class="neo-select" onchange="switchModel(this.value)">
+                                <option value="llama3.2:3b">llama3.2:3b (Ollama Local)</option>
+                                <option value="mock">mock (Deterministic Fallback)</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="flex:1;margin-bottom:0;">
+                            <label class="form-label">Fallback Routing Order</label>
+                            <div id="fallbackChainDisplay" class="chain-display-box">
+                                llama3.2:3b &rarr; mock
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="form-grid">
                     <div class="form-group">
                         <label class="form-label" for="studentId">Student Identifier</label>
@@ -938,7 +1108,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </div>
                 </div>
                 <button class="neo-btn neo-btn-peach-green" id="btnUpload" onclick="runUpload()" style="width:100%;justify-content:center;padding:14px;">
-                    <span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>
+                    <span> Ingest Material &amp; Start Diagnostic Assessment</span>
                 </button>
             </div>
 
@@ -961,11 +1131,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     </div>
                 </div>
                 <button class="neo-btn neo-btn-peach-green" id="btnAssessExisting" onclick="runExistingAssess()" style="width:100%;justify-content:center;padding:14px;">
-                    <span>⚡ Generate Diagnostic Quiz from Material</span>
+                    <span> Generate Diagnostic Quiz from Material</span>
                 </button>
             </div>
 
-            <!-- 🚀 Live Pipeline Telemetry Timeline Card -->
+            <!--  Live Pipeline Telemetry Timeline Card -->
             <div id="timelineCard" class="timeline-card" style="display:none;">
                 <div class="timeline-header">
                     <div class="timeline-title-area">
@@ -985,7 +1155,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <!-- Status Box -->
             <div id="statusBox" style="display:none;padding:14px;border-radius:var(--radius-sm);margin:20px 0;font-size:14px;font-weight:600;"></div>
 
-            <!-- 📋 Diagnostic Assessment Quiz Section -->
+            <!--  Diagnostic Assessment Quiz Section -->
             <div id="quizSection" class="quiz-card" style="display:none;">
                 <div class="quiz-header">
                     <div>
@@ -999,19 +1169,19 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:12px;color:var(--text-muted);">Options shuffled via Fisher-Yates</span>
                     <button class="neo-btn neo-btn-peach-green" id="btnNextQuestion" onclick="submitCurrentAnswer()">
-                        <span>Next Question ➔</span>
+                        <span>Next Question</span>
                     </button>
                 </div>
             </div>
 
-            <!-- 🔍 Detailed Question Review Section -->
+            <!--  Detailed Question Review Section -->
             <div id="quizReviewSection" style="display:none;margin-top:28px;">
                 <div style="font-family:var(--font-display);font-size:22px;font-weight:700;margin-bottom:6px;">Diagnostic Assessment Review</div>
                 <p style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">Inspect your submissions against authoritative textbook ground truth.</p>
                 <div id="quizReviewContainer"></div>
             </div>
 
-            <!-- 🎯 Diagnostic Score & Profile Summary -->
+            <!--  Diagnostic Score & Profile Summary -->
             <div id="resultsBox" class="quiz-card" style="display:none;margin-top:28px;">
                 <div class="quiz-header">
                     <span style="font-weight:700;font-size:16px;">Student Learning Profile &amp; Knowledge Summary</span>
@@ -1032,14 +1202,119 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     <div id="lblMasteries" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
                 </div>
                 <div id="boxPrereqs" style="display:none;background:var(--amber-soft);border:1px solid var(--amber-border);border-radius:var(--radius-sm);padding:14px;margin-top:14px;color:var(--amber);">
-                    <div style="font-weight:700;font-size:13px;margin-bottom:4px;">⚠ Prerequisite Gaps Identified</div>
+                    <div style="font-weight:700;font-size:13px;margin-bottom:4px;"> Prerequisite Gaps Identified</div>
                     <div id="lblPrereqs" style="font-size:13px;"></div>
+                </div>
+            </div>
+
+            <!--  Step 3 & 4: Remedial Video Generation & Dual-Layer Video RAG -->
+            <div id="videoSection" class="quiz-card" style="display:none;margin-top:28px;">
+                <div class="quiz-header" style="border-bottom:1px solid var(--border-card);padding-bottom:12px;margin-bottom:16px;">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:20px;"></span>
+                            <span style="font-weight:700;font-size:18px;color:var(--text-ink);">Personalized Remedial Video Lessons</span>
+                        </div>
+                        <p style="font-size:13px;color:var(--text-muted);margin:4px 0 0 0;">
+                            Programmatic Manim animations + natural voiceover tailored to your diagnosed knowledge gaps
+                        </p>
+                    </div>
+                    <span class="badge badge-peach-green">STEP 3 VIDEO ENGINE</span>
+                </div>
+
+                <!-- Video Generation Cards for Diagnosed Gaps -->
+                <div id="videoTargetsContainer">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                        <span style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">
+                            Diagnosed Gaps Eligible for Video Generation
+                        </span>
+                        <span style="font-size:12px;color:var(--peach-green);font-weight:600;" id="lblTargetsCount"></span>
+                    </div>
+                    <div id="videoTargetsList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px;"></div>
+                </div>
+
+                <!-- Live Generation Status / Progress -->
+                <div id="videoGenStatusBox" style="display:none;background:var(--bg-surface);border:1px solid var(--peach-green-border);border-radius:var(--radius-sm);padding:16px;margin-bottom:18px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                        <span style="font-weight:700;font-size:14px;color:var(--peach-green);" id="lblVideoGenStage">
+                             Initializing Video Engine...
+                        </span>
+                        <span class="badge badge-peach-green" id="lblVideoGenProgress">0%</span>
+                    </div>
+                    <div class="progress-bar-track" style="height:8px;background:var(--bg-subtle);border-radius:4px;overflow:hidden;">
+                        <div id="videoGenProgressBar" class="progress-bar-fill" style="width:0%;height:100%;background: var(--peach-green);transition:width 0.4s ease;"></div>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:8px;" id="lblVideoGenDetails">
+                        Composing Manim scene scripts, rendering animations, and synthesizing voiceover...
+                    </div>
+                </div>
+
+                <!-- Active Video Player & Dual-Layer Video RAG Container -->
+                <div id="activeVideoPlayerBox" style="display:none;margin-top:24px;padding-top:20px;border-top:1px solid var(--border-card);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+                        <div>
+                            <span style="font-weight:700;font-size:16px;color:var(--text-ink);" id="activeVideoTitle">Remedial Lesson</span>
+                            <span class="badge badge-green" style="margin-left:6px;">READY</span>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            <a id="btnDownloadVideo" href="#" target="_blank" class="neo-btn neo-btn-peach-green" style="padding:6px 14px;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                                <span> Download MP4</span>
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="video-rag-grid">
+                        <!-- Left: Video Player -->
+                        <div>
+                            <div style="background:#000;border-radius:var(--radius-sm);overflow:hidden;">
+                                <video id="remedialVideoPlayer" controls style="width:100%;display:block;aspect-ratio:16/9;outline:none;" preload="metadata">
+                                    <source id="videoSource" src="" type="video/mp4">
+                                    Your browser does not support HTML5 video streaming.
+                                </video>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--text-muted);">
+                                <span>Manim + Edge-TTS · 720p · 30 FPS</span>
+                                <span id="lblPlaybackTime">Time: 0:00</span>
+                            </div>
+                        </div>
+
+                        <!-- Right: Dual-Layer Video RAG Assistant (Step 4) -->
+                        <div style="background:var(--bg-surface);border:1px solid var(--border-card);border-radius:var(--radius-sm);padding:16px;display:flex;flex-direction:column;gap:12px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;">
+                                <div style="display:flex;align-items:center;gap:6px;">
+                                    <span style="font-size:18px;"></span>
+                                    <strong style="font-size:14px;color:var(--text-ink);">Dual-Layer Video RAG Assistant</strong>
+                                </div>
+                                <span class="badge badge-blue" style="font-size:10px;">STEP 4 GROUNDED</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-muted);line-height:1.4;">
+                                Ask any question. Answers are verified against <strong>Layer A</strong> (textbook ground truth) and synchronized to <strong>Layer B</strong> (current video scene).
+                            </div>
+
+                            <div style="display:flex;gap:6px;">
+                                <input type="text" id="qaQuestionInput" placeholder="e.g. Can you explain this concept in simpler terms?" class="neo-input" style="flex:1;font-size:13px;padding:8px 12px;" onkeydown="if(event.key==='Enter')askVideoRAG()">
+                                <button class="neo-btn neo-btn-peach-green" id="btnAskRAG" onclick="askVideoRAG()" style="padding:8px 14px;font-size:12px;white-space:nowrap;">
+                                    <span>Ask Question</span>
+                                </button>
+                            </div>
+
+                            <div id="ragLoading" style="display:none;font-size:12px;color:var(--peach-green);font-weight:600;padding:4px 0;">
+                                <span class="pulse-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--peach-green);margin-right:6px;"></span>
+                                Searching Layer A source chunks &amp; current video scene...
+                            </div>
+
+                            <div id="ragAnswerBox" style="display:none;max-height:240px;overflow-y:auto;background:var(--bg-page);border:1px solid var(--border-card);border-radius:6px;padding:12px;font-size:12px;line-height:1.5;color:var(--text-ink);">
+                                <div id="ragAnswerText" style="margin-bottom:8px;font-size:13px;"></div>
+                                <div id="ragCitationsBox" style="font-size:11px;color:var(--text-muted);border-top:1px solid var(--border-card);padding-top:6px;"></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
         </section>
 
-        <!-- 🗺 Architectural Pipeline Flow Documentation -->
+        <!--  Architectural Pipeline Flow Documentation -->
         <section class="flow-section">
             <div style="margin-bottom:8px;">
                 <h2 class="flow-title">The Multimodal Assessment Pipeline</h2>
@@ -1050,7 +1325,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <div class="step-num">1</div>
                 <div>
                     <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--peach-green);margin-bottom:4px;">
-                        Step 1 — Multimodal Ingestion &amp; Ground Truth Engine
+                        Step 1 - Multimodal Ingestion &amp; Ground Truth Engine
                     </div>
                     <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
                         Separated Ingestion Pipelines &amp; Layer A Vectorization
@@ -1066,7 +1341,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 <div class="step-num">2</div>
                 <div>
                     <div style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--blue);margin-bottom:4px;">
-                        Step 2 — Diagnostic Assessment &amp; Knowledge Profiling
+                        Step 2 - Diagnostic Assessment &amp; Knowledge Profiling
                     </div>
                     <div style="font-size:17px;font-weight:700;color:var(--text-ink);margin-bottom:6px;">
                         Prerequisite Concept Pairing &amp; Sequential Grounded Generation
@@ -1078,8 +1353,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- 🛡 Solving the Three Generative AI Project Killers Table -->
-            <div style="background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-md);padding:24px;margin-top:24px;box-shadow:var(--neo-raised);">
+            <!--  Solving the Three Generative AI Project Killers Table -->
+            <div style="background:var(--bg-card);border:1px solid var(--border-card);border-radius:var(--radius-md);padding:24px;margin-top:24px;">
                 <div style="font-weight:700;font-size:16px;color:var(--text-ink);margin-bottom:4px;">Solving the Three Generative AI "Project Killers"</div>
                 <div style="font-size:13px;color:var(--text-muted);margin-bottom:18px;">Core architectural safeguards engineered into VisualAI</div>
                 <div style="overflow-x:auto;">
@@ -1112,7 +1387,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
-            <!-- ❓ FAQ Accordion Section -->
+            <!--  FAQ Accordion Section -->
             <div style="margin-top:40px;">
                 <h3 style="font-family:var(--font-display);font-size:22px;font-weight:700;margin-bottom:16px;">Frequently Asked Questions</h3>
 
@@ -1132,7 +1407,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <span>▼</span>
                     </button>
                     <div class="faq-content">
-                        By passing parsed in-memory content units directly between ingestion and assessment handoff, we eliminate redundant vector lookups. Furthermore, question synthesis runs with a parallel ThreadPoolExecutor against atomic KnowledgeGraph concepts, drastically reducing end-to-end latency from 3–4 minutes to under 60 seconds.
+                        By passing parsed in-memory content units directly between ingestion and assessment handoff, we eliminate redundant vector lookups. Furthermore, question synthesis runs with a parallel ThreadPoolExecutor against atomic KnowledgeGraph concepts, drastically reducing end-to-end latency from 3-4 minutes to under 60 seconds.
                     </div>
                 </div>
 
@@ -1148,16 +1423,18 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             </div>
         </section>
 
-        <!-- 🏛 Footer -->
+        <!--  Footer -->
         <footer class="footer">
             <div>
                 <strong style="color:var(--text-ink);">VisualAI</strong> &middot; <span style="color:var(--peach);font-weight:700;">STUDY WITH YOUR VISION</span> &middot; &copy; 2026 VisualAI Technologies Inc.
             </div>
             <div style="display:flex;gap:16px;">
-                <a href="/instructor" target="_blank" style="color:var(--text-muted);text-decoration:none;">👩‍🏫 Instructor Portal</a>
+                <a href="/instructor" target="_blank" style="color:var(--text-muted);text-decoration:none;"> Instructor Portal</a>
                 <a href="/docs" target="_blank" style="color:var(--text-muted);text-decoration:none;">API Docs</a>
                 <a href="/health" target="_blank" style="color:var(--text-muted);text-decoration:none;">System Health</a>
                 <a href="/sources" target="_blank" style="color:var(--text-muted);text-decoration:none;">Sources Index</a>
+                <a href="#terms" onclick="openModal('tosModal'); return false;" style="color:var(--text-muted);text-decoration:none;">Terms of Service</a>
+                <a href="#privacy" onclick="openModal('privacyModal'); return false;" style="color:var(--text-muted);text-decoration:none;">Privacy Policy</a>
             </div>
         </footer>
     </main>
@@ -1170,16 +1447,104 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         let activeEventSource = null;
         let timelineStartTime = 0;
         let timelineTimerInterval = null;
+        let activeModelData = null;
+
+        async function loadModelOptions() {
+            try {
+                const res = await fetch('/api/models');
+                if (!res.ok) return;
+                const data = await res.json();
+                activeModelData = data;
+                renderModelOptions(data);
+            } catch (err) {
+                console.warn('Could not fetch model options:', err);
+            }
+        }
+
+        function renderModelOptions(data) {
+            const headerSelect = document.getElementById('headerModelSelect');
+            const formSelect = document.getElementById('formModelSelect');
+            const chainDisplay = document.getElementById('fallbackChainDisplay');
+            const badge = document.getElementById('headerFallbackBadge');
+
+            if (data.available_models) {
+                if (headerSelect) {
+                    headerSelect.innerHTML = '';
+                    data.available_models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.name;
+                        const label = m.name + (m.provider === 'mock' ? ' (Fast Mock)' : ' (Ollama)');
+                        opt.textContent = label + (m.supports_vision ? ' + Vision' : '');
+                        if (m.name === data.active_model) opt.selected = true;
+                        headerSelect.appendChild(opt);
+                    });
+                }
+                if (formSelect) {
+                    formSelect.innerHTML = '';
+                    data.available_models.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m.name;
+                        const label = m.name + (m.provider === 'mock' ? ' (Fast Deterministic Mock)' : ' (Ollama Local)');
+                        opt.textContent = label + (m.supports_vision ? ' + Vision Support' : '');
+                        if (m.name === data.active_model) opt.selected = true;
+                        formSelect.appendChild(opt);
+                    });
+                }
+            }
+
+            if (chainDisplay && data.fallback_chain) {
+                const chainNames = data.fallback_chain.map(c => c.model);
+                chainDisplay.innerHTML = chainNames.map((name, idx) => {
+                    const isFirst = idx === 0;
+                    return `<span style="color:${isFirst ? 'var(--peach-green)' : 'var(--text-muted)'};font-weight:${isFirst ? '700' : '500'};">${escapeHtml(name)}</span>`;
+                }).join(' <span style="color:var(--text-muted);">&rarr;</span> ');
+            }
+
+            if (badge) {
+                badge.textContent = data.enable_fallback ? 'Fallback: ON' : 'Fallback: OFF';
+                badge.style.background = data.enable_fallback ? 'var(--peach-green-soft)' : 'var(--rose-soft)';
+                badge.style.color = data.enable_fallback ? 'var(--peach-green)' : 'var(--rose)';
+                badge.style.borderColor = data.enable_fallback ? 'var(--peach-green-border)' : 'var(--rose-border)';
+            }
+        }
+
+        async function switchModel(modelName) {
+            if (!modelName) return;
+            const headerSelect = document.getElementById('headerModelSelect');
+            const formSelect = document.getElementById('formModelSelect');
+
+            if (headerSelect) headerSelect.disabled = true;
+            if (formSelect) formSelect.disabled = true;
+
+            try {
+                const res = await fetch('/api/models/switch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: modelName })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Failed to switch model');
+
+                activeModelData = data;
+                renderModelOptions(data);
+            } catch (err) {
+                alert(`Could not switch model: ${err.message}`);
+                if (activeModelData) renderModelOptions(activeModelData);
+            } finally {
+                if (headerSelect) headerSelect.disabled = false;
+                if (formSelect) formSelect.disabled = false;
+            }
+        }
 
         const STAGE_LABELS = {
-            'uploading': 'Phase 1: Ingestion — Uploading Course Material',
-            'extracting': 'Phase 1: Extraction — Text Blocks & Embedded Diagrams',
-            'knowledge_graph': 'Phase 1: Ground Truth — Constructing Concept Knowledge Graph',
-            'indexing': 'Phase 1: Ground Truth — Vectorizing Layer A (Authoritative Source)',
-            'planning_assessment': 'Phase 2: Diagnostic — Prerequisite Graph Concept Pairing',
-            'generating_questions': 'Phase 2: Knowledge Profiling — Sequential Grounded Questions',
-            'validating_questions': 'Phase 2: Validation — Negative Distractors & Fisher-Yates Shuffling',
-            'assessment_ready': 'Phase 2: Diagnostic Ready — Commencing Knowledge Profiling'
+            'uploading': 'Phase 1: Ingestion - Uploading Course Material',
+            'extracting': 'Phase 1: Extraction - Text Blocks & Embedded Diagrams',
+            'knowledge_graph': 'Phase 1: Ground Truth - Constructing Concept Knowledge Graph',
+            'indexing': 'Phase 1: Ground Truth - Vectorizing Layer A (Authoritative Source)',
+            'planning_assessment': 'Phase 2: Diagnostic - Prerequisite Graph Concept Pairing',
+            'generating_questions': 'Phase 2: Knowledge Profiling - Sequential Grounded Questions',
+            'validating_questions': 'Phase 2: Validation - Negative Distractors & Fisher-Yates Shuffling',
+            'assessment_ready': 'Phase 2: Diagnostic Ready - Commencing Knowledge Profiling'
         };
 
         function escapeHtml(str) {
@@ -1192,21 +1557,21 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 .replace(/'/g, '&#039;');
         }
 
-        // 🌓 Theme Toggle
+        // Dark Theme Toggle
         function toggleTheme() {
             const html = document.documentElement;
             const currentTheme = html.getAttribute('data-theme') || 'light';
             const newTheme = currentTheme === 'light' ? 'dark' : 'light';
             html.setAttribute('data-theme', newTheme);
             localStorage.setItem('visualai_theme', newTheme);
-            document.getElementById('themeIcon').textContent = newTheme === 'dark' ? '☀️' : '🌓';
+            document.getElementById('themeIcon').textContent = newTheme === 'dark' ? 'Light' : 'Dark';
         }
 
         // Initialize Theme
         const savedTheme = localStorage.getItem('visualai_theme') || 'light';
         document.documentElement.setAttribute('data-theme', savedTheme);
 
-        // 📊 Animated Statistics Counters
+        //  Animated Statistics Counters
         function initCounters() {
             const counters = document.querySelectorAll('.stat-number');
             counters.forEach(counter => {
@@ -1231,7 +1596,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             });
         }
 
-        // ❓ FAQ Accordion Toggle
+        //  FAQ Accordion Toggle
         function toggleFaq(btn) {
             const content = btn.nextElementSibling;
             const isOpen = content.style.display === 'block';
@@ -1255,7 +1620,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             const info = document.getElementById('selectedFileInfo');
             if (file) {
                 info.style.display = 'block';
-                info.textContent = `✓ Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                info.textContent = `Selected: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
             }
         }
 
@@ -1320,10 +1685,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             stageElem.className = `stage-item status-${ev.status}`;
             let iconHtml = '○';
-            if (ev.status === 'running') iconHtml = '⏳';
-            else if (ev.status === 'completed') iconHtml = '✓';
-            else if (ev.status === 'warning') iconHtml = '⚠️';
-            else if (ev.status === 'failed') iconHtml = '✕';
+            if (ev.status === 'running') iconHtml = '';
+            else if (ev.status === 'completed') iconHtml = '•';
+            else if (ev.status === 'warning') iconHtml = '️';
+            else if (ev.status === 'failed') iconHtml = '[x]';
 
             let metaChips = '';
             if (ev.metadata) {
@@ -1419,7 +1784,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             const btn = document.getElementById('btnUpload');
             btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Uploading &amp; Ingesting...</span>';
+            btn.innerHTML = '<span> Uploading &amp; Ingesting...</span>';
             resetTimeline();
 
             const formData = new FormData();
@@ -1437,7 +1802,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 if (data.job_id) {
                     trackJobSSE(data.job_id, async () => {
                         btn.disabled = false;
-                        btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                        btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
                         const resultRes = await fetch(`/pipeline/jobs/${data.job_id}`);
                         if (!resultRes.ok) throw new Error("Cannot retrieve completed assessment");
                         const resultData = await resultRes.json();
@@ -1446,13 +1811,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         loadSources();
                     }, (err) => {
                         btn.disabled = false;
-                        btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                        btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
                         alert(`Pipeline Error: ${err.message}`);
                     });
                 }
             } catch (err) {
                 btn.disabled = false;
-                btn.innerHTML = '<span>⚡ Ingest Material &amp; Start Diagnostic Assessment</span>';
+                btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
                 if (timelineTimerInterval) clearInterval(timelineTimerInterval);
                 timelineTimerInterval = null;
                 alert(`Upload failed: ${err.message}`);
@@ -1472,7 +1837,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             const btn = document.getElementById('btnAssessExisting');
             btn.disabled = true;
-            btn.innerHTML = '<span>⏳ Generating Diagnostic Questions...</span>';
+            btn.innerHTML = '<span> Generating Diagnostic Questions...</span>';
             resetTimeline();
 
             try {
@@ -1490,11 +1855,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
 
                 btn.disabled = false;
-                btn.innerHTML = '<span>⚡ Generate Diagnostic Quiz from Material</span>';
+                btn.innerHTML = '<span> Generate Diagnostic Quiz from Material</span>';
                 startQuiz(data);
             } catch (err) {
                 btn.disabled = false;
-                btn.innerHTML = '<span>⚡ Generate Diagnostic Quiz from Material</span>';
+                btn.innerHTML = '<span> Generate Diagnostic Quiz from Material</span>';
                 if (timelineTimerInterval) clearInterval(timelineTimerInterval);
                 timelineTimerInterval = null;
                 alert(`Assessment generation failed: ${err.message}`);
@@ -1513,6 +1878,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             document.getElementById('quizSection').style.display = 'block';
             document.getElementById('resultsBox').style.display = 'none';
             document.getElementById('quizReviewSection').style.display = 'none';
+            const vidSec = document.getElementById('videoSection');
+            if (vidSec) vidSec.style.display = 'none';
+            const vidPlayer = document.getElementById('activeVideoPlayerBox');
+            if (vidPlayer) vidPlayer.style.display = 'none';
 
             renderCurrentQuestion();
         }
@@ -1561,8 +1930,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             const nextBtn = document.getElementById('btnNextQuestion');
             nextBtn.innerHTML = currentQuestionIdx === activeQuestions.length - 1
-                ? '<span>Submit Diagnostic Assessment ✓</span>'
-                : '<span>Next Question ➔</span>';
+                ? '<span>Submit Diagnostic Assessment</span>'
+                : '<span>Next Question</span>';
         }
 
         function selectOption(idx) {
@@ -1637,13 +2006,13 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             (profileSummary.strong_concepts || []).forEach(c => {
                 const s = document.createElement('span');
                 s.className = 'badge badge-green';
-                s.textContent = `✔ ${c} (Strong)`;
+                s.textContent = `${c} (Mastered)`;
                 masteriesEl.appendChild(s);
             });
             (profileSummary.weak_concepts || []).forEach(c => {
                 const s = document.createElement('span');
                 s.className = 'badge badge-amber';
-                s.textContent = `⚠ ${c} (Needs Review)`;
+                s.textContent = ` ${c} (Needs Review)`;
                 masteriesEl.appendChild(s);
             });
 
@@ -1660,6 +2029,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             } else {
                 prereqsBox.style.display = 'none';
             }
+
+            // Render Step 3 Remedial Video Targets & Dual-Layer Video RAG
+            displayVideoTargets(data);
 
             // Question-by-Question Review
             const reviewSection = document.getElementById('quizReviewSection');
@@ -1708,15 +2080,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                         if (isCorrectAnswer) {
                             optStyle += 'border:1px solid var(--emerald-border);background:var(--emerald-soft);color:#065f46;font-weight:600;';
-                            badgeText = '✓ Authoritative Correct';
+                            badgeText = 'Authoritative Correct';
                             badgeClass = 'badge badge-green';
                         }
                         if (isUserChoice && !isCorrectAnswer) {
                             optStyle += 'border:1px solid var(--rose-border);background:var(--rose-soft);color:#991b1b;font-weight:600;';
-                            badgeText = '✕ Your Choice (Incorrect)';
+                            badgeText = '[x] Your Choice (Incorrect)';
                             badgeClass = 'badge badge-rose';
                         } else if (isUserChoice && isCorrectAnswer) {
-                            badgeText = '✓ Your Choice (Correct)';
+                            badgeText = 'Your Choice (Correct)';
                             badgeClass = 'badge badge-green';
                         }
 
@@ -1768,11 +2140,379 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
+        // =========================================================================
+        //  Step 3: Video Engine Handlers & Step 4: Dual-Layer Video RAG Assistant
+        // =========================================================================
+        let currentActiveVideoJobId = null;
+        let currentActiveVideoConceptId = null;
+        let videoPollInterval = null;
+
+        function displayVideoTargets(data) {
+            const videoSec = document.getElementById('videoSection');
+            if (!videoSec) return;
+
+            const listEl = document.getElementById('videoTargetsList');
+            listEl.innerHTML = '';
+
+            let targets = [];
+            if (data.video_target_matrix && Array.isArray(data.video_target_matrix.targets) && data.video_target_matrix.targets.length > 0) {
+                targets = data.video_target_matrix.targets;
+            } else if (data.profile_summary) {
+                const weakNames = data.profile_summary.weak_concepts || [];
+                const weakIds = data.profile_summary.weak_concept_ids || [];
+                targets = weakNames.map((name, i) => ({
+                    concept_id: weakIds[i] || `CONCEPT_${name.toUpperCase().replace(/[^A-Z0-9_]/g, '_')}`,
+                    concept_name: name,
+                    target_seconds: 45,
+                    difficulty: 'intermediate',
+                    score: 0.0,
+                    directive: `Remedial visual lesson targeting diagnosed prerequisite gap in ${name}`,
+                    chunk_ids: [],
+                    source_content_ids: []
+                }));
+            }
+
+            // If score was passing, offer concept reinforcement animations for covered concepts
+            if (targets.length === 0 && currentSession && currentSession.questions) {
+                const seen = new Set();
+                currentSession.questions.forEach(q => {
+                    if (q.concept_id && !seen.has(q.concept_id)) {
+                        seen.add(q.concept_id);
+                        targets.push({
+                            concept_id: q.concept_id,
+                            concept_name: q.concept_name || q.concept_id,
+                            target_seconds: 45,
+                            difficulty: 'intermediate',
+                            score: 100.0,
+                            directive: `Concept reinforcement visual lesson for ${q.concept_name || q.concept_id}`,
+                            chunk_ids: [],
+                            source_content_ids: []
+                        });
+                    }
+                });
+            }
+
+            if (targets.length === 0) {
+                videoSec.style.display = 'none';
+                return;
+            }
+
+            videoSec.style.display = 'block';
+            document.getElementById('lblTargetsCount').textContent = `${targets.length} Target${targets.length > 1 ? 's' : ''} Ready`;
+
+            targets.forEach(tgt => {
+                const card = document.createElement('div');
+                card.className = 'video-target-card';
+
+                const infoDiv = document.createElement('div');
+                infoDiv.style.flex = '1';
+
+                const titleRow = document.createElement('div');
+                titleRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;';
+
+                const icon = document.createElement('span');
+                icon.textContent = '';
+                titleRow.appendChild(icon);
+
+                const nameStrong = document.createElement('strong');
+                nameStrong.style.cssText = 'font-size:14px;color:var(--text-ink);';
+                nameStrong.textContent = tgt.concept_name || tgt.concept_id;
+                titleRow.appendChild(nameStrong);
+
+                const durBadge = document.createElement('span');
+                durBadge.className = 'badge badge-peach-green';
+                durBadge.style.fontSize = '11px';
+                durBadge.textContent = `${tgt.target_seconds || 45}s · Manim & Voice`;
+                titleRow.appendChild(durBadge);
+
+                infoDiv.appendChild(titleRow);
+
+                const descDiv = document.createElement('div');
+                descDiv.style.cssText = 'font-size:12px;color:var(--text-muted);';
+                descDiv.textContent = tgt.directive || `Personalized visual remediation on ${tgt.concept_name}`;
+                infoDiv.appendChild(descDiv);
+
+                const btn = document.createElement('button');
+                btn.className = 'neo-btn neo-btn-peach-green';
+                btn.id = `btnGen_${tgt.concept_id}`;
+                btn.style.cssText = 'padding:8px 16px;font-size:12px;white-space:nowrap;';
+                btn.innerHTML = '<span> Generate Video Lesson</span>';
+                btn.onclick = () => triggerVideoGeneration(tgt.concept_id, tgt.concept_name, tgt.target_seconds, tgt.chunk_ids, tgt.source_content_ids);
+
+                card.appendChild(infoDiv);
+                card.appendChild(btn);
+                listEl.appendChild(card);
+            });
+        }
+
+        async function triggerVideoGeneration(conceptId, conceptName, targetSeconds, chunkIds, sourceContentIds) {
+            const btn = document.getElementById(`btnGen_${conceptId}`);
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span> Enqueuing Video Job...</span>';
+            }
+
+            const studentId = currentSession ? (currentSession.student_id || 'student_1') : (document.getElementById('studentId')?.value.trim() || 'student_1');
+            const sourceId = currentSession ? currentSession.source_id : (document.getElementById('sourceSelect')?.value || 'SRC_DEFAULT');
+
+            const statusBox = document.getElementById('videoGenStatusBox');
+            statusBox.style.display = 'block';
+            document.getElementById('lblVideoGenStage').textContent = ` Initializing Video Engine for "${conceptName}"...`;
+            document.getElementById('videoGenProgressBar').style.width = '15%';
+            document.getElementById('lblVideoGenProgress').textContent = '15%';
+            document.getElementById('lblVideoGenDetails').textContent = 'Submitting job to bounded background queue...';
+
+            try {
+                const res = await fetch('/video/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        student_id: studentId,
+                        source_id: sourceId,
+                        concept_id: conceptId,
+                        concept_name: conceptName,
+                        target_seconds: targetSeconds || 45,
+                        difficulty: 'intermediate',
+                        chunk_ids: chunkIds || [],
+                        source_content_ids: sourceContentIds || [],
+                        force: true
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                const jobId = data.job_id;
+                pollVideoJob(jobId, conceptId, conceptName, btn);
+            } catch (err) {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span> Generate Video Lesson</span>';
+                }
+                document.getElementById('lblVideoGenStage').textContent = '[Failed] Video Generation Failed';
+                document.getElementById('lblVideoGenDetails').textContent = err.message;
+                alert(`Video generation error: ${err.message}`);
+            }
+        }
+
+        function pollVideoJob(jobId, conceptId, conceptName, btn) {
+            if (videoPollInterval) clearInterval(videoPollInterval);
+
+            const stagesMap = {
+                'QUEUED': { pct: '20%', desc: 'Waiting in bounded queue slot...' },
+                'PLANNING': { pct: '35%', desc: 'LLM decomposing concept into declarative Manim scene plans...' },
+                'RENDERING': { pct: '60%', desc: 'Compiling mathematical equations and rendering Manim animations...' },
+                'GENERATING_AUDIO': { pct: '78%', desc: 'Synthesizing educational voiceover with Edge-TTS...' },
+                'ALIGNING': { pct: '88%', desc: 'Whisper aligning audio timing to visual scene timestamps...' },
+                'COMPOSITING': { pct: '94%', desc: 'FFmpeg multiplexing video stream, audio track, and captions...' },
+                'COMPLETED': { pct: '100%', desc: 'Remedial video lesson completed!' }
+            };
+
+            videoPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/video/status/${encodeURIComponent(jobId)}`);
+                    if (!res.ok) return;
+                    const job = await res.json();
+
+                    const st = (job.status || '').toUpperCase();
+                    const stageInfo = stagesMap[st] || { pct: '50%', desc: job.stage || 'Rendering video lesson...' };
+
+                    document.getElementById('videoGenProgressBar').style.width = stageInfo.pct;
+                    document.getElementById('lblVideoGenProgress').textContent = stageInfo.pct;
+                    document.getElementById('lblVideoGenStage').textContent = ` ${conceptName}: ${st.replace(/_/g, ' ')}`;
+                    document.getElementById('lblVideoGenDetails').textContent = stageInfo.desc;
+
+                    if (st === 'COMPLETED') {
+                        clearInterval(videoPollInterval);
+                        videoPollInterval = null;
+
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<span>Video Ready (Re-generate)</span>';
+                        }
+
+                        // Load and display video player
+                        const playerBox = document.getElementById('activeVideoPlayerBox');
+                        playerBox.style.display = 'block';
+                        document.getElementById('activeVideoTitle').textContent = `${conceptName} - Remedial Video Lesson`;
+
+                        const videoEl = document.getElementById('remedialVideoPlayer');
+                        const sourceEl = document.getElementById('videoSource');
+                        sourceEl.src = `/video/${encodeURIComponent(jobId)}/stream?t=${Date.now()}`;
+                        videoEl.load();
+
+                        document.getElementById('btnDownloadVideo').href = `/video/${encodeURIComponent(jobId)}`;
+
+                        currentActiveVideoJobId = jobId;
+                        currentActiveVideoConceptId = conceptId;
+
+                        videoEl.ontimeupdate = () => {
+                            const cur = videoEl.currentTime || 0;
+                            const mins = Math.floor(cur / 60);
+                            const secs = Math.floor(cur % 60);
+                            document.getElementById('lblPlaybackTime').textContent = `Time: ${mins}:${secs < 10 ? '0' : ''}${secs}`;
+                        };
+
+                        document.getElementById('videoGenStatusBox').style.display = 'none';
+                        playerBox.scrollIntoView({ behavior: 'smooth' });
+                    } else if (st === 'FAILED') {
+                        clearInterval(videoPollInterval);
+                        videoPollInterval = null;
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<span> Retry Generation</span>';
+                        }
+                        document.getElementById('lblVideoGenStage').textContent = '[Failed] Generation Failed';
+                        document.getElementById('lblVideoGenDetails').textContent = job.error_message || 'Video compositor encountered an error.';
+                    }
+                } catch (e) {
+                    console.error('Error polling video job:', e);
+                }
+            }, 2000);
+        }
+
+        async function askVideoRAG() {
+            const input = document.getElementById('qaQuestionInput');
+            const q = input.value.trim();
+            if (!q) return;
+
+            const btn = document.getElementById('btnAskRAG');
+            btn.disabled = true;
+
+            const loading = document.getElementById('ragLoading');
+            loading.style.display = 'block';
+
+            const answerBox = document.getElementById('ragAnswerBox');
+            answerBox.style.display = 'none';
+
+            const videoEl = document.getElementById('remedialVideoPlayer');
+            const curTime = (videoEl && !isNaN(videoEl.currentTime)) ? videoEl.currentTime : 0;
+
+            const studentId = currentSession ? (currentSession.student_id || 'student_1') : 'student_1';
+            const sourceId = currentSession ? currentSession.source_id : (document.getElementById('sourceSelect')?.value || 'SRC_DEFAULT');
+
+            try {
+                const res = await fetch('/qa/answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: studentId,
+                        source_id: sourceId,
+                        question: q,
+                        video_id: currentActiveVideoJobId || undefined,
+                        current_timestamp: curTime > 0 ? curTime : undefined,
+                        active_concept_id: currentActiveVideoConceptId || undefined
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                loading.style.display = 'none';
+                answerBox.style.display = 'block';
+
+                const answerTextEl = document.getElementById('ragAnswerText');
+                answerTextEl.textContent = data.answer;
+
+                const citBox = document.getElementById('ragCitationsBox');
+                citBox.innerHTML = '';
+
+                if (data.citations && data.citations.length > 0) {
+                    const citHeader = document.createElement('div');
+                    citHeader.style.cssText = 'font-weight:700;margin-bottom:4px;color:var(--text-ink);';
+                    citHeader.textContent = 'Authoritative Ground Truth Citations:';
+                    citBox.appendChild(citHeader);
+
+                    data.citations.forEach(c => {
+                        const citItem = document.createElement('div');
+                        citItem.style.cssText = 'margin-bottom:4px;display:flex;align-items:center;gap:6px;';
+
+                        const layerBadge = document.createElement('span');
+                        layerBadge.className = c.layer === 'B' ? 'badge badge-blue' : 'badge badge-peach-green';
+                        layerBadge.style.fontSize = '10px';
+                        layerBadge.textContent = c.layer === 'B' ? 'LAYER B (VIDEO)' : 'LAYER A (TEXTBOOK)';
+                        citItem.appendChild(layerBadge);
+
+                        const quote = document.createElement('span');
+                        quote.style.fontStyle = 'italic';
+                        quote.textContent = `"${(c.quote || '').slice(0, 90)}${c.quote && c.quote.length > 90 ? '...' : ''}"`;
+                        citItem.appendChild(quote);
+
+                        if (c.timestamp_start !== null && c.timestamp_start !== undefined && videoEl) {
+                            const jumpBtn = document.createElement('button');
+                            jumpBtn.className = 'neo-btn neo-btn-peach-green';
+                            jumpBtn.style.cssText = 'padding:2px 8px;font-size:10px;margin-left:auto;';
+                            jumpBtn.innerHTML = `<span>▶ ${Math.floor(c.timestamp_start)}s</span>`;
+                            jumpBtn.onclick = () => {
+                                videoEl.currentTime = c.timestamp_start;
+                                videoEl.play();
+                            };
+                            citItem.appendChild(jumpBtn);
+                        }
+
+                        citBox.appendChild(citItem);
+                    });
+                } else {
+                    citBox.textContent = 'Grounded strictly in Layer A vector index with zero hallucination loops.';
+                }
+            } catch (err) {
+                loading.style.display = 'none';
+                answerBox.style.display = 'block';
+                document.getElementById('ragAnswerText').textContent = `Error getting answer: ${err.message}`;
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             loadSources();
             initCounters();
+            loadModelOptions();
         });
+    
+        function openModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'flex';
+        }
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        }
+    
     </script>
+
+    <!-- Terms of Service Modal -->
+    <div id="tosModal" class="modal-overlay" onclick="if(event.target===this)closeModal('tosModal')">
+        <div class="modal-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="font-size:20px;font-weight:700;">Terms of Service</h3>
+                <button class="neo-btn" onclick="closeModal('tosModal')">Close</button>
+            </div>
+            <div style="font-size:14px;color:var(--text-body);line-height:1.6;">
+                <p style="margin-bottom:12px;">VisualAI provides grounded educational assessment and programmatic video generation based strictly on user-supplied course materials.</p>
+                <p style="margin-bottom:12px;">1. Ground Truth Integrity: All diagnostic questions and video explanations are derived from verified Layer A source chunks.</p>
+                <p style="margin-bottom:12px;">2. User Data Scope: Ingested documents and student learning profiles remain isolated to the designated student identifier.</p>
+                <p>3. Anti-Loop Protection: Learning sessions employ deterministic safeguards to avoid cognitive fatigue and loop cycles.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Privacy Policy Modal -->
+    <div id="privacyModal" class="modal-overlay" onclick="if(event.target===this)closeModal('privacyModal')">
+        <div class="modal-card">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+                <h3 style="font-size:20px;font-weight:700;">Privacy Policy</h3>
+                <button class="neo-btn" onclick="closeModal('privacyModal')">Close</button>
+            </div>
+            <div style="font-size:14px;color:var(--text-body);line-height:1.6;">
+                <p style="margin-bottom:12px;">VisualAI respects user privacy and enforces strict data boundary controls.</p>
+                <p style="margin-bottom:12px;">1. Ingestion Isolation: Uploaded materials are processed locally and never shared across student identities.</p>
+                <p style="margin-bottom:12px;">2. Telemetry and Analytics: Learning performance metrics are used solely to generate targeted remediation videos.</p>
+                <p>3. Retention: Artifacts and profiles are securely stored under verified runtime paths.</p>
+            </div>
+        </div>
+    </div>
+    
 </body>
 </html>
 """
@@ -1781,5 +2521,5 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 @router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 @router.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard():
-    """VisualAI dashboard — Interactive test runner and complete pipeline documentation."""
+    """VisualAI dashboard - Interactive test runner and complete pipeline documentation."""
     return HTMLResponse(content=DASHBOARD_HTML)

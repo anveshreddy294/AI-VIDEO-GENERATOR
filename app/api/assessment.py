@@ -1,4 +1,4 @@
-"""Step 2 API — Student Knowledge Profiling & Video Target Matrix Bridge.
+"""Step 2 API - Student Knowledge Profiling & Video Target Matrix Bridge.
 
 Endpoints:
 - POST /assessment/start               → Ingest Step 1 payload + Plan + Generate + Dispatch safe quiz
@@ -48,7 +48,7 @@ from ..services.assessment.video_target import (
 from ..services.registry import get_source_record, load_knowledge_graph, load_rich_chunks
 from ..services.schemas import ConceptNode, KnowledgeGraph
 
-router = APIRouter(prefix="/assessment", tags=["Step 2 — Assessment & Profiling"])
+router = APIRouter(prefix="/assessment", tags=["Step 2 - Assessment & Profiling"])
 
 # Execution parameters bound directly to central settings
 MAX_QUESTIONS = settings.max_questions
@@ -358,7 +358,7 @@ def start_assessment(
 
     candidates_to_run = primary_candidates[:target_questions]
     if candidates_to_run:
-        with ThreadPoolExecutor(max_workers=min(len(candidates_to_run), 5)) as pool:
+        with ThreadPoolExecutor(max_workers=min(len(candidates_to_run), 2)) as pool:
             futures = [pool.submit(_generate_candidate, c, "definition") for c in candidates_to_run]
             for f in futures:
                 if len(questions) >= target_questions:
@@ -456,6 +456,40 @@ def start_assessment(
             f"generated={len(questions)} shortfall={shortfall} "
             f"student='{req_student_id}' source='{req_source_id}'"
         )
+
+    # Zero-question rescue: If no questions could be generated, synthesize questions directly from source context
+    if not questions:
+        logger.warning("[assessment] Rescuing zero-question session using grounded synthesis")
+        from ..services.assessment.generator import _generate_grounded_fallback, search_concept_chunks
+        rescue_concepts = [c for c in primary_candidates if c.concept_id not in kill_switch_ids] or [
+            c for c in reserve_candidates if c.concept_id not in kill_switch_ids
+        ] or list(all_available_concepts.values())
+
+        for idx, c in enumerate(rescue_concepts):
+            if len(questions) >= min(target_questions, 3):
+                break
+            v = VARIANTS[idx % len(VARIANTS)]
+            c_chunks = search_concept_chunks(c, req_source_id, limit=3, provided_chunks=provided_chunks)
+            if not c_chunks and provided_chunks:
+                c_chunks = [ch for ch in provided_chunks if not ch.get("source_id") or ch.get("source_id") == req_source_id][:2]
+            if c_chunks:
+                rescue_q = _generate_grounded_fallback(
+                    concept=c,
+                    chunks=c_chunks,
+                    chunk_ids=[ch.get("chunk_id", "") for ch in c_chunks if ch.get("chunk_id")],
+                    content_ids=[cid for ch in c_chunks for cid in ch.get("content_ids", [])],
+                    page_start=c_chunks[0].get("page_start", c_chunks[0].get("page")),
+                    page_end=c_chunks[0].get("page_end"),
+                    timestamp_start=c_chunks[0].get("timestamp_start"),
+                    timestamp_end=c_chunks[0].get("timestamp_end"),
+                    source_id=req_source_id,
+                    difficulty="intermediate",
+                    variant_type=v,
+                    fallback_reason="Grounded zero-question rescue",
+                )
+                if not is_duplicate(rescue_q, questions):
+                    questions.append(rescue_q)
+                    logger.info(f"[assessment] Accepted rescue grounded question {len(questions)}/{target_questions}: {c.name}")
 
     if not questions:
         session.status = "FAILED"

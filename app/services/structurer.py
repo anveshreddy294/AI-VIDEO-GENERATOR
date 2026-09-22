@@ -27,7 +27,7 @@ Respond with STRICT JSON only — no markdown fences, no commentary.
 
 Schema:
 {
-  "topic_name": "<short overall title>",
+  "topic_name": "<Short overarching topic name based on the material>",
   "difficulty_level": "beginner | intermediate | advanced",
   "chapters": [
     {
@@ -37,31 +37,26 @@ Schema:
         {
           "id": "SEC1_1",
           "title": "<Section Title>",
-          "content_ids": ["<CU_ID_1>", "<CU_ID_2>"]
+          "content_ids": ["<EXACT_CU_ID>"]
         }
       ]
     }
   ],
   "concepts": [
     {
-      "concept_id": "CONCEPT_FORCE",
-      "name": "Force",
-      "definition": "...",
+      "concept_id": "<CONCEPT_NAME_IN_CAPS_UNDERSCORES>",
+      "name": "<Concept Name Extracted From Material>",
+      "definition": "<Clear 1-2 sentence definition directly from the material>",
       "prerequisite_concept_ids": [],
-      "source_content_ids": ["<CU_ID_1>"]
-    },
-    {
-      "concept_id": "CONCEPT_NEWTON_2",
-      "name": "Newton's Second Law",
-      "definition": "...",
-      "prerequisite_concept_ids": ["CONCEPT_FORCE"],
-      "source_content_ids": ["<CU_ID_1>", "<CU_ID_2>"]
+      "source_content_ids": ["<EXACT_CU_ID>"]
     }
   ]
 }
 
 RULES:
-- concept_id MUST be uppercase with words separated by underscores (e.g. CONCEPT_NEWTON_SECOND_LAW).
+- Extract concepts ONLY from the provided material text below. Do NOT invent concepts from other domains.
+- You MUST provide the top-level "concepts" array. Do NOT output "nodes" or "edges".
+- concept_id MUST be uppercase with words separated by underscores (e.g. CONCEPT_TOPIC_NAME).
 - prerequisite_concept_ids MUST reference valid concept_ids defined in the same list.
 - source_content_ids MUST be drawn from the CU IDs in the provided material.
 - difficulty_level MUST be one of: beginner, intermediate, advanced.
@@ -71,10 +66,130 @@ MATERIAL CONTENT UNITS:
 
 
 def _generate_with_llm(payload: str) -> str:
-    """Generate content using the active LLM provider (Ollama or Mock)."""
-    from .assessment.providers import get_default_provider
-    provider = get_default_provider()
-    return provider.generate_content(payload)
+    """Generate content using ModelManager with runtime switching and automatic fallback."""
+    from ..core.model_manager import model_manager
+    timeout = max(100.0, float(getattr(settings, "ollama_timeout", 120.0)))
+    raw_response, model_used = model_manager.generate_with_fallback(
+        payload,
+        is_json=True,
+        timeout=timeout,
+    )
+    return raw_response
+
+
+def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[str, Any]:
+    """Auto-repair and normalize LLM responses into compliant concepts schema."""
+    if not isinstance(data, dict):
+        return {}
+
+    cu_map = {u.content_id: u for u in units}
+    valid_cu_ids = list(cu_map.keys())
+    fallback_cu_id = valid_cu_ids[0] if valid_cu_ids else "CU_DEFAULT"
+
+    # If "concepts" is missing or empty, search for alternative keys like "nodes", "topics", "key_concepts", "items"
+    raw_concepts = data.get("concepts")
+    if not raw_concepts or not isinstance(raw_concepts, list):
+        converted = []
+        edge_map: dict[str, list[str]] = {}
+        for edge in data.get("edges", []):
+            if isinstance(edge, dict):
+                src, tgt = str(edge.get("source", "")), str(edge.get("target", ""))
+                if src and tgt:
+                    edge_map.setdefault(tgt, []).append(src)
+
+        candidates = (
+            data.get("nodes")
+            or data.get("topics")
+            or data.get("key_concepts")
+            or data.get("items")
+            or []
+        )
+        if isinstance(candidates, list):
+            for i, item in enumerate(candidates):
+                if isinstance(item, str):
+                    name = item.strip()
+                    defn = f"{name} as documented in the study material."
+                    nid = str(i + 1)
+                elif isinstance(item, dict):
+                    name = str(item.get("text") or item.get("name") or item.get("title") or item.get("label") or f"Concept {i+1}").strip()
+                    defn = str(item.get("definition") or item.get("description") or item.get("text") or f"{name} as documented in the study material.").strip()
+                    nid = str(item.get("id", i + 1))
+                else:
+                    continue
+
+                if len(name) < 3:
+                    continue
+
+                cid = re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{name.upper()}")[:35].strip("_") or f"CONCEPT_{i+1:03d}"
+                matched_cu = None
+                for u in units:
+                    if name.lower() in (u.text or "").lower():
+                        matched_cu = u.content_id
+                        break
+
+                prereqs = [
+                    re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{p.upper()}")[:35].strip("_")
+                    for p in edge_map.get(nid, [])
+                ]
+                converted.append({
+                    "concept_id": cid,
+                    "name": name,
+                    "definition": defn,
+                    "prerequisite_concept_ids": prereqs,
+                    "source_content_ids": [matched_cu or fallback_cu_id],
+                })
+        if converted:
+            data["concepts"] = converted
+
+    # Normalize existing concepts list if present
+    if "concepts" in data and isinstance(data["concepts"], list):
+        repaired = []
+        known_ids: set[str] = set()
+        for idx, c in enumerate(data["concepts"]):
+            if not isinstance(c, dict):
+                continue
+            name = str(c.get("name") or c.get("title") or f"Concept {idx+1}").strip()
+            cid = str(c.get("concept_id") or "").strip()
+            if not cid:
+                cid = re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{name.upper()}")[:35].strip("_") or f"CONCEPT_{idx+1:03d}"
+            if cid in known_ids:
+                cid = f"{cid}_{idx+1}"
+            known_ids.add(cid)
+            c["concept_id"] = cid
+            c["name"] = name
+
+            defn = str(c.get("definition") or c.get("description") or "").strip()
+            if not defn:
+                defn = f"{name} as defined in the curriculum materials."
+            c["definition"] = defn
+
+            refs = c.get("source_content_ids")
+            valid_refs = [r for r in refs if r in cu_map] if isinstance(refs, list) else []
+            if not valid_refs:
+                matched_cu = None
+                for u in units:
+                    if name.lower() in (u.text or "").lower():
+                        matched_cu = u.content_id
+                        break
+                valid_refs = [matched_cu or fallback_cu_id]
+            c["source_content_ids"] = valid_refs
+
+            repaired.append(c)
+
+        # Sanitize prerequisites: remove missing parents and self-loops
+        for c in repaired:
+            parents = c.get("prerequisite_concept_ids")
+            if isinstance(parents, list):
+                c["prerequisite_concept_ids"] = [
+                    p for p in parents
+                    if p in known_ids and p != c["concept_id"]
+                ]
+            else:
+                c["prerequisite_concept_ids"] = []
+
+        data["concepts"] = repaired
+
+    return data
 
 
 def process_structure_and_concepts(
@@ -111,6 +226,22 @@ def process_structure_and_concepts(
             raw_response = _generate_with_llm(payload)
             data = _parse_json(raw_response)
             dur_ms = int((time.time() - start_t) * 1000)
+
+            # Auto-repair and normalize LLM response into concepts schema
+            data = _normalize_llm_data(data, units)
+
+            # Check grounding overlap: ensure returned concepts aren't hallucinated boilerplate
+            raw_concepts = data.get("concepts", [])
+            if raw_concepts and isinstance(raw_concepts, list):
+                extracted_names = [c.get("name", "").lower() for c in raw_concepts if c.get("name")]
+                has_overlap = any(
+                    any(word in material_text.lower() for word in name.split() if len(word) >= 4)
+                    for name in extracted_names
+                )
+                if not has_overlap and any("force" in name or "newton" in name for name in extracted_names) and "force" not in material_text.lower():
+                    logger.warning("[structurer] LLM returned hallucinated concepts unrelated to source; using grounded fallback")
+                    return _fallback_outputs(units, fallback_reason="Hallucinated boilerplate concepts", duration_ms=dur_ms)
+
             return _assemble_outputs(data, units, duration_ms=dur_ms)
         except Exception as exc:
             last_err = str(exc)
@@ -122,7 +253,7 @@ def process_structure_and_concepts(
             )
 
     dur_ms = int((time.time() - start_t) * 1000)
-    logger.warning("[structurer] LLM structure extraction failed after retries. Ingestion stopped. Error: %s", last_err)
+    logger.warning("[structurer] LLM structure extraction failed after retries. Error: %s", last_err)
     raise RuntimeError(f"Knowledge extraction failed after two attempts: {last_err}")
 
 
@@ -287,15 +418,16 @@ def _fallback_outputs(
                     )
 
             # Clean headings
-            if 4 <= len(line) <= 50 and not line.endswith(".") and not line.startswith("http") and not line.startswith("•"):
+            if 4 <= len(line) <= 60 and not line.endswith(".") and not line.startswith("http") and not line.startswith("•"):
                 clean_hd = re.sub(
                     r"^(Section \d+(\.\d+)*:?|Chapter \d+:?|Description:?|Background:?)\s*",
                     "",
                     line,
                     flags=re.IGNORECASE,
-                ).strip()
-                if 4 <= len(clean_hd) <= 40 and clean_hd not in seen_names and len(seen_names) < 8:
-                    if clean_hd.lower() not in ("parameter", "parameters", "notes", "summary", "overview", "introduction"):
+                ).strip().rstrip(":")
+                ignore_starts = ("code ", "git ", "pip ", "open ", "find", "change ", "expected", "select-string", "select ", "run ", "then ", "now ", "also ", "you should ", "for an ", "you can ", "if ")
+                if 4 <= len(clean_hd) <= 45 and clean_hd not in seen_names and len(seen_names) < 6:
+                    if clean_hd.lower() not in ("parameter", "parameters", "notes", "summary", "overview", "introduction") and not clean_hd.lower().startswith(ignore_starts):
                         seen_names.add(clean_hd)
                         cid_token = re.sub(r"[^A-Z0-9_]", "_", clean_hd.upper()).strip("_")
                         import hashlib
@@ -310,16 +442,27 @@ def _fallback_outputs(
                             source_content_ids=[u.content_id],
                         )
 
-    # Fallback to general concepts if nothing was matched
-    if not concepts_dict and units:
-        for idx, u in enumerate(units[:4]):
-            cid = f"CONCEPT_{idx+1:03d}"
-            snippet = (u.text or "")[:120].strip()
-            name = snippet.split("\n")[0][:40] or f"Concept {idx+1}"
+    # Ensure at least 2 distinct concepts are produced from units
+    if len(concepts_dict) < 2 and units:
+        for idx, u in enumerate(units):
+            if len(concepts_dict) >= 3:
+                break
+            txt = (u.text or "").strip()
+            if len(txt) < 15 or any(u.content_id in c.source_content_ids for c in concepts_dict.values()):
+                continue
+            first_line = txt.split("\n")[0].strip().rstrip(":")
+            if first_line.startswith(("-", "=", "*")):
+                continue
+            words = [w for w in re.findall(r"[A-Za-z0-9_\-\.]{2,}", first_line) if w.lower() not in ("the", "this", "that", "with", "from", "then", "also", "open", "find", "change", "now")]
+            cand_name = " ".join(words[:4]).title() if words else f"Topic Segment {len(concepts_dict)+1}"
+            if cand_name in seen_names:
+                continue
+            seen_names.add(cand_name)
+            cid = f"CONCEPT_{len(concepts_dict)+1:03d}"
             concepts_dict[cid] = ConceptNode(
                 concept_id=cid,
-                name=name,
-                definition=(u.text or "")[:250].strip() or f"Foundational knowledge for {name}.",
+                name=cand_name,
+                definition=txt[:250].strip(),
                 prerequisite_concept_ids=list(concepts_dict.keys())[-1:] if concepts_dict else [],
                 related_concept_ids=[],
                 source_content_ids=[u.content_id],
@@ -352,4 +495,12 @@ def _fallback_outputs(
 
 def _parse_json(raw: str) -> dict:
     without_fences = re.sub(r"```(?:json)?", "", raw).strip()
-    return json.loads(without_fences)
+    match = re.search(r"(\{.*\})", without_fences, re.DOTALL)
+    if match:
+        without_fences = match.group(1).strip()
+    try:
+        return json.loads(without_fences)
+    except Exception:
+        cleaned = re.sub(r",\s*([\}\]])", r"\1", without_fences)
+        return json.loads(cleaned)
+

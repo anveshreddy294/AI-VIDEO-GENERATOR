@@ -1,4 +1,4 @@
-"""POST /upload — Reception Point & Full Step 1 Ingestion Pipeline.
+"""POST /upload - Reception Point & Full Step 1 Ingestion Pipeline.
 
 Executes the complete Step 1 sequence:
 1. User Input & Temporary Save
@@ -39,7 +39,7 @@ from ..services.validator import ValidationFailed, validate_ingestion_quality
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/upload", tags=["Step 1 — Ingestion"])
+router = APIRouter(prefix="/upload", tags=["Step 1 - Ingestion"])
 
 # SEC-006: Configurable maximum upload size (default: 200 MB)
 _MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "200")) * 1024 * 1024
@@ -61,7 +61,7 @@ def _validate_mime(filename: str, content_type: str | None) -> None:
     """SEC-007: Verify the Content-Type header matches the declared extension.
 
     Protects against trivial extension spoofing (e.g. a .php renamed to .pdf).
-    We perform a best-effort check — browser Content-Type can be unreliable,
+    We perform a best-effort check - browser Content-Type can be unreliable,
     so we only reject when there is a clear, unambiguous mismatch.
     """
     if not content_type:
@@ -69,7 +69,7 @@ def _validate_mime(filename: str, content_type: str | None) -> None:
     ext = Path(filename).suffix.lstrip(".").lower()
     allowed_mimes = _MIME_ALLOWLIST.get(ext)
     if allowed_mimes is None:
-        return  # Extension not in map — already blocked by is_allowed check
+        return  # Extension not in map - already blocked by is_allowed check
     ct_base = content_type.split(";")[0].strip().lower()
     # Allow generic octet-stream from any uploader
     if ct_base == "application/octet-stream":
@@ -197,7 +197,17 @@ async def upload_file(
             units_to_process = raw_units
 
         # Step 7 & 8: Structure Detection, Concept Extraction & Knowledge Graph
-        enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, units_to_process)
+        try:
+            enriched_units, knowledge_graph, blueprint = await asyncio.to_thread(process_structure_and_concepts, units_to_process)
+        except Exception as exc:
+            logger.warning("[upload] LLM structure extraction failed, falling back to rule-based extraction: %s", exc)
+            from ..services.structurer import _fallback_outputs
+            enriched_units, knowledge_graph, blueprint = _fallback_outputs(units_to_process, fallback_reason=str(exc))
+
+        if not knowledge_graph or not knowledge_graph.concepts:
+            from ..services.structurer import _fallback_outputs
+            enriched_units, knowledge_graph, blueprint = _fallback_outputs(units_to_process, fallback_reason="Empty concepts after extraction")
+
 
         # Persist normalized ContentUnits and Knowledge Graph to registry storage
         save_content_units(source_id, enriched_units)

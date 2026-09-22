@@ -92,29 +92,66 @@ def _render_with_manim(plan: VideoPlan, output_mp4: Path) -> Path:
                     self.play(FadeOut(group, shift=DOWN * 0.5), run_time=min(1.0, dur * 0.3))
 
                 elif stype == SceneType.EQUATION:
-                    eq_str = scene.equation or "F = ma"
-                    label_str = scene.label or f"Governing Law: {plan.concept_name}"
-                    eq = Text(eq_str, font_size=56, color=YELLOW, weight="BOLD")
-                    lbl = Text(label_str, font_size=26, color=BLUE)
-                    lbl.next_to(eq, UP, buff=0.5)
-                    group = VGroup(lbl, eq).move_to(ORIGIN)
-                    self.play(Write(eq), FadeIn(lbl), run_time=min(2.0, dur * 0.35))
+                    has_real_equation = bool(scene.equation and any(c in scene.equation for c in ("=", "<", ">", "\\", "+", "-", "*", "/")))
+                    if has_real_equation:
+                        eq_str = scene.equation
+                        label_str = scene.label or f"Governing Law: {plan.concept_name}"
+                        eq = Text(eq_str, font_size=52, color=YELLOW, weight="BOLD")
+                        lbl = Text(label_str, font_size=26, color=BLUE)
+                        lbl.next_to(eq, UP, buff=0.5)
+                        group = VGroup(lbl, eq).move_to(ORIGIN)
+                    else:
+                        lbl = Text((scene.label or f"Core Principle: {plan.concept_name}")[:50], font_size=28, color=YELLOW, weight="BOLD")
+                        body = Text((scene.text or scene.equation or plan.concept_name)[:80], font_size=22, color=WHITE)
+                        body.next_to(lbl, DOWN, buff=0.4)
+                        box = Rectangle(width=10.0, height=2.4, color=BLUE, fill_opacity=0.3)
+                        group = VGroup(box, lbl, body).move_to(ORIGIN)
+                    self.play(FadeIn(group), run_time=min(2.0, dur * 0.35))
                     self.wait(max(0.5, dur * 0.4))
                     self.play(FadeOut(group), run_time=min(1.0, dur * 0.25))
 
                 elif stype == SceneType.DIAGRAM:
-                    # Diagram: Mass block with force vector arrow and acceleration
-                    box = Square(side_length=1.8, color=BLUE, fill_opacity=0.6)
-                    obj_label = Text(scene.object_label or "Mass (m)", font_size=20, color=WHITE).move_to(box)
-                    arrow = Arrow(LEFT * 2.5, LEFT * 0.9, color=YELLOW, buff=0.1)
-                    force_lbl = Text(scene.force_label or "Force (F)", font_size=20, color=YELLOW).next_to(arrow, UP, buff=0.1)
-                    diag_group = VGroup(box, obj_label, arrow, force_lbl).move_to(LEFT * 1.5)
+                    is_physics = (
+                        scene.diagram_type == "force_box"
+                        and (bool(scene.force_label) or "force" in plan.concept_name.lower() or "newton" in plan.concept_name.lower())
+                    )
+                    if is_physics:
+                        # Diagram: Mass block with force vector arrow and acceleration
+                        box = Square(side_length=1.8, color=BLUE, fill_opacity=0.6)
+                        obj_label = Text(scene.object_label or "Mass (m)", font_size=20, color=WHITE).move_to(box)
+                        arrow = Arrow(LEFT * 2.5, LEFT * 0.9, color=YELLOW, buff=0.1)
+                        force_lbl = Text(scene.force_label or "Force (F)", font_size=20, color=YELLOW).next_to(arrow, UP, buff=0.1)
+                        diag_group = VGroup(box, obj_label, arrow, force_lbl).move_to(LEFT * 1.5)
 
-                    self.play(FadeIn(diag_group), run_time=min(1.5, dur * 0.25))
-                    # Animate accelerating to the right
-                    self.play(diag_group.animate.shift(RIGHT * 3.0), run_time=min(3.0, dur * 0.5))
-                    self.wait(max(0.5, dur * 0.15))
-                    self.play(FadeOut(diag_group), run_time=min(1.0, dur * 0.1))
+                        self.play(FadeIn(diag_group), run_time=min(1.5, dur * 0.25))
+                        # Animate accelerating to the right
+                        self.play(diag_group.animate.shift(RIGHT * 3.0), run_time=min(3.0, dur * 0.5))
+                        self.wait(max(0.5, dur * 0.15))
+                        self.play(FadeOut(diag_group), run_time=min(1.0, dur * 0.1))
+                    else:
+                        # Modern Process Flow / Architecture Diagram for general concepts
+                        t_lbl = Text((scene.title or f"{plan.concept_name} Structural Flow")[:35], font_size=26, color=YELLOW, weight="BOLD").to_edge(UP, buff=1.2)
+
+                        box1 = Rectangle(width=2.8, height=1.5, color=BLUE, fill_opacity=0.4).shift(LEFT * 3.6)
+                        t1 = Text((scene.subtitle or "Context / Input")[:18], font_size=15, color=WHITE).move_to(box1)
+                        g1 = VGroup(box1, t1)
+
+                        arr1 = Arrow(LEFT * 2.1, LEFT * 1.1, color=YELLOW, buff=0.1)
+
+                        box2 = Rectangle(width=3.2, height=1.7, color=YELLOW, fill_opacity=0.5).move_to(ORIGIN)
+                        t2 = Text((scene.label or plan.concept_name)[:20], font_size=17, color=WHITE, weight="BOLD").move_to(box2)
+                        g2 = VGroup(box2, t2)
+
+                        arr2 = Arrow(RIGHT * 1.1, RIGHT * 2.1, color=YELLOW, buff=0.1)
+
+                        box3 = Rectangle(width=2.8, height=1.5, color=GREEN, fill_opacity=0.4).shift(RIGHT * 3.6)
+                        t3 = Text("Applied Outcome", font_size=15, color=WHITE).move_to(box3)
+                        g3 = VGroup(box3, t3)
+
+                        flow_group = VGroup(t_lbl, g1, arr1, g2, arr2, g3).move_to(ORIGIN)
+                        self.play(FadeIn(flow_group), run_time=min(2.0, dur * 0.35))
+                        self.wait(max(0.5, dur * 0.45))
+                        self.play(FadeOut(flow_group), run_time=min(1.0, dur * 0.2))
 
                 elif stype == SceneType.SUMMARY:
                     title = Text("Key Takeaways", font_size=36, color=YELLOW, weight="BOLD").to_edge(UP, buff=1.0)
@@ -217,36 +254,82 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
                 draw.text((width // 2 - len(sub) * 6, height // 2 + 10), sub, fill=(229, 231, 235))
 
             elif stype == SceneType.EQUATION:
-                eq = scene.equation or "F = ma"
-                lbl = scene.label or f"Governing Formula: {plan.concept_name}"
-                draw.text((width // 2 - len(lbl) * 7, height // 2 - 70), lbl, fill=(96, 165, 250))
-                # Draw highlighted equation box
-                box_w = max(260, len(eq) * 24)
-                draw.rectangle(
-                    [width // 2 - box_w // 2, height // 2 - 20, width // 2 + box_w // 2, height // 2 + 60],
-                    outline=(250, 204, 21),
-                    width=3,
-                )
-                draw.text((width // 2 - len(eq) * 11, height // 2 + 5), eq, fill=(250, 204, 21))
+                has_real_equation = bool(scene.equation and any(c in scene.equation for c in ("=", "<", ">", "\\", "+", "-", "*", "/")))
+                if has_real_equation:
+                    eq = scene.equation
+                    lbl = scene.label or f"Governing Formula: {plan.concept_name}"
+                    draw.text((width // 2 - len(lbl) * 7, height // 2 - 70), lbl, fill=(96, 165, 250))
+                    box_w = max(260, len(eq) * 24)
+                    draw.rectangle(
+                        [width // 2 - box_w // 2, height // 2 - 20, width // 2 + box_w // 2, height // 2 + 60],
+                        outline=(250, 204, 21),
+                        width=3,
+                    )
+                    draw.text((width // 2 - len(eq) * 11, height // 2 + 5), eq, fill=(250, 204, 21))
+                else:
+                    lbl = (scene.label or f"Core Principle: {plan.concept_name}")[:55]
+                    body = (scene.text or scene.equation or plan.concept_name)[:75]
+                    draw.text((width // 2 - len(lbl) * 7, height // 2 - 60), lbl, fill=(250, 204, 21))
+                    card_w = min(840, max(360, len(body) * 13))
+                    draw.rectangle(
+                        [width // 2 - card_w // 2, height // 2 - 10, width // 2 + card_w // 2, height // 2 + 60],
+                        outline=(96, 165, 250),
+                        fill=(31, 41, 55),
+                        width=2,
+                    )
+                    draw.text((width // 2 - len(body) * 5, height // 2 + 15), body, fill=(255, 255, 255))
 
             elif stype == SceneType.DIAGRAM:
-                # Animate a box moving across with force arrow
-                x_pos = int(250 + t_ratio * 400)
-                y_pos = height // 2 - 60
-                # Mass box
-                draw.rectangle(
-                    [x_pos, y_pos, x_pos + 120, y_pos + 100],
-                    fill=(59, 130, 246),
-                    outline=(147, 197, 253),
-                    width=2,
+                is_physics = (
+                    scene.diagram_type == "force_box"
+                    and (bool(scene.force_label) or "force" in plan.concept_name.lower() or "newton" in plan.concept_name.lower())
                 )
-                draw.text((x_pos + 25, y_pos + 40), "Mass (m)", fill=(255, 255, 255))
-                # Force arrow
-                draw.line([x_pos - 100, y_pos + 50, x_pos - 10, y_pos + 50], fill=(250, 204, 21), width=4)
-                draw.polygon([(x_pos - 10, y_pos + 42), (x_pos, y_pos + 50), (x_pos - 10, y_pos + 58)], fill=(250, 204, 21))
-                draw.text((x_pos - 90, y_pos + 20), "Force (F)", fill=(250, 204, 21))
-                # Acceleration indicator
-                draw.text((x_pos + 10, y_pos + 115), "--> Acceleration (a)", fill=(52, 211, 153))
+                if is_physics:
+                    # Animate a box moving across with force arrow
+                    x_pos = int(250 + t_ratio * 400)
+                    y_pos = height // 2 - 60
+                    # Mass box
+                    draw.rectangle(
+                        [x_pos, y_pos, x_pos + 120, y_pos + 100],
+                        fill=(59, 130, 246),
+                        outline=(147, 197, 253),
+                        width=2,
+                    )
+                    draw.text((x_pos + 25, y_pos + 40), scene.object_label or "Mass (m)", fill=(255, 255, 255))
+                    # Force arrow
+                    draw.line([x_pos - 100, y_pos + 50, x_pos - 10, y_pos + 50], fill=(250, 204, 21), width=4)
+                    draw.polygon([(x_pos - 10, y_pos + 42), (x_pos, y_pos + 50), (x_pos - 10, y_pos + 58)], fill=(250, 204, 21))
+                    draw.text((x_pos - 90, y_pos + 20), scene.force_label or "Force (F)", fill=(250, 204, 21))
+                    # Acceleration indicator
+                    draw.text((x_pos + 10, y_pos + 115), f"--> {scene.acceleration_label or 'Acceleration (a)'}", fill=(52, 211, 153))
+                else:
+                    # Modern Process Flow / Architecture Diagram
+                    flow_title = (scene.title or f"{plan.concept_name} Structural Flow")[:45]
+                    draw.text((width // 2 - len(flow_title) * 6, 120), flow_title, fill=(250, 204, 21))
+
+                    c1_text = (scene.subtitle or "Context / Input")[:18]
+                    c2_text = (scene.label or plan.concept_name)[:20]
+                    c3_text = "Applied Outcome"
+
+                    # Card 1
+                    draw.rectangle([140, 240, 380, 360], fill=(31, 41, 55), outline=(59, 130, 246), width=2)
+                    draw.text((160, 290), c1_text, fill=(255, 255, 255))
+
+                    # Arrow 1
+                    draw.line([390, 300, 470, 300], fill=(250, 204, 21), width=4)
+                    draw.polygon([(470, 292), (485, 300), (470, 308)], fill=(250, 204, 21))
+
+                    # Card 2 (Active highlighted)
+                    draw.rectangle([495, 220, 785, 380], fill=(30, 58, 138), outline=(250, 204, 21), width=3)
+                    draw.text((515, 290), c2_text, fill=(250, 204, 21))
+
+                    # Arrow 2
+                    draw.line([795, 300, 875, 300], fill=(250, 204, 21), width=4)
+                    draw.polygon([(875, 292), (890, 300), (875, 308)], fill=(250, 204, 21))
+
+                    # Card 3
+                    draw.rectangle([900, 240, 1140, 360], fill=(31, 41, 55), outline=(16, 185, 129), width=2)
+                    draw.text((920, 290), c3_text, fill=(255, 255, 255))
 
             elif stype == SceneType.SUMMARY:
                 draw.text((80, 100), "Key Takeaways & Conceptual Summary", fill=(250, 204, 21))

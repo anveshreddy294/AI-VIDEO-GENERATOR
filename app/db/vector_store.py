@@ -106,27 +106,131 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
 
 
 def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
-    """Attempt batch embedding via Ollama /api/embeddings endpoint."""
+    """Attempt batch embedding via Ollama /api/embeddings endpoint.
+
+    Validates:
+    - Ollama connectivity, HTTP status, and timeout
+    - Valid JSON payload structure
+    - 'embedding' key existence and non-empty list type
+    - Numeric (int, float) and finite (no NaN, Inf) vector values
+    - Homogeneous dimensions across all embeddings in the batch
+
+    Differentiates:
+    - Provider unavailable (URLError, timeout) -> logged with warning
+    - Invalid provider response (bad JSON, missing/invalid embedding) -> logged with diagnostics
+    """
     import json
+    import math
+    import urllib.error
     import urllib.request
+
+    if not texts:
+        return []
+
     base_url = (getattr(settings, "ollama_base_url", None) or getattr(settings, "ollama_url", "http://localhost:11434")).rstrip("/")
     embed_model = getattr(settings, "ollama_embed_model", "nomic-embed-text")
-    try:
-        vectors: list[list[float]] = []
-        for text in texts:
-            url = f"{base_url}/api/embeddings"
-            payload = json.dumps({"model": embed_model, "prompt": text}).encode("utf-8")
-            req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
-            with urllib.request.urlopen(req, timeout=2.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                emb = data.get("embedding")
-                if not emb or not isinstance(emb, list):
-                    return None
-                vectors.append(emb)
-        return vectors
-    except Exception as exc:
-        logger.debug("[vector_store] Ollama embeddings call failed (%s); fallback active", exc)
-        return None
+    timeout = float(getattr(settings, "ollama_timeout", 30.0))
+
+    vectors: list[list[float]] = []
+    batch_dim: int | None = None
+
+    for idx, text in enumerate(texts):
+        url = f"{base_url}/api/embeddings"
+        payload = json.dumps({"model": embed_model, "prompt": text}).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                resp_bytes = resp.read()
+        except urllib.error.HTTPError as http_err:
+            logger.warning(
+                "[vector_store] Ollama HTTP error for text index %d (%s): %s",
+                idx, url, http_err
+            )
+            return None
+        except urllib.error.URLError as url_err:
+            logger.warning(
+                "[vector_store] Ollama connection failure/timeout for text index %d (%s): %s",
+                idx, url, url_err
+            )
+            return None
+        except TimeoutError as to_err:
+            logger.warning(
+                "[vector_store] Ollama request timed out after %.1fs for text index %d: %s",
+                timeout, idx, to_err
+            )
+            return None
+
+        # 1. Parse JSON
+        try:
+            data = json.loads(resp_bytes.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as dec_err:
+            logger.warning(
+                "[vector_store] Ollama returned non-JSON response for text index %d: %s",
+                idx, dec_err
+            )
+            return None
+
+        if not isinstance(data, dict):
+            logger.warning(
+                "[vector_store] Ollama response is not a JSON object for text index %d: got %s",
+                idx, type(data).__name__
+            )
+            return None
+
+        # 2. Extract and validate 'embedding'
+        emb = data.get("embedding")
+        if emb is None:
+            logger.warning(
+                "[vector_store] Ollama response missing 'embedding' key for text index %d (keys: %s)",
+                idx, list(data.keys())
+            )
+            return None
+
+        if not isinstance(emb, list) or len(emb) == 0:
+            logger.warning(
+                "[vector_store] Ollama 'embedding' is not a non-empty list for text index %d (got %s, len=%d)",
+                idx, type(emb).__name__, len(emb) if isinstance(emb, list) else 0
+            )
+            return None
+
+        # 3. Validate numeric and finite values
+        clean_vector: list[float] = []
+        for v_idx, val in enumerate(emb):
+            if not isinstance(val, (int, float)) or isinstance(val, bool):
+                logger.warning(
+                    "[vector_store] Non-numeric value in embedding at [%d][%d]: %r (%s)",
+                    idx, v_idx, val, type(val).__name__
+                )
+                return None
+            f_val = float(val)
+            if not math.isfinite(f_val):
+                logger.warning(
+                    "[vector_store] Non-finite value in embedding at [%d][%d]: %r",
+                    idx, v_idx, f_val
+                )
+                return None
+            clean_vector.append(f_val)
+
+        # 4. Dimension consistency across batch
+        vec_dim = len(clean_vector)
+        if batch_dim is None:
+            batch_dim = vec_dim
+        elif vec_dim != batch_dim:
+            logger.warning(
+                "[vector_store] Inconsistent embedding dimension at text index %d: got %d, expected %d",
+                idx, vec_dim, batch_dim
+            )
+            return None
+
+        vectors.append(clean_vector)
+
+    return vectors
 
 
 def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list[float]]:
@@ -139,7 +243,7 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
     if getattr(settings, "llm_provider", "") in ("mock", "test"):
         dim = _active_embedding_dim
         vectors = [_deterministic_embedding(t, dim=dim) for t in texts]
-        _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False))
+        _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False, dimension_validated=True))
         return vectors
 
     # 2. Local Ollama embeddings
@@ -147,14 +251,14 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
     if ollama_vectors and len(ollama_vectors) == len(texts):
         dim = len(ollama_vectors[0])
         _active_embedding_dim = dim
-        _embed_diagnostics_var.set(StageDiagnostics(provider_used="ollama", fallback_used=False, grounding_verified=False))
+        _embed_diagnostics_var.set(StageDiagnostics(provider_used="ollama", fallback_used=False, grounding_verified=True, dimension_validated=True))
         return ollama_vectors
 
     # 3. Resilient offline deterministic hash fallback
-    logger.info("[vector_store] Ollama embeddings unavailable; using deterministic normalized hash embedding fallback.")
+    logger.info("[vector_store] Ollama embeddings unavailable or invalid; using deterministic normalized hash embedding fallback.")
     dim = _active_embedding_dim
     vectors = [_deterministic_embedding(t, dim=dim) for t in texts]
-    _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False))
+    _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False, dimension_validated=True))
     return vectors
 
 

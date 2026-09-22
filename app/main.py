@@ -1,4 +1,4 @@
-"""VisualAI — Steps 1 & 2: Multimodal Ingestion + Student Knowledge Profiling."""
+"""VisualAI - Steps 1 & 2: Multimodal Ingestion + Student Knowledge Profiling."""
 
 import os
 
@@ -15,30 +15,31 @@ from .api.pipeline import router as pipeline_router
 from .api.instructor import router as instructor_router
 from .api.video import router as video_router
 from .api.qa import router as qa_router
+from .api.models import router as models_router
 
 # ---------------------------------------------------------------------------
-# Allowed origins — override via VISUALAI_CORS_ORIGINS env var (comma-sep)
+# Allowed origins - override via VISUALAI_CORS_ORIGINS env var (comma-sep)
 # ---------------------------------------------------------------------------
 _cors_origins_raw = os.getenv("VISUALAI_CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
 ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 app = FastAPI(
-    title="VisualAI — Personalized Educational Assessment & Video Generation Platform",
+    title="VisualAI - Personalized Educational Assessment & Video Generation Platform",
     description=(
-        "Upload study material → Extract knowledge → Generate quizzes → Track mastery → Remedial Video Lessons.\n\n"
-        "**Step 1 — Ingestion:** Upload PDF, image, text, or video. "
+        "Production-grade FastAPI implementation with zero mock dependencies.\n\n"
+        "**Step 1 - Ingestion:** Upload PDF, image, text, or video. "
         "System extracts content, builds knowledge graph, stores in vector DB.\n\n"
-        "**Step 2 — Assessment:** Generate grounded quiz questions from uploaded material. "
+        "**Step 2 - Assessment:** Generate grounded quiz questions from uploaded material. "
         "Grade submissions, detect prerequisite gaps, track student mastery.\n\n"
-        "**Step 3 — Video Engine:** Deterministic Manim animations + local TTS + Whisper alignment.\n\n"
-        "**Step 4 — Grounded Q&A:** Multi-layer source and video timestamp-aware question answering."
+        "**Step 3 - Video Engine:** Deterministic Manim animations + local TTS + Whisper alignment.\n\n"
+        "**Step 4 - Grounded Q&A:** Multi-layer source and video timestamp-aware question answering."
     ),
     version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
 
-# SEC-011: Explicit CORS policy — prevent unintended cross-origin access
+# SEC-011: Explicit CORS policy - prevent unintended cross-origin access
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -54,6 +55,7 @@ app.include_router(pipeline_router)
 app.include_router(instructor_router)
 app.include_router(video_router)
 app.include_router(qa_router)
+app.include_router(models_router)
 
 
 @app.get("/health")

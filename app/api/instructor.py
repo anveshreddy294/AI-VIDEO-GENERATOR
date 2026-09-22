@@ -57,7 +57,7 @@ INSTRUCTOR_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VisualAI — Instructor Analytics & Human Intervention Portal</title>
+    <title>VisualAI - Instructor Analytics & Human Intervention Portal</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -104,7 +104,7 @@ INSTRUCTOR_HTML = """
         .kpi-card {
             background: #161b22;
             border: 1px solid #30363d;
-            border-radius: 10px;
+            border-radius: 4px;
             padding: 20px;
         }
         .kpi-title { font-size: 13px; color: #8b949e; font-weight: 600; text-transform: uppercase; margin-bottom: 8px; }
@@ -115,7 +115,7 @@ INSTRUCTOR_HTML = """
         .section-card {
             background: #161b22;
             border: 1px solid #30363d;
-            border-radius: 10px;
+            border-radius: 4px;
             padding: 24px;
             margin-bottom: 28px;
         }
@@ -138,7 +138,7 @@ INSTRUCTOR_HTML = """
             align-items: center;
             gap: 4px;
             padding: 3px 8px;
-            border-radius: 6px;
+            border-radius: 3px;
             font-size: 11px;
             font-weight: 600;
         }
@@ -151,7 +151,7 @@ INSTRUCTOR_HTML = """
             border: 1px solid #30363d;
             color: #c9d1d9;
             padding: 6px 12px;
-            border-radius: 6px;
+            border-radius: 3px;
             font-size: 12px;
             cursor: pointer;
             font-weight: 600;
@@ -178,7 +178,7 @@ INSTRUCTOR_HTML = """
 <body>
     <div class="header">
         <h1>
-            <span>👩‍🏫 VisualAI Instructor Portal</span>
+            <span> VisualAI Instructor Portal</span>
             <span class="badge badge-blue">Cohort Analytics</span>
         </h1>
         <nav class="nav-links">
@@ -216,8 +216,8 @@ INSTRUCTOR_HTML = """
         <!-- ACTIVE HUMAN INTERVENTION ALERTS -->
         <div class="section-card">
             <div class="section-title">
-                <span>🚨 Active Human Intervention Alerts</span>
-                <button onclick="loadInstructorData()" class="btn-action">🔄 Refresh</button>
+                <span> Active Human Intervention Alerts</span>
+                <button onclick="loadInstructorData()" class="btn-action"> Refresh</button>
             </div>
             <div class="section-desc">
                 Students below have failed targeted remediation checks more than 3 times. The anti-loop kill switch has locked their status to prevent infinite video looping. Review their gap analysis and take action below.
@@ -245,10 +245,10 @@ INSTRUCTOR_HTML = """
         <!-- COHORT CONCEPT HEALTH HEATMAP -->
         <div class="section-card">
             <div class="section-title">
-                <span>📊 Concept Mastery & Bottleneck Heatmap</span>
+                <span> Concept Mastery & Bottleneck Heatmap</span>
             </div>
             <div class="section-desc">
-                Cohort-wide distribution of student mastery across each curriculum topic. Concepts marked with <strong>⚠️ Bottleneck</strong> are prerequisites where failure cascades to dependent topics.
+                Cohort-wide distribution of student mastery across each curriculum topic. Concepts marked with <strong> Bottleneck</strong> are prerequisites where failure cascades to dependent topics.
             </div>
 
             <div style="overflow-x: auto;">
@@ -289,7 +289,7 @@ INSTRUCTOR_HTML = """
                 const aBody = document.getElementById('alertsTableBody');
                 aBody.innerHTML = '';
                 if (!data.alerts || data.alerts.length === 0) {
-                    aBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#3fb950;padding:24px;">✔ No active human intervention alerts. All students are progressing smoothly!</td></tr>';
+                    aBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#3fb950;padding:24px;"> No active human intervention alerts. All students are progressing smoothly!</td></tr>';
                 } else {
                     data.alerts.forEach(a => {
                         const prereqs = (a.prerequisite_concept_ids && a.prerequisite_concept_ids.length > 0)
@@ -311,8 +311,8 @@ INSTRUCTOR_HTML = """
                                 <td>${prereqs}</td>
                                 <td>
                                     <div style="display:flex;gap:6px;">
-                                        <button onclick="overrideMastery('${a.student_id}', '${a.source_id}', '${a.concept_id}', 'LEARNING')" class="btn-action" title="Reset iterations to 0 and allow student to retry remediation">🔄 Reset to Learning</button>
-                                        <button onclick="overrideMastery('${a.student_id}', '${a.source_id}', '${a.concept_id}', 'MASTERED')" class="btn-action btn-success" title="Manually verify concept after 1-on-1 instructor session">✔ Verify Mastered</button>
+                                        <button onclick="overrideMastery('${a.student_id}', '${a.source_id}', '${a.concept_id}', 'LEARNING')" class="btn-action" title="Reset iterations to 0 and allow student to retry remediation"> Reset to Learning</button>
+                                        <button onclick="overrideMastery('${a.student_id}', '${a.source_id}', '${a.concept_id}', 'MASTERED')" class="btn-action btn-success" title="Manually verify concept after 1-on-1 instructor session"> Verify Mastered</button>
                                     </div>
                                 </td>
                             </tr>
@@ -332,7 +332,7 @@ INSTRUCTOR_HTML = """
                         const fPct = (c.fallback_count / c.total_students) * 100;
 
                         const bottleneckBadge = c.is_prerequisite_bottleneck
-                            ? '<span class="badge badge-red">⚠️ Bottleneck</span>'
+                            ? '<span class="badge badge-red"> Bottleneck</span>'
                             : '';
 
                         cBody.innerHTML += `

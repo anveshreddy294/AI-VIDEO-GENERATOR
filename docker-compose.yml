@@ -1,16 +1,15 @@
 services:
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.12.0
     container_name: visualai-qdrant
-    ports:
-      - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/ || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:6333/readyz || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   api:
     build:
@@ -21,7 +20,6 @@ services:
       - "8000:8000"
     environment:
       - QDRANT_URL=http://qdrant:6333
-      - QDRANT_API_KEY=
     env_file:
       - .env
     volumes:
@@ -33,3 +31,4 @@ services:
 
 volumes:
   qdrant_data:
+
