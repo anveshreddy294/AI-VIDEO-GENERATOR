@@ -22,7 +22,7 @@
     "bbox": null,
     "region_id": null,
     "image_id": "IMG_original",
-    "extraction_method": "gemini_vision",
+    "extraction_method": "ollama_vision",
     "confidence_score": 0.95
   }
 ]

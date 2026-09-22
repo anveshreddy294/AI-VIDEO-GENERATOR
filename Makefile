@@ -10,7 +10,7 @@ setup:  ## Create venv and install dependencies
 	python3 -m venv .venv 2>/dev/null || python -m venv .venv
 	.venv/bin/pip install -q -r requirements-dev.txt 2>/dev/null || .venv\Scripts\pip install -q -r requirements-dev.txt
 	@test -f .env || cp .env.example .env
-	@echo "[OK] Setup complete. Edit .env to add your GEMINI_API_KEY."
+	@echo "[OK] Setup complete. Verify Ollama is running with llama3.2:3b and nomic-embed-text."
 
 run:  ## Start the development server
 	.venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 2>/dev/null || \

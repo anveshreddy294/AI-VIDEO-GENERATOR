@@ -1,7 +1,6 @@
 __pycache__/
 *.pyc
 .venv/
-.env
 storage/runtime/
 storage/uploads/*
 storage/processed/*

@@ -4,7 +4,7 @@ Decouples core reasoning (Step 1 Ingestion, Step 2 Assessment, Step 3 Video Plan
 from any specific cloud SDK or vendor.
  
 Supported Providers:
-- OllamaProvider: Local lightweight model (Llama 3.2 3B / Qwen / etc.) via HTTP endpoint.
+- OllamaProvider: Local lightweight model (Llama 3.2 3B) via HTTP endpoint.
 - MockProvider / MockLLMProvider: Deterministic responses for offline testing without internet/API keys.
 """
 
@@ -53,7 +53,7 @@ class OllamaProvider:
             model_name
             or getattr(settings, "ollama_model", None)
             or getattr(settings, "generation_model", None)
-            or os.getenv("OLLAMA_MODEL", "qwen3:8b")
+            or os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         )
         self.timeout = timeout if timeout is not None else float(getattr(settings, "ollama_timeout", 120.0))
 

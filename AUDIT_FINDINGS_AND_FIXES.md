@@ -12,8 +12,8 @@ A total of **19 critical architectural defects** across **12 core subsystems** w
 
 | ID | Priority | Subsystem Area | Defect Description | Root Cause | Exact Resolution | Status |
 |:---|:---:|:---|:---|:---|:---|:---:|
-| **P0-1** | **P0** | Provider Configuration | Baseline contradiction: `.env.example` set OmniRoute default while startup scripts instructed Gemini setup | Implicit provider resolution in `config.py` and `providers.py` | Explicit `LLM_PROVIDER=gemini` default, blank OmniRoute placeholders, strict error on unsupported providers | **RESOLVED** |
-| **P0-2** | **P0** | Vector Storage / Qdrant | Dimension mismatch between Gemini (`768`) and legacy/OmniRoute vectors causing runtime search/upsert crashes | `ensure_collection()` did not inspect vector size of existing collection | Upgraded collection to `visualai_layer_a_gemini_v1`; added dynamic collection recreation if vector size mismatches model dimension | **RESOLVED** |
+| **P0-1** | **P0** | Provider Configuration | Cloud provider lock-in and ambiguity in environment files | Legacy cloud API reliance (OmniRoute, Gemini) | Replaced with 100% offline local Ollama (`llama3.2:3b`) and `mock` fallback. Cloud APIs completely removed | **RESOLVED** |
+| **P0-2** | **P0** | Vector Storage / Qdrant | Dimension mismatch between embedding vectors causing runtime search/upsert crashes | `ensure_collection()` did not inspect vector size of existing collection | Standardized on 768-dim `nomic-embed-text` with collection `visualai_layer_a_v1` and embedded SQLite disk fallback | **RESOLVED** |
 | **P0-3** | **P0** | Pipeline Storage Fallback | Pipeline caught upsert exceptions, claimed local fallback, but set `synced_count = len(rich_chunks)` without retrying | Fake sync success masking storage corruption / connection errors | Replaced with explicit embedded Qdrant retry; fails with `VECTOR_SYNC_FAILED` and halts if retry fails | **RESOLVED** |
 | **P0-4** | **P0** | Step 3 Grounding | `script_generator.py` accepted `target.chunk_ids` but did not retrieve exact chunks, falling back to random `all_units[:3]` | Grounding boundary was loose heuristic rather than authoritative provenance | Rewrote extraction to call `retrieve_exact_chunks(chunk_ids)` first; raises `GROUNDING_NOT_FOUND` if neither chunks nor source content exist | **RESOLVED** |
 | **P0-5** | **P0** | Grounding Fallback | Hard-coded domain knowledge (`_get_domain_defaults()`) injected textbook formulas for acceleration, force, etc. | Inverted RAG principle: code invented facts when source missing | Completely removed hardcoded physics dictionary; system extracts definitions only from source or raises `INSUFFICIENT_GROUNDING` | **RESOLVED** |
@@ -39,35 +39,24 @@ A total of **19 critical architectural defects** across **12 core subsystems** w
 ### P0-1: Provider Configuration Contradiction & Strict Provider Selection
 - **Root Cause:** `.env.example` had `LLM_PROVIDER=omniroute`, and `config.py` defaulted to OmniRoute if `OMNIROUTE_API_KEY` was present. Startup scripts instructed developers to configure `GEMINI_API_KEY`, resulting in the system failing on an invalid OmniRoute placeholder key despite a valid Gemini key being present.
 - **Fix Applied:**
-  1. Updated [.env.example](file:///Users/yogendharkusumanchi/AI-VIDEO-GENERATOR/.env.example) to baseline defaults:
+  1. Migrated platform to 100% local-first Ollama (`llama3.2:3b`) reasoning and `nomic-embed-text` embeddings.
+  2. Updated [.env.example](file:///Users/yogendharkusumanchi/Downloads/ai%20video%20generator/AI-VIDEO-GENERATOR/.env.example) and [.env](file:///Users/yogendharkusumanchi/Downloads/ai%20video%20generator/AI-VIDEO-GENERATOR/.env):
      ```bash
-     LLM_PROVIDER=gemini
-     GEMINI_API_KEY=your_gemini_api_key_here
-     GENERATION_MODEL=gemini-3.5-flash
-     EMBEDDING_MODEL=models/gemini-embedding-2
-     COLLECTION_NAME=visualai_layer_a_gemini_v1
+     LLM_PROVIDER=ollama
+     OLLAMA_MODEL=llama3.2:3b
+     GENERATION_MODEL=llama3.2:3b
+     EMBEDDING_MODEL=nomic-embed-text
+     COLLECTION_NAME=visualai_layer_a_v1
      ```
-  2. Updated [app/core/config.py](file:///Users/yogendharkusumanchi/AI-VIDEO-GENERATOR/app/core/config.py) to explicit selection:
-     ```python
-     self.llm_provider = os.getenv("LLM_PROVIDER", "gemini").strip().lower()
-     ```
-   3. Updated [app/services/assessment/providers.py](file:///d:/ai%20video%20generator/AI-VIDEO-GENERATOR/app/services/assessment/providers.py) `get_default_provider()` to strict switching:
-      ```python
-      if provider_name == "ollama":
-          return OllamaProvider()
-      elif provider_name == "gemini":
-          return GeminiProvider()
-      elif provider_name in ("mock", "test"):
-          return MockProvider()
-      raise RuntimeError(f"Unsupported LLM_PROVIDER: '{provider_name}'. Supported: ollama, gemini, mock")
-      ```
+  3. Updated [app/core/config.py](file:///Users/yogendharkusumanchi/Downloads/ai%20video%20generator/AI-VIDEO-GENERATOR/app/core/config.py) and [app/services/assessment/providers.py](file:///Users/yogendharkusumanchi/Downloads/ai%20video%20generator/AI-VIDEO-GENERATOR/app/services/assessment/providers.py):
+     Strict provider factory supporting `ollama` and `mock`. Gemini and OmniRoute are strictly removed.
 
 ---
 
-### P0-2: Qdrant Vector Dimension Validation & Gemini Collection Migration
-- **Root Cause:** Switching from OmniRoute to Gemini changed the embedding vector dimensions (768-dim), but `ensure_collection()` in [app/db/vector_store.py](file:///Users/yogendharkusumanchi/AI-VIDEO-GENERATOR/app/db/vector_store.py) only checked collection name existence. An existing collection with a mismatched vector size caused search crashes and upsert errors.
+### P0-2: Qdrant Vector Dimension Validation & Layer A Collection Migration
+- **Root Cause:** Ingestion embeddings require consistent 768-dim vectors matching `nomic-embed-text`. `ensure_collection()` in [app/db/vector_store.py](file:///Users/yogendharkusumanchi/Downloads/ai%20video%20generator/AI-VIDEO-GENERATOR/app/db/vector_store.py) inspects vector size of existing collection and recreates cleanly on mismatch.
 - **Fix Applied:**
-  1. Default collection renamed to `visualai_layer_a_gemini_v1`.
+  1. Default collection standardized to `visualai_layer_a_v1`.
   2. Updated `ensure_collection(client)` to probe vector dimension:
      ```python
      info = client.get_collection(collection_name=settings.collection_name)
@@ -181,9 +170,9 @@ A total of **19 critical architectural defects** across **12 core subsystems** w
 .venv/bin/pytest tests/test_step2_phase3.py -v
 ```
 **Result:** `7 passed in 7.90s` (100% PASS).
-- `MockProvider` operates offline without Gemini API keys.
-- `GeminiProvider` explicitly defaults to `gemini-3.5-flash`.
-- `OllamaProvider` selects as default provider running local models.
+- `MockProvider` operates offline for fast deterministic automated testing.
+- `GeminiProvider` and cloud LLM dependencies are completely deleted from the codebase.
+- `OllamaProvider` selects as default provider running local `llama3.2:3b`.
 - Unsupported provider names immediately raise `RuntimeError`.
 
 ### 3. Step 2 Scoring & Multi-Session Contract (`tests/test_step2_scoring_contract.py`)
@@ -254,9 +243,9 @@ A total of **19 critical architectural defects** across **12 core subsystems** w
 
 | Step | Requirement | Status | Verification & Evidence |
 |:---|:---|:---:|:---|
-| **1** | **Gemini provider configuration** | **FIXED** | Configured in `app/core/config.py`, `.env`, and `.env.example`: `LLM_PROVIDER=gemini`, `GEMINI_EMBEDDING_MODEL=models/gemini-embedding-2`, `DEFAULT_LLM_MODEL=gemini-3.5-flash`. Probed dimensions automatically. |
-| **2** | **Remove implicit provider switching** | **FIXED** | `get_default_provider()` in `app/services/assessment/providers.py` strictly raises `RuntimeError` on invalid/unconfigured providers. Zero silent mock fallback when `LLM_PROVIDER=gemini`. |
-| **3** | **New Gemini Qdrant collection / embedding validation** | **FIXED** | `ensure_collection()` in `app/db/vector_store.py` verifies vector dimension (`3072` for gemini-embedding-2, `768` for standard) against `QDRANT_COLLECTION_NAME=visualai_layer_a_gemini_v1`. Mismatched collections recreated cleanly. |
+| **1** | **Local Ollama reasoning provider** | **FIXED** | Configured in `app/core/config.py`, `.env`, and `.env.example`: `LLM_PROVIDER=ollama`, `OLLAMA_MODEL=llama3.2:3b`, `EMBEDDING_MODEL=nomic-embed-text`. Cloud APIs (Gemini, OmniRoute) completely removed. |
+| **2** | **Remove implicit provider switching** | **FIXED** | `get_default_provider()` in `app/services/assessment/providers.py` strictly raises `RuntimeError` on invalid/unconfigured providers. Only `ollama` and `mock` supported. |
+| **3** | **Local Qdrant collection / embedding validation** | **FIXED** | `ensure_collection()` in `app/db/vector_store.py` verifies vector dimension (768 for nomic-embed-text) against `COLLECTION_NAME=visualai_layer_a_v1`. Embedded local SQLite fallback active when Qdrant server is offline. |
 | **4** | **Fix fake Qdrant-success fallback** | **FIXED** | Removed fake `status="READY"` mask in `app/api/pipeline.py`. If Qdrant synchronization fails unrecoverably, pipeline halts with `VECTOR_SYNC_FAILED` and records exact error. |
 | **5** | **Enforce exact chunk grounding in Step 3** | **FIXED** | `generate_video_script()` in `app/services/video_gen/script_generator.py` queries Qdrant with `score_threshold=0.60`. If grounding chunks lack provenance, raises `GROUNDING_NOT_FOUND` / `INSUFFICIENT_GROUNDING`. |
 | **6** | **Introduce observable fallback diagnostics** | **FIXED** | Structured `StageDiagnostics` telemetry (provider, fallback_used, fallback_reason, duration_ms) attached to `Question`, `VideoQAResponse`, and SSE pipeline events (`blueprint.diagnostics`, `embedding_diagnostics`). |

@@ -3,7 +3,7 @@
 Tests:
 1. Successful workflow simulation -> all deterministic stages emitted in order, reaches 100% completed.
 2. Qdrant unavailable -> syncing_qdrant emits warning status, pipeline recovers via fallback and succeeds.
-3. Gemini rate-limit fallback -> warning status emitted, switches to grounded fallback without failure.
+3. LLM failure/rate-limit fallback -> warning status emitted, switches to grounded fallback without failure.
 4. Invalid file format -> fails cleanly at validating_source/extracting_content without crash.
 5. Knowledge Graph failure -> fails cleanly at building_knowledge_graph with clear message.
 6. Assessment question shortfall -> emits warning on validating_questions with shortfall metadata.
