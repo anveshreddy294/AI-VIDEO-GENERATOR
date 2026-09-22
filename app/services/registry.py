@@ -302,6 +302,12 @@ def get_source_record(source_id: str) -> SourceRecord | None:
         return None
 
 
+def get_source(source_id: str) -> SourceRecord | None:
+    """Convenience alias for get_source_record."""
+    return get_source_record(source_id)
+
+
+
 def save_rich_chunks(source_id: str, chunks) -> None:
     atomic_json(get_registry_dir() / validate_id(source_id) / "rich_chunks.json", [c.model_dump() for c in chunks])
 

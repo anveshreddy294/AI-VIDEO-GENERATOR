@@ -17,9 +17,11 @@ from uuid import uuid4
 
 from ...core.config import settings
 from ..assessment.schemas import VideoTarget, VideoTargetMatrix
+from .artifact_store import find_existing_video, store_video_artifacts
 from .manim_renderer import render_video_plan
 from .narration import extract_narration_script
 from .scene_schema import VideoArtifact, VideoJobStatus, VideoPlan
+from .scene_validator import validate_video_plan
 from .tts import get_tts_provider
 from .video_compositor import composite_remedial_video
 from .video_planner import plan_video_for_target
@@ -60,14 +62,44 @@ async def execute_video_generation_job(
     target: VideoTarget,
     job_id: str | None = None,
     mock_mode: bool = False,
+    force: bool = False,
 ) -> VideoArtifact:
     """Execute complete end-to-end Step 3 generation pipeline asynchronously."""
     jid = job_id or f"JOB_{uuid4().hex[:10].upper()}"
+    student_id = target.student_id or "STU_DEFAULT"
+    source_id = target.source_id or "SRC_DEFAULT"
+    log_prefix = f"[video][job={jid}][source={source_id}][concept={target.concept_id}]"
+
+    # Idempotency check: reuse existing completed video if force is False
+    if not force:
+        existing = find_existing_video(student_id, source_id, target.concept_id)
+        if existing and existing.get("video_path") and Path(existing["video_path"]).exists():
+            logger.info("%s Reusing existing completed video artifact from %s", log_prefix, existing["video_path"])
+            artifact = VideoArtifact(
+                job_id=jid,
+                student_id=student_id,
+                source_id=source_id,
+                concept_id=target.concept_id,
+                concept_name=target.concept_name,
+                duration_seconds=float(existing.get("actual_seconds", target.target_seconds)),
+                status=VideoJobStatus.COMPLETED,
+                stage="COMPLETED (REUSED)",
+                progress=100,
+                video_path=existing.get("video_path"),
+                subtitle_path=existing.get("subtitle_path"),
+                provenance_chunks=target.chunk_ids,
+                source_content_ids=target.source_content_ids,
+                page_start=target.page_start,
+                page_end=target.page_end,
+                completed_at=existing.get("generated_at", datetime.now(timezone.utc).isoformat()),
+            )
+            _save_video_artifact(artifact)
+            return artifact
 
     artifact = VideoArtifact(
         job_id=jid,
-        student_id=target.student_id or "STU_DEFAULT",
-        source_id=target.source_id or "SRC_DEFAULT",
+        student_id=student_id,
+        source_id=source_id,
         concept_id=target.concept_id,
         concept_name=target.concept_name,
         duration_seconds=float(target.target_seconds),
@@ -76,6 +108,8 @@ async def execute_video_generation_job(
         progress=5,
         provenance_chunks=target.chunk_ids,
         source_content_ids=target.source_content_ids,
+        page_start=target.page_start,
+        page_end=target.page_end,
     )
     _save_video_artifact(artifact)
 
@@ -85,19 +119,24 @@ async def execute_video_generation_job(
         artifact.stage = "Generating Video Plan"
         artifact.progress = 20
         _save_video_artifact(artifact)
+        logger.info("%s Generating structured VideoPlan...", log_prefix)
 
         plan: VideoPlan = await asyncio.to_thread(
             plan_video_for_target,
             target=target,
-            student_id=target.student_id,
-            source_id=target.source_id,
+            student_id=student_id,
+            source_id=source_id,
         )
+
+        # Validate VideoPlan
+        validate_video_plan(plan)
 
         # 2. Narration & Audio Synthesis (TTS)
         artifact.status = VideoJobStatus.GENERATING_AUDIO
         artifact.stage = "Synthesizing Narration Audio"
         artifact.progress = 40
         _save_video_artifact(artifact)
+        logger.info("%s Synthesizing voiceover audio...", log_prefix)
 
         script = extract_narration_script(plan)
         audio_path = settings.audio_dir / f"{jid}.wav"
@@ -114,6 +153,7 @@ async def execute_video_generation_job(
         artifact.stage = "Aligning Subtitles via Whisper"
         artifact.progress = 60
         _save_video_artifact(artifact)
+        logger.info("%s Generating Whisper word-level alignment & subtitles...", log_prefix)
 
         srt_path = settings.captions_dir / f"{jid}.srt"
         aligner = get_whisper_aligner(mock=mock_mode)
@@ -130,6 +170,7 @@ async def execute_video_generation_job(
         artifact.stage = "Rendering Animation Scenes"
         artifact.progress = 75
         _save_video_artifact(artifact)
+        logger.info("%s Rendering Manim animation scenes...", log_prefix)
 
         raw_video_path = settings.renders_dir / f"{jid}_visual.mp4"
         await asyncio.to_thread(render_video_plan, plan, raw_video_path)
@@ -139,6 +180,7 @@ async def execute_video_generation_job(
         artifact.stage = "Compositing Final MP4"
         artifact.progress = 90
         _save_video_artifact(artifact)
+        logger.info("%s Multiplexing audio and visual tracks via FFmpeg...", log_prefix)
 
         final_mp4_path = settings.renders_dir / f"{jid}.mp4"
         await composite_remedial_video(
@@ -148,16 +190,34 @@ async def execute_video_generation_job(
             subtitles_srt=srt_path,
         )
 
+        # 6. Store in canonical structured video artifact store
+        store_video_artifacts(
+            video_id=jid,
+            student_id=student_id,
+            source_id=source_id,
+            concept_id=target.concept_id,
+            concept_name=target.concept_name,
+            plan=plan,
+            final_mp4=final_mp4_path,
+            audio_path=audio_path,
+            srt_path=srt_path,
+            alignment_data=align_meta,
+            actual_seconds=float(plan.duration_seconds),
+            tts_provider=getattr(settings, "tts_provider", "edge_tts"),
+            model=getattr(settings, "ollama_model", "llama3.2:3b"),
+        )
+
         artifact.video_path = str(final_mp4_path)
         artifact.status = VideoJobStatus.COMPLETED
         artifact.stage = "COMPLETED"
         artifact.progress = 100
         artifact.completed_at = datetime.now(timezone.utc).isoformat()
         _save_video_artifact(artifact)
+        logger.info("%s Video generation complete: %s", log_prefix, final_mp4_path)
         return artifact
 
     except Exception as exc:
-        logger.error(f"[video_engine] Job {jid} failed: {exc}", exc_info=True)
+        logger.error("%s Job failed: %s", log_prefix, exc, exc_info=True)
         artifact.status = VideoJobStatus.FAILED
         artifact.stage = "FAILED"
         artifact.error = str(exc)

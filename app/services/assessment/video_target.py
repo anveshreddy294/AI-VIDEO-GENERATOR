@@ -370,3 +370,9 @@ def load_video_matrix(student_id: str, source_id: str) -> VideoTargetMatrix | No
     except Exception as exc:
         logger.warning("[video_target] Failed to load matrix at %s: %s", path, exc)
         return None
+
+
+def get_video_target_matrix(student_id: str, source_id: str) -> VideoTargetMatrix | None:
+    """Convenience alias for load_video_matrix."""
+    return load_video_matrix(student_id, source_id)
+

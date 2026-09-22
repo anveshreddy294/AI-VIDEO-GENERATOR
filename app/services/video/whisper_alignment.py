@@ -109,11 +109,26 @@ class WhisperAligner:
         ).ratio()
         qa_passed = qa_score >= 0.50
 
+        # Extract word timestamps
+        words_list: list[dict[str, Any]] = []
+        for s in segments_data:
+            s_words = s["text"].split()
+            if s_words:
+                dt = (s["end"] - s["start"]) / len(s_words)
+                for w_idx, w in enumerate(s_words):
+                    words_list.append({
+                        "word": w,
+                        "start": round(s["start"] + w_idx * dt, 2),
+                        "end": round(s["start"] + (w_idx + 1) * dt, 2),
+                    })
+
         return {
             "qa_score": round(qa_score, 3),
             "qa_passed": qa_passed,
             "transcription": transcribed_text,
             "segment_count": len(segments_data),
+            "segments": segments_data,
+            "words": words_list,
             "srt_path": str(output_srt),
         }
 
@@ -161,13 +176,27 @@ class MockWhisperAligner:
 
         output_srt.write_text("\n".join(srt_lines), encoding="utf-8")
 
+        # Generate word-level timestamps
+        dt = total_dur / total_words
+        words_list = [
+            {
+                "word": w,
+                "start": round(idx * dt, 2),
+                "end": round((idx + 1) * dt, 2),
+            }
+            for idx, w in enumerate(words)
+        ]
+
         return {
             "qa_score": 1.0,
             "qa_passed": True,
             "transcription": expected_narration,
             "segment_count": len(segments_data),
+            "segments": segments_data,
+            "words": words_list,
             "srt_path": str(output_srt),
         }
+
 
 
 def get_whisper_aligner(mock: bool = False) -> WhisperAligner | MockWhisperAligner:

@@ -56,3 +56,9 @@ def get_or_create_profile(student_id: str, source_id: str) -> StudentLearningPro
     if profile is not None:
         return profile
     return StudentLearningProfile(student_id=student_id, source_id=source_id)
+
+
+def get_learning_profile(student_id: str, source_id: str) -> StudentLearningProfile | None:
+    """Convenience alias for load_profile."""
+    return load_profile(student_id, source_id)
+

@@ -94,6 +94,15 @@ class Settings:
         self.video_resolution: str = os.getenv("VIDEO_RESOLUTION", "720p")
         self.tts_provider: str = os.getenv("TTS_PROVIDER", "edge_tts").strip().lower()
         self.whisper_model: str = os.getenv("WHISPER_MODEL", "base").strip().lower()
+        self.video_timeout: float = float(os.getenv("VIDEO_TIMEOUT", "180.0"))
+        self.video_output_dir: Path = BASE_DIR / os.getenv("VIDEO_OUTPUT_DIR", "storage/videos")
+        self.video_output_dir.mkdir(parents=True, exist_ok=True)
+        self.manim_quality: str = os.getenv("MANIM_QUALITY", "low").strip().lower()
+        self.ffmpeg_preset: str = os.getenv("FFMPEG_PRESET", "fast").strip().lower()
+        self.pass_threshold: float = self.assessment_pass_threshold
+        self.reasoning_model: str = self.ollama_model
+        self.qdrant_collection: str = self.collection_name
+
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:

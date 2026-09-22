@@ -409,13 +409,27 @@ This runner requires `LLM_PROVIDER=ollama`. It uses the same upload, quality val
 | `GET` | `/assessment/video-target/{student_id}/{source_id}` | Retrieve or generate the `VideoTargetMatrix` blueprint for downstream video rendering. |
 | `GET` | `/assessment/status/{session_id}` | Check active assessment session state and expiration TTL. |
 
-### Instructor Portal & Governance
+### Video Engine & Rendering (Step 3)
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/video/generate` | Trigger asynchronous or batch remedial video generation for weak concepts. Rejects human fallback concepts. |
+| `GET` | `/video/status/{video_id}` | Query video generation job state, progress percentage, stage, and error details. |
+| `GET` | `/video/{video_id}` | Download the composited MP4 video artifact. |
+| `GET` | `/video/{video_id}/stream` | Stream MP4 video with HTTP 206 Partial Content byte-range seeking support. |
+| `GET` | `/video/{video_id}/metadata` | Fetch provenance metadata, concept IDs, chunk IDs, page ranges, and model details. |
+| `GET` | `/video/{video_id}/subtitles` | Fetch synchronized WebVTT or SRT subtitles with word-level alignment. |
+| `GET` | `/video/{video_id}/captions` | Plaintext or SRT format caption file download. |
+
+### Instructor Portal & Governance (Step 4)
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/instructor/cohort/summary` | Cohort-wide mastery metrics, total assessments, and active alerts. |
+| `GET` | `/instructor/analytics` | Comprehensive cohort analytics JSON (average mastery, concepts needing review, alert counts). |
 | `GET` | `/instructor/alerts` | List all active kill-switch human intervention alerts (`REQUIRES_HUMAN_FALLBACK`). |
-| `POST` | `/instructor/alerts/{alert_id}/resolve` | Mark an alert as resolved after instructor intervention. |
+| `POST` | `/instructor/alerts/{alert_id}/resolve` | Resolve an intervention alert and reset student status to `LEARNING`. |
+| `POST` | `/instructor/mastery/{student_id}/{source_id}/{concept_id}/reset` | Direct override/reset of student concept mastery status with audit log notes. |
 | `GET` | `/instructor/cohort/heatmap` | Per-concept breakdown of mastered, in-progress, and failed students. |
 
 ### Observability & System Diagnostics
@@ -424,10 +438,12 @@ This runner requires `LLM_PROVIDER=ollama`. It uses the same upload, quality val
 | :--- | :--- | :--- |
 | `GET` | `/` | Single-Page Web Dashboard interface. |
 | `GET` | `/health` | System health check reporting active service capabilities. |
+| `GET` | `/health/video` | Step 3 Video Engine health check (Manim, FFmpeg, TTS, Whisper readiness). |
 | `GET` | `/pipeline/status/{task_id}` | Real-time stage tracker for long-running document/video processing tasks. |
 | `GET` | `/pipeline/stats` | Pipeline execution throughput and stage latency statistics. |
 | `GET` | `/docs` | Interactive Swagger UI API documentation. |
 | `GET` | `/debug/qdrant` | Vector collection point counts and payload diagnostics (`VISUALAI_DEBUG=true`). |
+
 
 ---
 
@@ -440,14 +456,22 @@ The dashboard recovery checks run with `node tests/step12/test_progress.cjs` (No
 VisualAI includes comprehensive test suites covering all phases:
 
 ```bash
-# Run the entire test suite
-pytest tests/ -v
+# Run the entire test suite (119 passing tests)
+pytest tests/ -q
 
-# Run Step 1 ingestion tests
+# Run Step 1 ingestion unit & contract tests
+python test_step1.py
 pytest tests/test_step1.py -v
 
 # Run Step 2 assessment contracts & grading tests
+python test_step2.py
 pytest tests/test_step2.py tests/test_step2_scoring_contract.py -v
+
+# Run Step 3 Manim video engine test suite (20 Section 31 tests)
+pytest tests/test_step3_manim_video.py -v
+
+# Run End-to-End closed loop integration tests (Section 32, 33, 34)
+pytest tests/test_e2e_closed_loop.py -v
 
 # Run phase-specific validation suites
 pytest tests/test_step2_fulfillment.py tests/test_step2_phase2b.py tests/test_step2_phase4.py -v
@@ -455,7 +479,7 @@ pytest tests/test_step2_fulfillment.py tests/test_step2_phase2b.py tests/test_st
 # Run instructor portal and pipeline observability tests
 pytest tests/test_instructor_portal.py tests/test_pipeline_observability.py -v
 
-# Run End-to-End ingestion test using a real PDF document
+# Run End-to-End real PDF ingestion, assessment & video generation lifecycle
 python tests/test_e2e_real_pdf_run.py
 ```
 
@@ -465,6 +489,31 @@ make test         # Run complete test suite
 make test-core    # Fast run of core integration tests
 make audit        # Dependency security audit
 ```
+
+---
+
+## Troubleshooting Guide
+
+### 1. Ollama Connection Issues
+- **Symptom**: `Failed to connect to Ollama at http://localhost:11434`
+- **Solution**: Ensure Ollama is running (`ollama serve`). Verify required models:
+  ```bash
+  ollama list
+  ollama pull llama3.2:3b
+  ollama pull nomic-embed-text
+  ```
+
+### 2. Manim / LaTeX Rendering
+- **Symptom**: `LaTeX Error! Not all written LaTeX code could be converted`
+- **Solution**: VisualAI includes deterministic fallbacks using Text/SVGMobject and OpenCV if TeX is uninstalled. For high-res LaTeX formula rendering, install MacTeX on macOS (`brew install --cask mactex-no-gui`) or TeXLive on Linux (`apt-get install texlive-latex-extra`).
+
+### 3. FFmpeg Missing
+- **Symptom**: `FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'`
+- **Solution**: Install FFmpeg via Homebrew (`brew install ffmpeg`) or apt (`sudo apt install ffmpeg`). Ensure `ffmpeg` and `ffprobe` are on your system `PATH`.
+
+### 4. EdgeTTS Network Timeout
+- **Symptom**: EdgeTTS audio generation fails due to network connectivity.
+- **Solution**: VisualAI gracefully falls back to synthetic PCM tone synthesis in test/mock mode without breaking the compositing pipeline. Set `MOCK_TTS=true` in `.env` for fully offline execution.
 
 ---
 
@@ -483,21 +532,22 @@ make audit        # Dependency security audit
   - Local Ollama LLM provider (`llama3.2:3b`) + Mock Provider for offline testing
   - Student learning profile tracking & hidden answer key safety
   - `VideoTargetMatrix` handoff contract generation
-- [x] **Step 3: Deterministic Video Engine**
-  - Scene-by-scene VideoPlan generation consuming `VideoTargetMatrix`
-  - Neural text-to-speech (EdgeTTS) voiceover synthesis
-  - Faster-Whisper word-level alignment
-  - Deterministic Manim scene rendering (title, equation, diagrams, summary)
-  - Audio/video compositing via FFmpeg
-- [x] **Web Dashboard & Instructor Portal**
-  - Embedded interactive web console at `/`
-  - Cohort analytics, mastery heatmaps, and kill-switch resolution workflows
-- [ ] **Step 3: Automated Remedial Video Generation**
-  - Scene-by-scene instructional scriptwriter consuming `VideoTargetMatrix`
-  - Neural text-to-speech (TTS) voiceover synthesizer
-  - Programmatic visual scene rendering (diagram animations, dynamic motion graphics)
-  - Audio/video multiplexing and final video rendering pipeline
-- [ ] **Step 4: Interactive Video RAG Agent**
+- [x] **Step 3: Deterministic Remedial Video Engine**
+  - Strongly typed `VideoPlan` & `ScenePlan` schemas (TITLE, EXPLANATION, EQUATION, DIAGRAM, EXAMPLE, SUMMARY)
+  - Strict security validation gateway preventing arbitrary code injection
+  - 30s / 45s / 60s pedagogical duration scaling
+  - Deterministic Manim scene animations & physics/math renderers
+  - Text-to-speech voiceover synthesis (EdgeTTS provider abstraction)
+  - Faster-Whisper word-level subtitle alignment & SRT generation
+  - FFmpeg compositor creating H.264/AAC MP4 containers
+  - Canonical video artifact persistence (`storage/videos/{student}/{source}/{concept}/`)
+  - HTTP 206 Partial Content byte-range video streaming API
+- [x] **Step 4: Instructor Governance & Closed-Loop Learning**
+  - Instructor dashboard, cohort analytics, and bottleneck heatmaps
+  - Kill-switch intervention alerts with audit logging
+  - Manual mastery override and student reset API (`POST /instructor/mastery/.../reset`)
+  - Closed reassessment loops updating student profiles across attempts
+- [ ] **Interactive In-Video RAG Agent**
   - Real-time in-video conversational assistant
   - Timestamp-accurate video seeking and question answering
 - [ ] **Enterprise Features**

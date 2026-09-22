@@ -130,11 +130,13 @@ def _synthesize_grounded_fallback_plan(
     evidence_chunks: list[dict[str, Any]],
 ) -> VideoPlan:
     """Deterministic fallback synthesis if LLM is offline or output is invalid."""
-    dur = target.target_seconds or (30 if target.difficulty == "foundational" else (60 if target.difficulty == "advanced" else 45))
-    s1_dur = max(4.0, dur * 0.12)
-    s2_dur = max(8.0, dur * 0.25)
-    s3_dur = max(10.0, dur * 0.38)
-    s4_dur = dur - (s1_dur + s2_dur + s3_dur)
+    dur = float(target.target_seconds or (30 if target.difficulty == "foundational" else (60 if target.difficulty == "advanced" else 45)))
+    
+    # Proportional durations across 5 pedagogical scenes (Section 9)
+    weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+    durations = [max(1.0, round(dur * w, 1)) for w in weights]
+    diff = round(dur - sum(durations), 1)
+    durations[-1] = max(1.0, round(durations[-1] + diff, 1))
 
     first_chunk_text = evidence_chunks[0].get("text", "") if evidence_chunks else target.directive
     clean_snippet = first_chunk_text[:180].replace("\n", " ")
@@ -144,40 +146,69 @@ def _synthesize_grounded_fallback_plan(
         "p = mv" if "momentum" in target.concept_name.lower() else f"Concept: {target.concept_name}"
     )
 
+    chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence_chunks if c.get("chunk_id")]
+
     scenes = [
         ScenePlan(
             scene_index=0,
             scene_type=SceneType.TITLE,
             title=target.concept_name,
             subtitle="Core Pedagogical Concept Review",
-            duration_seconds=s1_dur,
+            duration_seconds=durations[0],
+            source_chunk_ids=chunk_ids,
+            page_start=target.page_start,
+            page_end=target.page_end,
         ),
         ScenePlan(
             scene_index=1,
-            scene_type=SceneType.EQUATION if " = " in eq else SceneType.TEXT,
-            equation=eq if " = " in eq else None,
-            text=clean_snippet if " = " not in eq else None,
-            label=f"Governing Principle: {target.concept_name}",
-            duration_seconds=s2_dur,
+            scene_type=SceneType.EXPLANATION,
+            title=f"Understanding {target.concept_name}",
+            text=clean_snippet,
+            label=f"Core Concept: {target.concept_name}",
+            duration_seconds=durations[1],
+            source_chunk_ids=chunk_ids,
+            page_start=target.page_start,
+            page_end=target.page_end,
         ),
         ScenePlan(
             scene_index=2,
-            scene_type=SceneType.DIAGRAM,
-            diagram_type="force_box",
+            scene_type=SceneType.EQUATION if " = " in eq else SceneType.DIAGRAM,
+            title=f"Governing Principle: {target.concept_name}",
+            equation=eq if " = " in eq else None,
+            diagram_type="force_box" if " = " not in eq else None,
             object_label="Object / State",
             force_label="Applied Force",
             acceleration_label="Resulting Change",
-            duration_seconds=s3_dur,
+            label=f"Governing Relation: {eq}",
+            duration_seconds=durations[2],
+            source_chunk_ids=chunk_ids,
+            page_start=target.page_start,
+            page_end=target.page_end,
         ),
         ScenePlan(
             scene_index=3,
+            scene_type=SceneType.EXAMPLE,
+            title=f"Concrete Example: {target.concept_name}",
+            text=f"Consider a physical scenario governed by {target.concept_name}, demonstrating direct proportional response.",
+            label="Real-World Application",
+            duration_seconds=durations[3],
+            source_chunk_ids=chunk_ids,
+            page_start=target.page_start,
+            page_end=target.page_end,
+        ),
+        ScenePlan(
+            scene_index=4,
             scene_type=SceneType.SUMMARY,
+            title="Key Takeaways",
             summary_points=[
                 f"Core foundation: {target.concept_name}",
                 "Key relationship observed directly in study material",
                 "Review foundational prerequisites to solidify understanding",
             ],
-            duration_seconds=s4_dur,
+            duration_seconds=durations[4],
+            source_chunk_ids=chunk_ids,
+            page_start=target.page_start,
+            page_end=target.page_end,
         ),
     ]
 
@@ -185,39 +216,53 @@ def _synthesize_grounded_fallback_plan(
         NarrationSegment(
             scene_index=0,
             text=f"Welcome to this remedial lesson on {target.concept_name}.",
-            target_seconds=s1_dur,
+            target_seconds=durations[0],
         ),
         NarrationSegment(
             scene_index=1,
-            text=f"Let's focus on the authoritative definition: {clean_snippet}",
-            target_seconds=s2_dur,
+            text=f"Let's focus on the authoritative definition: {clean_snippet[:90]}.",
+            target_seconds=durations[1],
         ),
         NarrationSegment(
             scene_index=2,
-            text=f"Visually, notice how this principle applies directly to changing systems.",
-            target_seconds=s3_dur,
+            text=f"Notice how the governing relation {eq} describes the system behavior.",
+            target_seconds=durations[2],
         ),
         NarrationSegment(
             scene_index=3,
-            text=f"To master {target.concept_name}, remember these essential takeaways and governing relationships.",
-            target_seconds=s4_dur,
+            text=f"In practice, observing these principles clarifies the underlying physical laws.",
+            target_seconds=durations[3],
+        ),
+        NarrationSegment(
+            scene_index=4,
+            text=f"Remember these core takeaways to master {target.concept_name}.",
+            target_seconds=durations[4],
         ),
     ]
-
-    chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence_chunks if c.get("chunk_id")]
 
     return VideoPlan(
         student_id=target.student_id or "STU_DEFAULT",
         source_id=target.source_id or "SRC_DEFAULT",
         concept_id=target.concept_id,
         concept_name=target.concept_name,
-        duration_seconds=dur,
+        definition=clean_snippet or f"Grounded concept: {target.concept_name}",
+        duration_seconds=int(dur),
+        target_seconds=int(dur),
         difficulty=target.difficulty,
         learning_objective=f"Master the core principles and relationships of {target.concept_name}",
         key_points=[f"Understanding {target.concept_name}", "Visualizing the system", "Applying governing laws"],
         scenes=scenes,
         narration=narration,
+        source_chunk_ids=[cid for cid in chunk_ids if cid],
         provenance_chunks=[cid for cid in chunk_ids if cid],
+        source_content_ids=target.source_content_ids or [],
+        page_start=target.page_start,
+        page_end=target.page_end,
+        provenance={
+            "chunks": chunk_ids,
+            "content_ids": target.source_content_ids or [],
+            "pages": [target.page_start, target.page_end] if target.page_start else [],
+        },
     )
 
 
@@ -268,6 +313,7 @@ def plan_video_for_target(
     )
 
     t0 = time.time()
+    chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence if c.get("chunk_id")]
     try:
         raw = active_provider.generate_content(prompt)
         data = _parse_json(raw)
@@ -292,6 +338,9 @@ def plan_video_for_target(
                     force_label=s.get("force_label"),
                     acceleration_label=s.get("acceleration_label"),
                     summary_points=s.get("summary_points", []),
+                    source_chunk_ids=chunk_ids,
+                    page_start=target.page_start,
+                    page_end=target.page_end,
                 )
             )
 
@@ -306,20 +355,29 @@ def plan_video_for_target(
             for idx, n in enumerate(raw_narration)
         ]
 
-        chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence if c.get("chunk_id")]
-
         plan = VideoPlan(
             student_id=student,
             source_id=source,
             concept_id=target.concept_id,
             concept_name=target.concept_name,
-            duration_seconds=dur,
+            definition=evidence[0].get("text", "")[:300] if evidence else target.directive,
+            duration_seconds=int(dur),
+            target_seconds=int(dur),
             difficulty=target.difficulty,
             learning_objective=data.get("learning_objective", f"Understand {target.concept_name}"),
             key_points=data.get("key_points", []),
             scenes=scenes,
             narration=narration,
+            source_chunk_ids=[cid for cid in chunk_ids if cid],
             provenance_chunks=[cid for cid in chunk_ids if cid],
+            source_content_ids=target.source_content_ids or [],
+            page_start=target.page_start,
+            page_end=target.page_end,
+            provenance={
+                "chunks": chunk_ids,
+                "content_ids": target.source_content_ids or [],
+                "pages": [target.page_start, target.page_end] if target.page_start else [],
+            },
         )
         validated = validate_video_plan(plan)
         save_video_plan(validated)
@@ -329,9 +387,15 @@ def plan_video_for_target(
         fallback_plan = _synthesize_grounded_fallback_plan(target, evidence)
         fallback_plan.student_id = student
         fallback_plan.source_id = source
+        fallback_plan.page_start = target.page_start
+        fallback_plan.page_end = target.page_end
+        fallback_plan.source_content_ids = target.source_content_ids or []
+        fallback_plan.source_chunk_ids = [cid for cid in chunk_ids if cid]
+        fallback_plan.provenance_chunks = [cid for cid in chunk_ids if cid]
         validated = validate_video_plan(fallback_plan)
         save_video_plan(validated)
         return validated
+
 
 
 def save_video_plan(plan: VideoPlan) -> Path:

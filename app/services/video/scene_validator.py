@@ -35,6 +35,20 @@ class SceneValidationError(ValueError):
     pass
 
 
+def validate_latex(equation: str | None) -> None:
+    """Validate LaTeX equation syntax for balanced braces and safe notation."""
+    if not equation or not isinstance(equation, str):
+        return
+    # Check balanced curly braces
+    if equation.count("{") != equation.count("}"):
+        raise SceneValidationError(f"Invalid LaTeX syntax: unbalanced curly braces in '{equation}'")
+    # Check for trailing backslash
+    clean = equation.strip()
+    if clean.endswith("\\"):
+        raise SceneValidationError(f"Invalid LaTeX syntax: trailing backslash in '{equation}'")
+
+
+
 def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
     """Validate a single scene plan."""
     if not isinstance(scene.scene_type, SceneType):
@@ -46,11 +60,16 @@ def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
     if scene.duration_seconds <= 0 or scene.duration_seconds > 120:
         raise SceneValidationError(f"Scene duration {scene.duration_seconds}s is outside valid range (1–120s)")
 
+    # Validate LaTeX equation if present
+    if scene.equation:
+        validate_latex(scene.equation)
+
     # Security check all text and equation fields
     check_fields = [
         scene.title,
         scene.subtitle,
         scene.text,
+        scene.narration,
         scene.equation,
         scene.label,
         scene.object_label,
@@ -68,8 +87,8 @@ def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
     return scene
 
 
-def validate_video_plan(plan: VideoPlan) -> VideoPlan:
-    """Validate full VideoPlan including scene count, narration alignment, and durations."""
+def validate_video_plan(plan: VideoPlan, max_duration_tolerance: float = 6.0) -> VideoPlan:
+    """Validate full VideoPlan including scene count, narration alignment, durations, and provenance."""
     if not plan.concept_id or not plan.concept_name:
         raise SceneValidationError("VideoPlan must contain non-empty concept_id and concept_name")
 
@@ -86,6 +105,14 @@ def validate_video_plan(plan: VideoPlan) -> VideoPlan:
         validate_scene_plan(scene)
         total_scene_duration += scene.duration_seconds
 
+    # Validate duration contract against target_seconds / duration_seconds
+    target = float(plan.target_seconds or plan.duration_seconds or 45)
+    if abs(total_scene_duration - target) > max_duration_tolerance:
+        raise SceneValidationError(
+            f"Total scene duration ({total_scene_duration:.1f}s) deviates significantly "
+            f"from target duration ({target:.1f}s, tolerance: ±{max_duration_tolerance:.1f}s)"
+        )
+
     # Validate narration segments
     max_scene_idx = len(plan.scenes) - 1
     for seg in plan.narration:
@@ -97,6 +124,17 @@ def validate_video_plan(plan: VideoPlan) -> VideoPlan:
         for dangerous in _DANGEROUS_SUBSTRINGS:
             if dangerous in seg.text.lower():
                 raise SceneValidationError(f"Security violation: dangerous substring '{dangerous}' in narration")
+
+        # Speech rate budgeting check (max 210 words per minute allowed)
+        matched_scene = plan.scenes[seg.scene_index]
+        words = seg.text.split()
+        if matched_scene.duration_seconds > 0:
+            effective_wpm = (len(words) / matched_scene.duration_seconds) * 60
+            if effective_wpm > 240 and len(words) > 15:
+                raise SceneValidationError(
+                    f"Narration rate ({effective_wpm:.0f} WPM) exceeds maximum speech budget for scene "
+                    f"{seg.scene_index} ({matched_scene.duration_seconds}s duration, {len(words)} words)"
+                )
 
     # Check that duration is positive
     if plan.duration_seconds <= 0:

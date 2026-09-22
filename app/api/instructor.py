@@ -13,7 +13,7 @@ environments to prevent accidental exposure of student data.
 import logging
 import os
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Security
 from fastapi.responses import HTMLResponse
 from fastapi.security.api_key import APIKeyHeader
 
@@ -440,3 +440,68 @@ def reset_mastery_api(
         # SEC-010: Do not leak internal exception details to API responses
         logger.exception("Failed to reset mastery for %s / %s", req.student_id, req.concept_id)
         raise HTTPException(status_code=500, detail="Failed to reset mastery. Check server logs.")
+
+
+@router.get("/alerts")
+def get_alerts(
+    source_id: Optional[str] = Query(default=None),
+    _key: str = Depends(_require_instructor_key),
+) -> dict[str, Any]:
+    """Retrieve all active kill-switch human intervention alerts."""
+    overview = get_cohort_overview(source_id)
+    return {"alerts": overview.alerts, "total": len(overview.alerts)}
+
+
+@router.get("/analytics", response_model=CohortOverview)
+def get_analytics(
+    source_id: Optional[str] = Query(default=None),
+    _key: str = Depends(_require_instructor_key),
+) -> CohortOverview:
+    """Retrieve cohort-wide mastery analytics and concept bottleneck heatmaps."""
+    return get_cohort_overview(source_id)
+
+
+@router.post("/alerts/{alert_id}/resolve")
+def resolve_alert(
+    alert_id: str,
+    notes: Optional[str] = Body(default="Resolved by instructor"),
+    _key: str = Depends(_require_instructor_key),
+) -> ResetMasteryResponse:
+    """Resolve an active human intervention alert by resetting the concept status."""
+    overview = get_cohort_overview()
+    target_alert = next((a for a in overview.alerts if a.alert_id == alert_id), None)
+    if not target_alert:
+        raise HTTPException(status_code=404, detail=f"Alert '{alert_id}' not found")
+
+    return reset_student_concept_status(
+        student_id=target_alert.student_id,
+        source_id=target_alert.source_id,
+        concept_id=target_alert.concept_id,
+        new_status="LEARNING",
+        instructor_notes=notes,
+    )
+
+
+@router.post("/mastery/{student_id}/{source_id}/{concept_id}/reset", response_model=ResetMasteryResponse)
+def reset_student_mastery_path(
+    student_id: str,
+    source_id: str,
+    concept_id: str,
+    new_status: str = Query(default="LEARNING"),
+    notes: Optional[str] = Query(default=None),
+    _key: str = Depends(_require_instructor_key),
+) -> ResetMasteryResponse:
+    """Direct path parameter endpoint to reset or override student concept mastery."""
+    if new_status not in ("LEARNING", "MASTERED"):
+        raise HTTPException(status_code=400, detail="new_status must be 'LEARNING' or 'MASTERED'")
+    try:
+        return reset_student_concept_status(
+            student_id=student_id,
+            source_id=source_id,
+            concept_id=concept_id,
+            new_status=new_status,  # type: ignore
+            instructor_notes=notes or "Reset via instructor mastery endpoint",
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
