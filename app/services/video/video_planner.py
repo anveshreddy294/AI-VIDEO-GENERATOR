@@ -33,6 +33,9 @@ Use ONLY the supplied educational source material.
 Do not invent facts.
 Ground ALL scene titles, descriptions, and narration strictly in the SOURCE EVIDENCE and CONCEPT.
 Do not mention physics, forces, or unrelated concepts unless they explicitly appear in the source.
+CRITICAL GROUNDING CONSTRAINT:
+Do NOT generate generic dictionary definitions of common words (such as 'Features', 'Overview', or 'System').
+If a concept is named 'Features', explain the specific features, capabilities, and modular hardware described in the SOURCE EVIDENCE — do NOT explain what a system feature is in abstract computer science.
 
 USER:
 CONCEPT: {concept_name}
@@ -49,7 +52,7 @@ The video must:
 2. Address the likely knowledge gap based on the student's score.
 3. Structure scenes logically: Introduction/Title -> Definitional Core -> Structural/Process Workflow -> Practical Application -> Key Takeaways Summary.
 4. Allocate scene durations so their sum equals approximately {duration} seconds.
-5. Provide clear, natural spoken narration for each scene.
+5. Provide clear, natural spoken narration for each scene strictly grounded in the facts presented in SOURCE EVIDENCE.
 
 Respond with STRICT JSON only matching this schema:
 {{

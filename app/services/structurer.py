@@ -18,10 +18,23 @@ from .schemas import ConceptNode, ContentUnit, KnowledgeGraph, StageDiagnostics,
 
 logger = logging.getLogger(__name__)
 
+
+class KnowledgeExtractionFailed(ValueError):
+    """Raised when knowledge structuring cannot extract valid, source-grounded concepts."""
+
+    pass
+
+
 _STRUCTURE_AND_CONCEPT_PROMPT = """You are an expert curriculum and knowledge graph analyst.
 Analyze the provided study material content units and extract:
 1. The structural hierarchy (chapters/sections) of the material.
 2. The core concepts taught, their definitions, prerequisite concept IDs, and which content unit IDs teach them.
+
+CRITICAL GROUNDING RULES:
+- Every concept MUST be supported by factual evidence in the provided MATERIAL CONTENT UNITS.
+- Do NOT invent or assume concepts from external domains.
+- Do NOT use generic placeholder topic names like 'Study Material', 'Features', 'Introduction', 'Overview', or 'Untitled'.
+- If the source material does not support educational concepts, return an empty "concepts" array.
 
 Respond with STRICT JSON only — no markdown fences, no commentary.
 
@@ -78,13 +91,11 @@ def _generate_with_llm(payload: str) -> str:
 
 
 def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[str, Any]:
-    """Auto-repair and normalize LLM responses into compliant concepts schema."""
+    """Auto-repair and normalize LLM responses into compliant concepts schema with strict evidence grounding."""
     if not isinstance(data, dict):
         return {}
 
     cu_map = {u.content_id: u for u in units}
-    valid_cu_ids = list(cu_map.keys())
-    fallback_cu_id = valid_cu_ids[0] if valid_cu_ids else "CU_DEFAULT"
 
     # If "concepts" is missing or empty, search for alternative keys like "nodes", "topics", "key_concepts", "items"
     raw_concepts = data.get("concepts")
@@ -108,11 +119,11 @@ def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[
             for i, item in enumerate(candidates):
                 if isinstance(item, str):
                     name = item.strip()
-                    defn = f"{name} as documented in the study material."
+                    defn = ""
                     nid = str(i + 1)
                 elif isinstance(item, dict):
-                    name = str(item.get("text") or item.get("name") or item.get("title") or item.get("label") or f"Concept {i+1}").strip()
-                    defn = str(item.get("definition") or item.get("description") or item.get("text") or f"{name} as documented in the study material.").strip()
+                    name = str(item.get("text") or item.get("name") or item.get("title") or item.get("label") or "").strip()
+                    defn = str(item.get("definition") or item.get("description") or item.get("text") or "").strip()
                     nid = str(item.get("id", i + 1))
                 else:
                     continue
@@ -120,13 +131,33 @@ def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[
                 if len(name) < 3:
                     continue
 
-                cid = re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{name.upper()}")[:35].strip("_") or f"CONCEPT_{i+1:03d}"
+                # Grounding check: concept name must appear in source material
                 matched_cu = None
                 for u in units:
                     if name.lower() in (u.text or "").lower():
-                        matched_cu = u.content_id
+                        matched_cu = u
                         break
+                if not matched_cu:
+                    sig_words = [w.lower() for w in re.findall(r"[A-Za-z0-9]{4,}", name)]
+                    if sig_words:
+                        for u in units:
+                            if all(w in (u.text or "").lower() for w in sig_words):
+                                matched_cu = u
+                                break
+                if not matched_cu:
+                    logger.warning("[structurer] Rejecting candidate concept '%s' - no source evidence found.", name)
+                    continue
 
+                if not defn:
+                    u_text = matched_cu.text or ""
+                    for s in re.split(r"(?<=[.!?])\s+", u_text):
+                        if name.lower() in s.lower():
+                            defn = s.strip()
+                            break
+                    if not defn:
+                        defn = u_text[:200].strip()
+
+                cid = re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{name.upper()}")[:35].strip("_") or f"CONCEPT_{i+1:03d}"
                 prereqs = [
                     re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{p.upper()}")[:35].strip("_")
                     for p in edge_map.get(nid, [])
@@ -136,7 +167,7 @@ def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[
                     "name": name,
                     "definition": defn,
                     "prerequisite_concept_ids": prereqs,
-                    "source_content_ids": [matched_cu or fallback_cu_id],
+                    "source_content_ids": [matched_cu.content_id],
                 })
         if converted:
             data["concepts"] = converted
@@ -148,7 +179,39 @@ def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[
         for idx, c in enumerate(data["concepts"]):
             if not isinstance(c, dict):
                 continue
-            name = str(c.get("name") or c.get("title") or f"Concept {idx+1}").strip()
+            name = str(c.get("name") or c.get("title") or "").strip()
+            if not name or len(name) < 2:
+                continue
+
+            # Grounding check: verify that concept name exists in source units
+            matched_cu = None
+            refs = c.get("source_content_ids")
+            valid_refs = [r for r in refs if r in cu_map] if isinstance(refs, list) else []
+            if valid_refs:
+                for ref_id in valid_refs:
+                    u = cu_map[ref_id]
+                    if name.lower() in (u.text or "").lower():
+                        matched_cu = u
+                        break
+            if not matched_cu:
+                for u in units:
+                    if name.lower() in (u.text or "").lower():
+                        matched_cu = u
+                        valid_refs = [u.content_id]
+                        break
+            if not matched_cu:
+                sig_words = [w.lower() for w in re.findall(r"[A-Za-z0-9]{4,}", name)]
+                if sig_words:
+                    for u in units:
+                        if any(w in (u.text or "").lower() for w in sig_words):
+                            matched_cu = u
+                            valid_refs = [u.content_id]
+                            break
+
+            if not matched_cu or not valid_refs:
+                logger.warning("[structurer] Rejecting concept '%s' due to lack of source evidence.", name)
+                continue
+
             cid = str(c.get("concept_id") or "").strip()
             if not cid:
                 cid = re.sub(r"[^A-Z0-9_]", "_", f"CONCEPT_{name.upper()}")[:35].strip("_") or f"CONCEPT_{idx+1:03d}"
@@ -159,21 +222,16 @@ def _normalize_llm_data(data: dict[str, Any], units: list[ContentUnit]) -> dict[
             c["name"] = name
 
             defn = str(c.get("definition") or c.get("description") or "").strip()
-            if not defn:
-                defn = f"{name} as defined in the curriculum materials."
-            c["definition"] = defn
-
-            refs = c.get("source_content_ids")
-            valid_refs = [r for r in refs if r in cu_map] if isinstance(refs, list) else []
-            if not valid_refs:
-                matched_cu = None
-                for u in units:
-                    if name.lower() in (u.text or "").lower():
-                        matched_cu = u.content_id
+            if not defn or "as defined in the curriculum materials" in defn.lower():
+                u_text = matched_cu.text or ""
+                for s in re.split(r"(?<=[.!?])\s+", u_text):
+                    if name.lower() in s.lower():
+                        defn = s.strip()
                         break
-                valid_refs = [matched_cu or fallback_cu_id]
+                if not defn:
+                    defn = u_text[:200].strip()
+            c["definition"] = defn
             c["source_content_ids"] = valid_refs
-
             repaired.append(c)
 
         # Sanitize prerequisites: remove missing parents and self-loops
@@ -263,7 +321,7 @@ def _assemble_outputs(
     cu_map = {u.content_id: u for u in units}
     concepts = data.get("concepts")
     if not isinstance(concepts, list) or not concepts:
-        raise ValueError("Knowledge extraction returned no concepts")
+        raise KnowledgeExtractionFailed("Knowledge extraction returned no valid grounded concepts.")
     ids = [c.get("concept_id") for c in concepts]
     if any(not isinstance(cid, str) or not cid.strip() for cid in ids) or len(set(ids)) != len(ids):
         raise ValueError("Concept IDs must be nonempty and unique")
@@ -320,11 +378,21 @@ def _assemble_outputs(
         concepts_dict[cid] = node
         prereqs_set.update(node.prerequisite_concept_ids)
 
+    if not concepts_dict:
+        raise KnowledgeExtractionFailed("No valid source-grounded concepts could be identified.")
+
     kg = KnowledgeGraph(concepts=concepts_dict)
 
     # 3. Derive TopicBlueprint
+    raw_topic = str(data.get("topic_name") or "").strip()
+    generic_names = ("ingested learning material", "study material", "untitled", "unknown", "features", "overview", "introduction", "document", "general")
+    if not raw_topic or raw_topic.lower() in generic_names:
+        topic_name = list(concepts_dict.values())[0].name
+    else:
+        topic_name = raw_topic
+
     blueprint = TopicBlueprint(
-        topic_name=data.get("topic_name", "Ingested Learning Material"),
+        topic_name=topic_name,
         key_concepts=[c.name for c in concepts_dict.values()],
         prerequisites=list(prereqs_set),
         difficulty_level=data.get("difficulty_level", "intermediate"),
@@ -354,7 +422,7 @@ def _fallback_outputs(
     concepts_dict: dict[str, ConceptNode] = {}
     prereqs_set: set[str] = set()
     seen_names: set[str] = set()
-    topic_name = "Study Material"
+    topic_name = ""
 
     for u in units:
         text = (u.text or "").strip()
@@ -363,15 +431,17 @@ def _fallback_outputs(
 
         lines = [line.strip() for line in text.split("\n") if line.strip()]
         for line in lines:
+            alpha_words = re.findall(r"[A-Za-z]{3,}", line)
+
             # Candidate topic title
-            if topic_name == "Study Material" and 5 <= len(line) <= 80:
+            if not topic_name and 5 <= len(line) <= 80 and alpha_words:
                 clean_title = re.sub(
                     r"^(Problem Statement \d+|Title of Problem Statement|Chapter \d+:?|Topic:?)\s*",
                     "",
                     line,
                     flags=re.IGNORECASE,
                 ).strip()
-                if len(clean_title) >= 5:
+                if len(clean_title) >= 5 and clean_title.lower() not in ("study material", "introduction", "overview", "features", "notes", "summary"):
                     topic_name = clean_title
 
             # Acronym or named pattern: e.g. "Free Space Optical Communication (FSOC)"
@@ -418,7 +488,7 @@ def _fallback_outputs(
                     )
 
             # Clean headings
-            if 4 <= len(line) <= 60 and not line.endswith(".") and not line.startswith("http") and not line.startswith("•"):
+            if 4 <= len(line) <= 60 and not line.endswith(".") and not line.startswith("http") and not line.startswith("•") and alpha_words:
                 clean_hd = re.sub(
                     r"^(Section \d+(\.\d+)*:?|Chapter \d+:?|Description:?|Background:?)\s*",
                     "",
@@ -427,7 +497,8 @@ def _fallback_outputs(
                 ).strip().rstrip(":")
                 ignore_starts = ("code ", "git ", "pip ", "open ", "find", "change ", "expected", "select-string", "select ", "run ", "then ", "now ", "also ", "you should ", "for an ", "you can ", "if ")
                 if 4 <= len(clean_hd) <= 45 and clean_hd not in seen_names and len(seen_names) < 6:
-                    if clean_hd.lower() not in ("parameter", "parameters", "notes", "summary", "overview", "introduction") and not clean_hd.lower().startswith(ignore_starts):
+                    clean_alpha = re.findall(r"[A-Za-z]{3,}", clean_hd)
+                    if clean_alpha and clean_hd.lower() not in ("parameter", "parameters", "notes", "summary", "overview", "introduction", "features", "study material") and not clean_hd.lower().startswith(ignore_starts):
                         seen_names.add(clean_hd)
                         cid_token = re.sub(r"[^A-Z0-9_]", "_", clean_hd.upper()).strip("_")
                         import hashlib
@@ -442,39 +513,20 @@ def _fallback_outputs(
                             source_content_ids=[u.content_id],
                         )
 
-    # Ensure at least 2 distinct concepts are produced from units
-    if len(concepts_dict) < 2 and units:
-        for idx, u in enumerate(units):
-            if len(concepts_dict) >= 3:
-                break
-            txt = (u.text or "").strip()
-            if len(txt) < 15 or any(u.content_id in c.source_content_ids for c in concepts_dict.values()):
-                continue
-            first_line = txt.split("\n")[0].strip().rstrip(":")
-            if first_line.startswith(("-", "=", "*")):
-                continue
-            words = [w for w in re.findall(r"[A-Za-z0-9_\-\.]{2,}", first_line) if w.lower() not in ("the", "this", "that", "with", "from", "then", "also", "open", "find", "change", "now")]
-            cand_name = " ".join(words[:4]).title() if words else f"Topic Segment {len(concepts_dict)+1}"
-            if cand_name in seen_names:
-                continue
-            seen_names.add(cand_name)
-            cid = f"CONCEPT_{len(concepts_dict)+1:03d}"
-            concepts_dict[cid] = ConceptNode(
-                concept_id=cid,
-                name=cand_name,
-                definition=txt[:250].strip(),
-                prerequisite_concept_ids=list(concepts_dict.keys())[-1:] if concepts_dict else [],
-                related_concept_ids=[],
-                source_content_ids=[u.content_id],
-            )
+    # Fail closed: if no grounded concepts could be discovered, do NOT invent synthetic concepts
+    if not concepts_dict:
+        raise KnowledgeExtractionFailed(
+            f"Rule-based concept extraction found no source-grounded concepts. Reason: {fallback_reason or 'No identifiable concepts in source text'}"
+        )
 
     for node in concepts_dict.values():
         prereqs_set.update(node.prerequisite_concept_ids)
 
+    final_topic = topic_name or list(concepts_dict.values())[0].name
     kg = KnowledgeGraph(concepts=concepts_dict)
     blueprint = TopicBlueprint(
-        topic_name=topic_name,
-        key_concepts=[c.name for c in concepts_dict.values()] or ["Study Material"],
+        topic_name=final_topic,
+        key_concepts=[c.name for c in concepts_dict.values()],
         prerequisites=list(prereqs_set),
         difficulty_level="intermediate",
         source_id=source_id,

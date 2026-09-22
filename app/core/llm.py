@@ -313,12 +313,17 @@ class MockProvider:
                     ],
                 })
 
-        if "verified_source_context" in lower or "pedagogically rigorous teaching assistant" in lower:
+        if "verified_source_context" in lower or "untrusted_retrieved_evidence" in lower or "pedagogically rigorous teaching assistant" in lower:
             import re
             cids = re.findall(r"\[Chunk ID:\s*([a-zA-Z0-9_\-]+)", prompt)
             cid = cids[0] if cids else "chunk_mock_1"
             src_sample = "Force equals mass times acceleration (F = ma)."
-            if "<VERIFIED_SOURCE_CONTEXT>" in prompt:
+            if "<UNTRUSTED_RETRIEVED_EVIDENCE>" in prompt:
+                ctx = prompt.split("<UNTRUSTED_RETRIEVED_EVIDENCE>")[1].split("</UNTRUSTED_RETRIEVED_EVIDENCE>")[0]
+                lines = [l.strip() for l in ctx.splitlines() if l.strip() and not l.startswith("[Chunk ID") and not l.startswith("---")]
+                if lines:
+                    src_sample = lines[0]
+            elif "<VERIFIED_SOURCE_CONTEXT>" in prompt:
                 ctx = prompt.split("<VERIFIED_SOURCE_CONTEXT>")[1].split("</VERIFIED_SOURCE_CONTEXT>")[0]
                 lines = [l.strip() for l in ctx.splitlines() if l.strip() and not l.startswith("[Chunk ID") and not l.startswith("---")]
                 if lines:
@@ -339,37 +344,43 @@ class MockProvider:
 
         if "concept" in lower and "definition" in lower and ("curriculum" in lower or "structure" in lower):
             import re
-            found_cu = re.findall(r"\[(CU_[a-zA-Z0-9_\-]+)\]", prompt)
-            cu1 = found_cu[0] if found_cu else "CU_001"
-            cu2 = found_cu[1] if len(found_cu) > 1 else cu1
+            cu_blocks = re.findall(r"\[(CU_[a-zA-Z0-9_\-]+)\](?:\s*\([^)]*\))?:\s*([^\n]+)", prompt)
+            if not cu_blocks:
+                found_cu = re.findall(r"\[(CU_[a-zA-Z0-9_\-]+)\]", prompt)
+                cu_blocks = [(cid, "Educational study material.") for cid in found_cu]
+
+            if not cu_blocks:
+                return json.dumps({"topic_name": "Empty Material", "difficulty_level": "beginner", "concepts": []})
+
+            extracted_concepts = []
+            for idx, (cid, ctext) in enumerate(cu_blocks[:3]):
+                words = [w for w in re.findall(r"[A-Za-z0-9\-]{3,}", ctext) if w.lower() not in ("this", "that", "with", "from", "image", "slide", "study", "asset", "material")]
+                if not words:
+                    continue
+                cname = " ".join(words[:2]).title()
+                c_id = f"CONCEPT_{re.sub(r'[^A-Z0-9_]', '_', cname.upper())[:20]}"
+                extracted_concepts.append({
+                    "concept_id": c_id,
+                    "name": cname,
+                    "definition": ctext[:120].strip() or f"{cname} as defined in source.",
+                    "prerequisite_concept_ids": [extracted_concepts[-1]["concept_id"]] if extracted_concepts else [],
+                    "source_content_ids": [cid],
+                })
+
+            top_name = extracted_concepts[0]["name"] if extracted_concepts else "Educational Topic"
             return json.dumps({
-                "topic_name": "Classical Mechanics",
+                "topic_name": top_name,
                 "difficulty_level": "intermediate",
                 "chapters": [
                     {
                         "id": "CH1",
-                        "title": "Laws of Motion",
+                        "title": top_name,
                         "sections": [
-                            {"id": "SEC1_1", "title": "Fundamentals", "content_ids": [cu1, cu2]}
+                            {"id": "SEC1_1", "title": "Overview", "content_ids": [c[0] for c in cu_blocks]}
                         ],
                     }
                 ],
-                "concepts": [
-                    {
-                        "concept_id": "CONCEPT_FORCE",
-                        "name": "Force",
-                        "definition": "An interaction that changes an object's state of motion.",
-                        "prerequisite_concept_ids": [],
-                        "source_content_ids": [cu1],
-                    },
-                    {
-                        "concept_id": "CONCEPT_NEWTON_2",
-                        "name": "Newton's Second Law",
-                        "definition": "Force equals mass multiplied by acceleration (F = ma).",
-                        "prerequisite_concept_ids": ["CONCEPT_FORCE"],
-                        "source_content_ids": [cu2],
-                    },
-                ],
+                "concepts": extracted_concepts,
             })
 
         # Default assessment question JSON - grounded dynamically if prompt contains concept or source material

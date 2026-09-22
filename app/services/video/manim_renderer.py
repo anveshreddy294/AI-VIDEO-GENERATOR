@@ -25,6 +25,30 @@ from .scene_schema import ScenePlan, SceneType, VideoPlan
 logger = logging.getLogger(__name__)
 
 
+def _validate_raw_video(mp4_path: Path) -> None:
+    """Verify that rendered visual animation exists, has valid size, video stream, and duration."""
+    if not mp4_path.exists():
+        raise FileNotFoundError(f"Rendered visual MP4 not found: {mp4_path}")
+    if mp4_path.stat().st_size == 0:
+        raise ValueError(f"Rendered visual MP4 is 0 bytes: {mp4_path}")
+    try:
+        from .video_compositor import probe_media
+        info = probe_media(mp4_path)
+        streams = info.get("streams", [])
+        v_streams = [s for s in streams if s.get("codec_type") == "video"]
+        if not v_streams:
+            raise ValueError(f"Rendered visual MP4 has no video stream: {mp4_path}")
+        if not v_streams[0].get("codec_name"):
+            raise ValueError(f"Rendered visual MP4 has unknown video codec: {mp4_path}")
+        format_info = info.get("format", {})
+        dur = float(format_info.get("duration", 0) or 0)
+        if dur <= 0:
+            raise ValueError(f"Rendered visual MP4 has invalid duration ({dur}s): {mp4_path}")
+    except Exception as exc:
+        logger.warning("[manim_renderer] Probe validation failed for %s: %s", mp4_path, exc)
+        raise
+
+
 def render_video_plan(plan: VideoPlan, output_mp4: Path) -> Path:
     """Render a VideoPlan to an MP4 video file."""
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
@@ -32,14 +56,20 @@ def render_video_plan(plan: VideoPlan, output_mp4: Path) -> Path:
     # For multi-minute videos (>60s) or fast quality settings, use high-speed OpenCV/Pillow engine
     # which renders in seconds with dynamic on-screen captions and zero display/LaTeX overhead
     if plan.duration_seconds > 60 or getattr(settings, "manim_quality", "") in ("fast", "pillow", "opencv"):
-        return _render_with_pillow_opencv(plan, output_mp4)
+        res = _render_with_pillow_opencv(plan, output_mp4)
+        _validate_raw_video(res)
+        return res
 
     # Attempt Manim rendering first for short videos <= 60s
     try:
-        return _render_with_manim(plan, output_mp4)
+        res = _render_with_manim(plan, output_mp4)
+        _validate_raw_video(res)
+        return res
     except Exception as exc:
         logger.warning(f"[manim_renderer] Manim engine encountered error ({exc}); using OpenCV/PIL programmatic renderer")
-        return _render_with_pillow_opencv(plan, output_mp4)
+        res = _render_with_pillow_opencv(plan, output_mp4)
+        _validate_raw_video(res)
+        return res
 
 
 def _render_with_manim(plan: VideoPlan, output_mp4: Path) -> Path:
@@ -180,19 +210,20 @@ def _render_with_manim(plan: VideoPlan, output_mp4: Path) -> Path:
     scene_inst = DynamicEducationalScene()
     scene_inst.render()
 
+    # If output_mp4 does not directly exist, check if Manim generated it inside temp_dir
+    if not (output_mp4.exists() and output_mp4.stat().st_size > 0):
+        for candidate in temp_dir.rglob("*.mp4"):
+            if candidate.exists() and candidate.stat().st_size > 0:
+                shutil.copy2(candidate, output_mp4)
+                break
+
     shutil.rmtree(temp_dir, ignore_errors=True)
 
     if output_mp4.exists() and output_mp4.stat().st_size > 0:
         return output_mp4
 
-    # Locate generated output file in video_dir if name differed
-    for candidate in output_mp4.parent.glob("*.mp4"):
-        if candidate.stat().st_size > 0:
-            if candidate != output_mp4:
-                shutil.copy2(candidate, output_mp4)
-            return output_mp4
+    raise RuntimeError(f"Manim render produced no valid output file for {output_mp4.name}")
 
-    raise RuntimeError("Manim render produced no output file")
 
 
 def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:

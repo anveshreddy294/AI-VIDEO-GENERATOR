@@ -12,7 +12,7 @@ environments to prevent accidental exposure of student data.
 
 import logging
 import os
-from typing import Optional
+from typing import Any,Optional
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Security
 from fastapi.responses import HTMLResponse
 from fastapi.security.api_key import APIKeyHeader

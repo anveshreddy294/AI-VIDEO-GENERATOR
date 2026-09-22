@@ -18,7 +18,7 @@ class Settings:
         self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_v1")
 
         # --- Models ---
-        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "embeddinggemma")
         self.generation_model: str = os.getenv("GENERATION_MODEL", "llama3.2:3b")
 
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
@@ -76,7 +76,7 @@ class Settings:
         self.ollama_base_url: str = (os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
         self.ollama_url: str = self.ollama_base_url
         self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        self.ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+        self.ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", self.embedding_model)
         self.ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
 
         # --- Step 3: Video Engine Directories & Configuration ---
@@ -107,6 +107,15 @@ class Settings:
         self.max_background_jobs: int = int(os.getenv("MAX_BACKGROUND_JOBS", "2"))
         self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
+
+        # --- Multimodal Vision Extraction (OpenRouter) ---
+        self.openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+        self.vision_provider: str = os.getenv("VISION_PROVIDER", "openrouter").strip().lower()
+        self.vision_model: str = os.getenv("VISION_MODEL", "google/gemma-4-31b-it:free").strip()
+        self.vision_fallback_model: str = os.getenv("VISION_FALLBACK_MODEL", "inclusionai/ling-3.0-flash-vl:free").strip()
+        self.vision_timeout_seconds: float = float(os.getenv("VISION_TIMEOUT_SECONDS", "60"))
+        self.vision_max_retries: int = int(os.getenv("VISION_MAX_RETRIES", "1"))
+
 
 
     # ---------- Validation helpers ----------

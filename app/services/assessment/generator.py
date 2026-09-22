@@ -61,11 +61,17 @@ DEFINITION: {concept_definition}
 SOURCE MATERIAL (authoritative grounded text from student's study material):
 {source_chunks}
 
-STRICT INSTRUCTIONS:
-1. Test conceptual understanding grounded strictly in the provided text according to the specified PEDAGOGICAL ANGLE.
+STRICT GROUNDING & DISTRACTOR RULES:
+1. Question stem and correct answer MUST be strictly grounded in the provided SOURCE MATERIAL.
 2. Provide exactly 4 options with indices 0, 1, 2, 3.
-3. Provide exactly 1 correct answer and 3 plausible but factually incorrect options (common student misconceptions).
-4. Negative prompt: Do not use trivial or obviously silly distractors. Every incorrect option must sound plausible.
+3. Every distractor MUST be derived by a controlled transformation of source evidence:
+   - For definition questions: modify or invert one specific source-supported property.
+   - For relationship questions: alter a specific source-supported relationship or dependency.
+   - For sequence/workflow questions: reorder the stages or steps described in the source.
+4. FORBIDDEN DISTRACTORS:
+   - Do NOT invent external scientific/technical facts not present in the source material.
+   - Do NOT use generic LLM filler phrases (e.g. 'direct contradiction to foundational principles', 'auxiliary secondary property', 'transient buffer').
+   - Do NOT reference filenames, chunk IDs, or metadata.
 5. Provide a clear explanation of why the correct answer is right according to the source material.
 
 Respond with STRICT JSON only (no markdown, no explanation outside JSON):
@@ -439,42 +445,42 @@ def _generate_grounded_fallback(
 
     if variant_type == "relationship":
         stem = f"Regarding {concept.name}, how does this principle connect to prerequisite context ({prereq_str}) to establish '{def_snippet}'?"
-        correct_text = f"{concept.name} builds directly upon {prereq_str} to establish that: {definition[:110]}."
-        distractor_1 = f"{concept.name} functions in complete isolation, superseding and invalidating {prereq_str}."
-        distractor_2 = f"{concept.name} inverts the causal sequence, requiring downstream applications to precede {prereq_str}."
-        distractor_3 = f"{concept.name} is a redundant synonym for {prereq_str} with no distinct properties of its own."
+        correct_text = f"{concept.name} directly depends upon {prereq_str} to establish that: {definition[:110]}."
+        distractor_1 = f"{concept.name} precedes and serves as the mandatory prerequisite for {prereq_str}."
+        distractor_2 = f"{concept.name} operates with complete independence, requiring no functional interaction with {prereq_str}."
+        distractor_3 = f"{concept.name} actively negates and replaces the conditions established by {prereq_str}."
         explanation = f"Directly derived from the prerequisite structure and source definition of {concept.name}."
 
     elif variant_type == "application":
         stem = f"In practical applications of {concept.name} ({def_snippet}), which scenario demonstrates its correct operation?"
-        correct_text = f"An application where {concept.name} is used to explain: {definition[:110]}."
-        distractor_1 = f"Applying {concept.name} to produce infinite output without consuming system energy or resources."
-        distractor_2 = f"Using {concept.name} exclusively as a static label without observing any state change in the system."
-        distractor_3 = f"Treating {concept.name} as applicable only when all environmental interactions are completely absent."
+        correct_text = f"An application where {concept.name} is used to achieve: {definition[:110]}."
+        distractor_1 = f"Applying {concept.name} in a manner that bypasses and disables {def_snippet}."
+        distractor_2 = f"Applying {concept.name} to reverse the observable outcomes of {def_snippet}."
+        distractor_3 = f"Restricting {concept.name} exclusively to scenarios where {def_snippet} is inactive."
         explanation = f"Grounded application of {concept.name} according to the source curriculum."
 
     elif variant_type == "comparison":
         stem = f"When distinguishing {concept.name} ({def_snippet}) from related domain principles, which criterion uniquely identifies it?"
         correct_text = f"Only {concept.name} specifically describes: {definition[:110]}."
-        distractor_1 = f"{concept.name} uniquely lacks any measurable or observable consequences in physical systems."
-        distractor_2 = f"{concept.name} is characterized by being universally identical across all distinct phenomena."
-        distractor_3 = f"{concept.name} uniquely requires external observers to manually define its properties at each step."
+        distractor_1 = f"{concept.name} is structurally identical to and functionally interchangeable with {prereq_str}."
+        distractor_2 = f"{concept.name} is distinguished by completely omitting {def_snippet}."
+        distractor_3 = f"{concept.name} is a superseded duplicate with no distinct properties beyond {prereq_str}."
         explanation = f"Comparative distinction for {concept.name} grounded in source definition."
 
     elif variant_type == "misconception":
         stem = f"Which statement regarding {concept.name} ({def_snippet}) represents an accurate understanding rather than a misconception?"
         correct_text = f"An accurate understanding recognizes that {concept.name} means: {definition[:110]}."
-        distractor_1 = f"A misconception assuming {concept.name} is merely a temporary convention with no factual basis."
-        distractor_2 = f"A flawed assumption that {concept.name} automatically guarantees equilibrium regardless of external conditions."
-        distractor_3 = f"An incorrect belief that {concept.name} operates only in theoretical approximations and never in actual scenarios."
+        distractor_1 = f"A misconception assuming {concept.name} functions without any relation to {def_snippet}."
+        distractor_2 = f"A flawed assumption that {concept.name} is completely interchangeable with {prereq_str}."
+        distractor_3 = f"An incorrect belief that {concept.name} automatically negates {def_snippet}."
         explanation = f"Diagnostic distinction addressing misconceptions regarding {concept.name}."
 
     else:  # "definition" / default
         stem = f"According to the study material for {concept.name}, which statement accurately captures its core definition ({def_snippet})?"
         correct_text = definition if len(definition) < 140 else f"{concept.name} is primarily defined as: {definition[:120]}..."
-        distractor_1 = f"{concept.name} operates in direct contradiction to{prereq_str}, reversing the system's observable state."
-        distractor_2 = f"{concept.name} is classified as an auxiliary secondary property that has no measurable interaction with {concept.name}."
-        distractor_3 = f"{concept.name} serves merely as a transient buffer and does not represent an independent conceptual model."
+        distractor_1 = f"{concept.name} operates completely independently without requiring {def_snippet}."
+        distractor_2 = f"{concept.name} acts exclusively to prevent {def_snippet} from occurring."
+        distractor_3 = f"{concept.name} applies only when {def_snippet} is disabled or absent."
         explanation = f"Directly derived from the source definition of {concept.name}: {definition[:120]}"
 
     distractors = [distractor_1, distractor_2, distractor_3]

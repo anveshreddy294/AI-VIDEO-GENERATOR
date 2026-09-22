@@ -26,7 +26,7 @@ from .narration import extract_narration_script
 from .scene_schema import VideoArtifact, VideoJobStatus, VideoPlan
 from .scene_validator import validate_video_plan
 from .tts import get_tts_provider
-from .video_compositor import composite_remedial_video
+from .video_compositor import composite_remedial_video, probe_media, validate_video_artifact
 from .video_planner import plan_video_for_target
 from .whisper_alignment import get_whisper_aligner
 
@@ -167,11 +167,20 @@ async def execute_video_generation_job(
         )
         artifact.audio_path = str(audio_path)
 
+        # Validate narration audio exists and has valid audio stream
+        if not audio_path.exists() or audio_path.stat().st_size == 0:
+            raise RuntimeError(f"Narration audio file is missing or 0 bytes: {audio_path}")
+        audio_probe = probe_media(audio_path)
+        a_streams = [s for s in audio_probe.get("streams", []) if s.get("codec_type") == "audio"]
+        if not a_streams:
+            raise RuntimeError(f"Narration audio {audio_path} contains no valid audio stream")
+        a_dur = float(audio_probe.get("format", {}).get("duration", 0) or 0)
+        if a_dur <= 0:
+            raise RuntimeError(f"Narration audio {audio_path} has invalid duration ({a_dur}s)")
+
         # Inspect generated audio duration and sync visual scenes if audio took slightly longer
         try:
-            import wave
-            with wave.open(str(audio_path), "rb") as wf:
-                actual_audio_dur = wf.getnframes() / float(wf.getframerate())
+            actual_audio_dur = a_dur
             if actual_audio_dur > float(plan.duration_seconds):
                 logger.info(
                     "%s Audio duration (%.2fs) exceeds planned visual duration (%ds); scaling visual scenes...",
@@ -182,7 +191,7 @@ async def execute_video_generation_job(
                     s.duration_seconds = round(s.duration_seconds * ratio, 2)
                 plan.duration_seconds = int(actual_audio_dur)
         except Exception as exc:
-            logger.debug("%s Could not inspect audio duration: %s", log_prefix, exc)
+            logger.debug("%s Could not scale visual scenes to audio duration: %s", log_prefix, exc)
 
         # 3. Whisper Alignment & Subtitle Generation
         artifact.status = VideoJobStatus.ALIGNING
@@ -211,6 +220,17 @@ async def execute_video_generation_job(
         raw_video_path = settings.renders_dir / f"{jid}_visual.mp4"
         await asyncio.to_thread(render_video_plan, plan, raw_video_path)
 
+        # Validate rendered visual stream exists and has valid duration
+        if not raw_video_path.exists() or raw_video_path.stat().st_size == 0:
+            raise RuntimeError(f"Rendered visual video file missing or 0 bytes: {raw_video_path}")
+        raw_probe = probe_media(raw_video_path)
+        v_streams = [s for s in raw_probe.get("streams", []) if s.get("codec_type") == "video"]
+        if not v_streams:
+            raise RuntimeError(f"Rendered visual video {raw_video_path} contains no video stream")
+        v_dur = float(raw_probe.get("format", {}).get("duration", 0) or 0)
+        if v_dur <= 0:
+            raise RuntimeError(f"Rendered visual video {raw_video_path} has invalid duration ({v_dur}s)")
+
         # 5. Final Audio/Video Composition
         artifact.status = VideoJobStatus.COMPOSITING
         artifact.stage = "Compositing Final MP4"
@@ -224,6 +244,17 @@ async def execute_video_generation_job(
             audio_wav=audio_path,
             output_mp4=final_mp4_path,
             subtitles_srt=srt_path,
+        )
+
+        # Strictly validate final composited artifact integrity
+        final_validation = validate_video_artifact(final_mp4_path, expect_audio=True)
+        logger.info(
+            "%s Final artifact validated: size=%d bytes, duration=%.2fs, v_codec=%s, a_codec=%s",
+            log_prefix,
+            final_validation["size"],
+            final_validation["duration"],
+            final_validation["video_codec"],
+            final_validation["audio_codec"],
         )
 
         # 6. Store in canonical structured video artifact store

@@ -42,10 +42,13 @@ class SanitizedContent(BaseModel):
 
 # High-risk patterns that directly signal adversarial instruction override attempts
 INJECTION_OVERRIDE_PATTERNS: list[tuple[str, str]] = [
-    (r"ignore\s+(all\s+)?(previous|prior|above)\s+(instructions|prompts|directives|commands)", "instruction_override"),
+    (r"ignore\s+(all\s+)?(previous|prior|above)?\s*(instructions|prompts|directives|commands|rules|constraints)\b", "instruction_override"),
     (r"disregard\s+(the\s+)?(system\s+prompt|all\s+prior|previous)\b", "instruction_override"),
-    (r"reveal\s+(your\s+)?(instructions|system\s+prompt|hidden\s+prompt|secret)", "system_prompt_extraction"),
-    (r"show\s+(your\s+)?(hidden\s+prompt|initial\s+instructions|system\s+message)", "system_prompt_extraction"),
+    (r"reveal\s+(your\s+|the\s+)?(instructions|system\s+prompt|hidden\s+prompt|secret)", "system_prompt_extraction"),
+    (r"show\s+(your\s+|the\s+)?(hidden\s+prompt|initial\s+instructions|system\s+message)", "system_prompt_extraction"),
+    (r"(print|reveal|show|return|leak|output)\s+(all\s+)?(api[_\-\s]?keys?|secrets?|tokens?|env(ironment)?\s*(variables|vars)?|passwords?)\b", "secret_extraction"),
+    (r"(search|query|retrieve|scan)\s+(all|every|the entire)\s+(chunks?|sources?|database|tenants?|users?)\b", "database_wide_search"),
+    (r"(return|show|reveal|access|leak)\s+(information|data|sources?)\s+(belonging\s+to|from|of)\s+(other|all)\s+users?\b", "cross_tenant_extraction"),
     (r"you\s+are\s+now\s+(a\s+different\s+assistant|DAN|in\s+developer\s+mode|unrestricted)", "role_switching"),
     (r"act\s+as\s+(an\s+unrestricted|DAN|a\s+malicious|a\s+different\s+ai)", "role_switching"),
     (r"(delete|drop)\s+(the\s+)?(database|table|all\s+files|filesystem)\b", "destructive_command"),

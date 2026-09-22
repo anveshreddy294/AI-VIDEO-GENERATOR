@@ -40,6 +40,7 @@ class SourceRecord(BaseModel):
         "INDEXING",
         "READY",
         "FAILED",
+        "VISION_EXTRACTION_FAILED",
     ] = "UPLOADED"
     error_message: str | None = None
     created_at: str = Field(
@@ -48,6 +49,26 @@ class SourceRecord(BaseModel):
     updated_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+
+
+class VisionExtractionData(BaseModel):
+    """Normalized structured evidence extracted from an image by vision model."""
+
+    visible_text: list[str] = Field(default_factory=list)
+    headings: list[str] = Field(default_factory=list)
+    paragraphs: list[str] = Field(default_factory=list)
+    bullet_points: list[str] = Field(default_factory=list)
+    diagram_entities: list[str] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    arrows: list[str] = Field(default_factory=list)
+    relationships: list[str] = Field(default_factory=list)
+    tables: list[Any] = Field(default_factory=list)
+    formulas: list[str] = Field(default_factory=list)
+    units: list[str] = Field(default_factory=list)
+    visual_structure: str = ""
+    uncertain_elements: list[str] = Field(default_factory=list)
+    confidence: float = 0.0
+
 
 
 class ContentUnit(BaseModel):
@@ -83,7 +104,7 @@ class ContentUnit(BaseModel):
     region_id: str | None = None
     image_id: str | None = None
     image_path: str | None = None
-    extraction_method: str
+    extraction_method: str = "direct"
     confidence_score: float = Field(
         default=1.0, description="Extraction or OCR/Vision confidence score (0.0 - 1.0)"
     )
@@ -268,6 +289,7 @@ class QARequest(BaseModel):
     user_id: str = "student_default"
     source_id: str
     question: str
+    session_id: str | None = None
     video_id: str | None = None
     current_timestamp: float | None = None
     active_concept_id: str | None = None

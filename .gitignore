@@ -21,3 +21,7 @@ storage/videos/*
 
 .env
 .env.backup
+
+# Local environment secrets
+.env
+scratch/

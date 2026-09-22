@@ -21,7 +21,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..core.config import settings
 from ..services.chunker import create_rich_chunks
-from ..services.dispatcher import UnsupportedFileType, dispatch
+from ..services.dispatcher import UnsupportedFileType, VisionExtractionFailed, dispatch
 from ..services.ingestion.normalizer import normalize_content_units
 from ..services.registry import (
     register_source,
@@ -158,12 +158,20 @@ async def upload_file(
         except UnsupportedFileType as exc:
             update_source_status(source_id, "FAILED", error_message=str(exc))
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except VisionExtractionFailed as exc:
+            logger.warning("[upload] Vision extraction failed for %s: %s", filename, exc)
+            update_source_status(source_id, "VISION_EXTRACTION_FAILED", error_message=str(exc))
+            raise HTTPException(
+                status_code=422,
+                detail=f"VISION_EXTRACTION_FAILED: {exc}",
+            ) from exc
         except Exception as exc:
             logger.exception("[upload] Extraction failed for %s", filename)
             update_source_status(source_id, "FAILED", error_message=str(exc))
             raise HTTPException(
                 status_code=500, detail=f"Extraction failed for '{filename}': {exc}"
             ) from exc
+
 
         if not raw_units:
             update_source_status(source_id, "FAILED", error_message="No content extracted")

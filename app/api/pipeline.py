@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import settings
 from ..services.chunker import create_rich_chunks
-from ..services.dispatcher import UnsupportedFileType, dispatch
+from ..services.dispatcher import UnsupportedFileType, VisionExtractionFailed, dispatch
 from ..services.ingestion.normalizer import normalize_content_units
 from ..services.pipeline_tracker import ProgressEvent, job_manager
 from ..services.registry import (
@@ -38,7 +38,12 @@ from ..services.registry import (
 )
 from ..services.security.content_sanitizer import sanitize_content_records
 from ..services.structurer import process_structure_and_concepts
-from ..services.validator import ValidationFailed, validate_ingestion_quality
+from ..services.validator import (
+    ExtractionQualityError,
+    ValidationFailed,
+    validate_extraction_quality,
+    validate_ingestion_quality,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +142,19 @@ async def _execute_upload_and_assess(
                 metadata={"source_id": source_id},
             )
             return
+        except VisionExtractionFailed as exc:
+            logger.warning("[pipeline] Vision extraction failed for source %s: %s", source_id, exc)
+            update_source_status(source_id, "VISION_EXTRACTION_FAILED", error_message=str(exc))
+            await job_manager.fail_job(
+                job_id=job_id,
+                stage="extracting_content",
+                error_message=f"VISION_EXTRACTION_FAILED: {exc}",
+                metadata={"source_id": source_id, "status": "VISION_EXTRACTION_FAILED"},
+            )
+            return
         except Exception as exc:
+            logger.exception("[pipeline] Content extraction failed for %s", persistent_file.name)
+            update_source_status(source_id, "FAILED", error_message=str(exc))
             await job_manager.fail_job(
                 job_id=job_id,
                 stage="extracting_content",
@@ -146,12 +163,34 @@ async def _execute_upload_and_assess(
             )
             return
 
+
         if not raw_units:
+            update_source_status(source_id, "EXTRACTION_FAILED", error_message="No extractable text or media found.")
             await job_manager.fail_job(
                 job_id=job_id,
                 stage="extracting_content",
-                error_message=f"No extractable text or media found in '{original_filename}'.",
-                metadata={"source_id": source_id},
+                error_message=f"EXTRACTION_FAILED: No extractable text or media found in '{original_filename}'.",
+                metadata={"source_id": source_id, "status": "EXTRACTION_FAILED"},
+            )
+            return
+
+        # Stage 2b: Extraction Quality Gate (Fail-Closed)
+        is_valid, quality_status, quality_reason = validate_extraction_quality(
+            raw_units, modality=extraction_result.modality
+        )
+        if not is_valid:
+            logger.warning(
+                "[pipeline] Source %s failed extraction quality gate: status=%s, reason=%s",
+                source_id,
+                quality_status,
+                quality_reason,
+            )
+            update_source_status(source_id, quality_status, error_message=quality_reason)
+            await job_manager.fail_job(
+                job_id=job_id,
+                stage="extracting_content",
+                error_message=f"{quality_status}: {quality_reason}",
+                metadata={"source_id": source_id, "status": quality_status, "reason": quality_reason},
             )
             return
 
@@ -197,7 +236,20 @@ async def _execute_upload_and_assess(
                     u.text = stext
                     units_to_process.append(u)
         if not units_to_process:
-            units_to_process = raw_units  # Graceful fallback if entire input was quarantined
+            # If all units are quarantined, halt immediately! Do NOT pass raw prompt-injections to the structurer!
+            logger.warning("[pipeline] All extracted units were quarantined for source %s. Halting pipeline.", source_id)
+            update_source_status(
+                source_id,
+                "EXTRACTION_INSUFFICIENT",
+                error_message="All extracted content was quarantined due to security policies.",
+            )
+            await job_manager.fail_job(
+                job_id=job_id,
+                stage="normalizing_units",
+                error_message="EXTRACTION_INSUFFICIENT: Content quarantined under security policies.",
+                metadata={"source_id": source_id, "status": "EXTRACTION_INSUFFICIENT", "quarantined_count": len(quarantined)},
+            )
+            return
 
         await job_manager.emit_event(
             job_id=job_id,
@@ -216,11 +268,16 @@ async def _execute_upload_and_assess(
             enriched_units, knowledge_graph, blueprint = _fallback_outputs(units_to_process, fallback_reason=str(exc))
 
         if not knowledge_graph or not knowledge_graph.concepts:
+            update_source_status(
+                source_id,
+                "EXTRACTION_INSUFFICIENT",
+                error_message="Knowledge graph construction failed: no valid source-grounded concepts could be extracted.",
+            )
             await job_manager.fail_job(
                 job_id=job_id,
                 stage="building_knowledge_graph",
                 error_message="Knowledge graph construction failed: no valid concepts could be extracted.",
-                metadata={"source_id": source_id},
+                metadata={"source_id": source_id, "status": "EXTRACTION_INSUFFICIENT"},
             )
             return
 

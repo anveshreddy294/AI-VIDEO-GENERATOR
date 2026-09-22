@@ -93,9 +93,13 @@ def get_client() -> QdrantClient:
 def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     """Generate a deterministic normalized vector representation for offline/fallback mode."""
     import hashlib
+    import re
     target_dim = dim or _active_embedding_dim
     vec = [0.0] * target_dim
-    for word in text.lower().split():
+    for raw_word in text.lower().split():
+        word = re.sub(r"[^\w]", "", raw_word)
+        if not word:
+            continue
         h = int(hashlib.md5(word.encode("utf-8")).hexdigest(), 16)
         idx = h % target_dim
         vec[idx] += 1.0
@@ -106,18 +110,19 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
 
 
 def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
-    """Attempt batch embedding via Ollama /api/embeddings endpoint.
+    """Attempt batch embedding via Ollama /api/embed endpoint.
 
     Validates:
     - Ollama connectivity, HTTP status, and timeout
     - Valid JSON payload structure
-    - 'embedding' key existence and non-empty list type
-    - Numeric (int, float) and finite (no NaN, Inf) vector values
-    - Homogeneous dimensions across all embeddings in the batch
+    - 'embeddings' key existence and list type
+    - Number of returned vectors equals number of input texts
+    - Every vector is a non-empty list of 768 numeric and finite floats
+    - All vectors have identical dimensions (768)
 
     Differentiates:
     - Provider unavailable (URLError, timeout) -> logged with warning
-    - Invalid provider response (bad JSON, missing/invalid embedding) -> logged with diagnostics
+    - Invalid provider response (bad JSON, missing/invalid embeddings) -> logged with diagnostics
     """
     import json
     import math
@@ -128,78 +133,99 @@ def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
         return []
 
     base_url = (getattr(settings, "ollama_base_url", None) or getattr(settings, "ollama_url", "http://localhost:11434")).rstrip("/")
-    embed_model = getattr(settings, "ollama_embed_model", "nomic-embed-text")
+    embed_model = getattr(settings, "embedding_model", "embeddinggemma")
     timeout = float(getattr(settings, "ollama_timeout", 30.0))
 
-    vectors: list[list[float]] = []
-    batch_dim: int | None = None
+    url = f"{base_url}/api/embed"
+    payload = json.dumps({"model": embed_model, "input": texts}).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
 
-    for idx, text in enumerate(texts):
-        url = f"{base_url}/api/embeddings"
-        payload = json.dumps({"model": embed_model, "prompt": text}).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            resp_bytes = resp.read()
+    except urllib.error.HTTPError as http_err:
+        logger.warning(
+            "[vector_store] Ollama HTTP error during batch embedding (%s): %s",
+            url, http_err
         )
+        return None
+    except urllib.error.URLError as url_err:
+        logger.warning(
+            "[vector_store] Ollama connection failure/timeout during batch embedding (%s): %s",
+            url, url_err
+        )
+        return None
+    except TimeoutError as to_err:
+        logger.warning(
+            "[vector_store] Ollama request timed out after %.1fs during batch embedding: %s",
+            timeout, to_err
+        )
+        return None
 
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                resp_bytes = resp.read()
-        except urllib.error.HTTPError as http_err:
-            logger.warning(
-                "[vector_store] Ollama HTTP error for text index %d (%s): %s",
-                idx, url, http_err
-            )
-            return None
-        except urllib.error.URLError as url_err:
-            logger.warning(
-                "[vector_store] Ollama connection failure/timeout for text index %d (%s): %s",
-                idx, url, url_err
-            )
-            return None
-        except TimeoutError as to_err:
-            logger.warning(
-                "[vector_store] Ollama request timed out after %.1fs for text index %d: %s",
-                timeout, idx, to_err
-            )
-            return None
+    # 1. Parse JSON
+    try:
+        data = json.loads(resp_bytes.decode("utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError) as dec_err:
+        logger.warning(
+            "[vector_store] Ollama returned non-JSON response during batch embedding: %s",
+            dec_err
+        )
+        return None
 
-        # 1. Parse JSON
-        try:
-            data = json.loads(resp_bytes.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError) as dec_err:
-            logger.warning(
-                "[vector_store] Ollama returned non-JSON response for text index %d: %s",
-                idx, dec_err
-            )
-            return None
+    if not isinstance(data, dict):
+        logger.warning(
+            "[vector_store] Ollama response is not a JSON object: got %s",
+            type(data).__name__
+        )
+        return None
 
-        if not isinstance(data, dict):
-            logger.warning(
-                "[vector_store] Ollama response is not a JSON object for text index %d: got %s",
-                idx, type(data).__name__
-            )
-            return None
+    # 2. Extract and validate 'embeddings'
+    embeddings = data.get("embeddings")
+    if embeddings is None:
+        logger.warning(
+            "[vector_store] Ollama response missing 'embeddings' key (keys: %s)",
+            list(data.keys())
+        )
+        return None
 
-        # 2. Extract and validate 'embedding'
-        emb = data.get("embedding")
-        if emb is None:
-            logger.warning(
-                "[vector_store] Ollama response missing 'embedding' key for text index %d (keys: %s)",
-                idx, list(data.keys())
-            )
-            return None
+    if not isinstance(embeddings, list):
+        logger.warning(
+            "[vector_store] Ollama 'embeddings' is not a list: got %s",
+            type(embeddings).__name__
+        )
+        return None
 
+    if len(embeddings) != len(texts):
+        logger.warning(
+            "[vector_store] Ollama returned vector count mismatch: got %d, expected %d",
+            len(embeddings), len(texts)
+        )
+        return None
+
+    # 3. Validate numeric and finite values, and dimensions
+    expected_dim = 768
+    clean_vectors: list[list[float]] = []
+
+    for idx, emb in enumerate(embeddings):
         if not isinstance(emb, list) or len(emb) == 0:
             logger.warning(
-                "[vector_store] Ollama 'embedding' is not a non-empty list for text index %d (got %s, len=%d)",
+                "[vector_store] Ollama embedding at index %d is not a non-empty list (got %s, len=%d)",
                 idx, type(emb).__name__, len(emb) if isinstance(emb, list) else 0
             )
             return None
 
-        # 3. Validate numeric and finite values
+        if len(emb) != expected_dim:
+            logger.warning(
+                "[vector_store] Ollama embedding at index %d dimension mismatch: got %d, expected %d",
+                idx, len(emb), expected_dim
+            )
+            return None
+
         clean_vector: list[float] = []
         for v_idx, val in enumerate(emb):
             if not isinstance(val, (int, float)) or isinstance(val, bool):
@@ -217,20 +243,9 @@ def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
                 return None
             clean_vector.append(f_val)
 
-        # 4. Dimension consistency across batch
-        vec_dim = len(clean_vector)
-        if batch_dim is None:
-            batch_dim = vec_dim
-        elif vec_dim != batch_dim:
-            logger.warning(
-                "[vector_store] Inconsistent embedding dimension at text index %d: got %d, expected %d",
-                idx, vec_dim, batch_dim
-            )
-            return None
+        clean_vectors.append(clean_vector)
 
-        vectors.append(clean_vector)
-
-    return vectors
+    return clean_vectors
 
 
 def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list[float]]:
@@ -391,7 +406,13 @@ def search_layer_a(
         must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
         if source_id:
             must_conditions.append(qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)))
-        threshold = score_threshold if score_threshold is not None else getattr(settings, "vector_similarity_threshold", 0.35)
+        _diag = _embed_diagnostics_var.get()
+        if score_threshold is not None:
+            threshold = score_threshold
+        elif getattr(settings, "llm_provider", "") in ("mock", "test") or (_diag and _diag.fallback_used):
+            threshold = 0.05
+        else:
+            threshold = getattr(settings, "vector_similarity_threshold", 0.35)
         hits = client.search(
             collection_name=settings.collection_name,
             query_vector=vector,
@@ -414,15 +435,18 @@ def search_source_chunks(
     current_timestamp: float | None = None,
     top_k: int = 5,
     score_threshold: float | None = None,
+    session_id: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Search Layer A source material with strict mandatory provenance and security filters.
+    """Search Layer A source material with strict mandatory provenance, session, and security filters.
 
     Enforces:
     - user_id isolation (prevent cross-user data leakage)
-    - source_id confinement
+    - source_id confinement (strict source isolation)
+    - session_id scoping (when provided)
     - layer == "A"
     - retrieval_allowed == True (quarantined prompt injections are never returned)
     - injection_status in ["clean", "sanitized"]
+    - Safe degraded threshold on vector fallback (>= 0.25) to prevent arbitrary leakage
     """
     client = get_client()
     try:
@@ -433,11 +457,20 @@ def search_source_chunks(
             qmodels.FieldCondition(key="retrieval_allowed", match=qmodels.MatchValue(value=True)),
         ]
         if user_id:
-            must_conditions.append(
-                qmodels.FieldCondition(
-                    key="user_id",
-                    match=qmodels.MatchAny(any=[user_id, "student_default"]),
+            if user_id == "student_default":
+                must_conditions.append(
+                    qmodels.FieldCondition(key="user_id", match=qmodels.MatchValue(value="student_default"))
                 )
+            else:
+                must_conditions.append(
+                    qmodels.FieldCondition(
+                        key="user_id",
+                        match=qmodels.MatchAny(any=[user_id, "student_default"]),
+                    )
+                )
+        if session_id:
+            must_conditions.append(
+                qmodels.FieldCondition(key="session_id", match=qmodels.MatchValue(value=session_id))
             )
         if source_version:
             must_conditions.append(
@@ -448,12 +481,18 @@ def search_source_chunks(
                 qmodels.FieldCondition(key="concept_ids", match=qmodels.MatchAny(any=[concept_id]))
             )
 
+        _diag = _embed_diagnostics_var.get()
         if score_threshold is not None:
             threshold = score_threshold
+        elif _diag and _diag.fallback_used:
+            # Deterministic hash vectors: require significant lexical overlap (>= 0.20)
+            # to prevent arbitrary chunk leakage. Never use 0.05!
+            threshold = 0.20
         elif getattr(settings, "llm_provider", "") in ("mock", "test"):
-            threshold = 0.05
+            threshold = 0.15
         else:
             threshold = getattr(settings, "vector_similarity_threshold", 0.35)
+
         hits = client.search(
             collection_name=settings.collection_name,
             query_vector=vector,

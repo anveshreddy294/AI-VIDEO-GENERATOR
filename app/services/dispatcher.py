@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .extractor import extract_from_pdf
 from .schemas import ContentUnit
-from .vision import describe_image_file
+from .vision import VisionExtractionFailed, describe_image_file
 
 IMAGE_EXTENSIONS: set[str] = {"png", "jpg", "jpeg"}
 VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
@@ -20,6 +20,7 @@ VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
 
 class UnsupportedFileType(Exception):
     pass
+
 
 
 @dataclass

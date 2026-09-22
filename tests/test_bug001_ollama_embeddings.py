@@ -30,8 +30,8 @@ def _mock_response(body_dict_or_bytes, status=200):
 
 
 def test_embed_ollama_success_single(monkeypatch):
-    expected_vec = [0.1, 0.2, 0.3]
-    mock_resp = _mock_response({"embedding": expected_vec})
+    expected_vec = [0.1] * 768
+    mock_resp = _mock_response({"embeddings": [expected_vec]})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["hello world"])
@@ -39,14 +39,10 @@ def test_embed_ollama_success_single(monkeypatch):
 
 
 def test_embed_ollama_success_multiple(monkeypatch):
-    vec1 = [0.1, 0.2, 0.3]
-    vec2 = [0.4, 0.5, 0.6]
-    responses = [_mock_response({"embedding": vec1}), _mock_response({"embedding": vec2})]
-
-    def mock_urlopen(req, timeout=30.0):
-        return responses.pop(0)
-
-    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
+    vec1 = [0.1] * 768
+    vec2 = [0.4] * 768
+    mock_resp = _mock_response({"embeddings": [vec1, vec2]})
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["first text", "second text"])
     assert res == [vec1, vec2]
@@ -60,24 +56,41 @@ def test_embed_ollama_invalid_json(monkeypatch):
     assert res is None
 
 
-def test_embed_ollama_missing_embedding_key(monkeypatch):
-    mock_resp = _mock_response({"wrong_key": [0.1, 0.2, 0.3]})
+def test_embed_ollama_missing_embeddings_key(monkeypatch):
+    mock_resp = _mock_response({"wrong_key": [[0.1] * 768]})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["test text"])
     assert res is None
 
 
-def test_embed_ollama_empty_embedding_list(monkeypatch):
-    mock_resp = _mock_response({"embedding": []})
+def test_embed_ollama_count_mismatch(monkeypatch):
+    # Sent 2 texts, received 1 vector
+    mock_resp = _mock_response({"embeddings": [[0.1] * 768]})
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
+
+    res = _embed_ollama(["first text", "second text"])
+    assert res is None
+
+
+def test_embed_ollama_empty_embeddings_list(monkeypatch):
+    mock_resp = _mock_response({"embeddings": []})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["test text"])
     assert res is None
 
 
-def test_embed_ollama_wrong_type_embedding(monkeypatch):
-    mock_resp = _mock_response({"embedding": "0.1, 0.2, 0.3"})
+def test_embed_ollama_empty_inner_vector(monkeypatch):
+    mock_resp = _mock_response({"embeddings": [[]]})
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
+
+    res = _embed_ollama(["test text"])
+    assert res is None
+
+
+def test_embed_ollama_wrong_type_embeddings(monkeypatch):
+    mock_resp = _mock_response({"embeddings": "0.1, 0.2, 0.3"})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["test text"])
@@ -85,7 +98,8 @@ def test_embed_ollama_wrong_type_embedding(monkeypatch):
 
 
 def test_embed_ollama_non_numeric_elements(monkeypatch):
-    mock_resp = _mock_response({"embedding": [0.1, "not-a-number", 0.3]})
+    bad_vec = [0.1, "not-a-number"] + [0.1] * 766
+    mock_resp = _mock_response({"embeddings": [bad_vec]})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["test text"])
@@ -93,7 +107,8 @@ def test_embed_ollama_non_numeric_elements(monkeypatch):
 
 
 def test_embed_ollama_boolean_elements_rejected(monkeypatch):
-    mock_resp = _mock_response({"embedding": [0.1, True, 0.3]})
+    bad_vec = [0.1, True] + [0.1] * 766
+    mock_resp = _mock_response({"embeddings": [bad_vec]})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["test text"])
@@ -102,24 +117,19 @@ def test_embed_ollama_boolean_elements_rejected(monkeypatch):
 
 def test_embed_ollama_non_finite_elements(monkeypatch):
     # NaN and Inf should be rejected
-    mock_resp = _mock_response(b'{"embedding": [0.1, NaN, 0.3]}')
+    mock_resp = _mock_response(b'{"embeddings": [[0.1, NaN, 0.3]]}')
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     res = _embed_ollama(["test text"])
     assert res is None
 
 
-def test_embed_ollama_dimension_mismatch_in_batch(monkeypatch):
-    vec_dim3 = [0.1, 0.2, 0.3]
-    vec_dim4 = [0.1, 0.2, 0.3, 0.4]
-    responses = [_mock_response({"embedding": vec_dim3}), _mock_response({"embedding": vec_dim4})]
+def test_embed_ollama_dimension_mismatch(monkeypatch):
+    vec_dim512 = [0.1] * 512
+    mock_resp = _mock_response({"embeddings": [vec_dim512]})
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
-    def mock_urlopen(req, timeout=30.0):
-        return responses.pop(0)
-
-    monkeypatch.setattr(urllib.request, "urlopen", mock_urlopen)
-
-    res = _embed_ollama(["text 1", "text 2"])
+    res = _embed_ollama(["text 1"])
     assert res is None
 
 
@@ -146,8 +156,8 @@ def test_embed_ollama_timeout(monkeypatch):
 def test_embed_pipeline_success_vs_fallback(monkeypatch):
     # 1. Success case uses Ollama provider
     monkeypatch.setattr(settings, "llm_provider", "ollama")
-    real_vec = [0.5, 0.6, 0.7]
-    mock_resp = _mock_response({"embedding": real_vec})
+    real_vec = [0.5] * 768
+    mock_resp = _mock_response({"embeddings": [real_vec]})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
 
     vectors = _embed(["sample text"])

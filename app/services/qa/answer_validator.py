@@ -18,13 +18,17 @@ from ..schemas import Citation
 
 logger = logging.getLogger(__name__)
 
-# Patterns that indicate the LLM was hijacked into acting as a compromised system
+# Patterns that indicate the LLM was hijacked into acting as a compromised system or leaking secrets
 _INJECTION_REFLECTIONS = [
     re.compile(r"\bSYSTEM\s+PROMPT\b", re.IGNORECASE),
     re.compile(r"\bYOU\s+ARE\s+NOW\b", re.IGNORECASE),
     re.compile(r"\bDEVELOPER\s+MODE\s+ACTIVE\b", re.IGNORECASE),
     re.compile(r"\bHERE\s+ARE\s+MY\s+INITIAL\s+INSTRUCTIONS\b", re.IGNORECASE),
     re.compile(r"\bI\s+WILL\s+NOW\s+IGNORE\s+ALL\s+RULES\b", re.IGNORECASE),
+    re.compile(r"\b(OPENROUTER_API_KEY|QDRANT_API_KEY|API_KEY|SECRET_KEY)\s*=", re.IGNORECASE),
+    re.compile(r"\bsk-or-v1-[a-zA-Z0-9]{20,}", re.IGNORECASE),
+    re.compile(r"\b(DATABASE_URL|SUPABASE_KEY|ENV_VAR)\b", re.IGNORECASE),
+    re.compile(r"\bHERE\s+(IS|ARE)\s+THE\s+API\s+KEYS?\b", re.IGNORECASE),
 ]
 
 
