@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import settings
 from ..services.chunker import create_rich_chunks
-from ..services.dispatcher import UnsupportedFileType, VisionExtractionFailed, dispatch
+from ..services.dispatcher import IMAGE_EXTENSIONS, UnsupportedFileType, VisionExtractionFailed, dispatch, dispatch_async
 from ..services.ingestion.normalizer import normalize_content_units
 from ..services.pipeline_tracker import ProgressEvent, job_manager
 from ..services.registry import (
@@ -70,11 +70,18 @@ async def _execute_upload_and_assess(
     student_id: str,
     max_questions: int,
     dedup_key: str | None = None,
+    existing_source_record: Any | None = None,
+    existing_persistent_file: Path | None = None,
 ) -> None:
     """Execute complete Step 1 & Step 2 pipeline emitting deterministic operational events."""
     start_time = time.time()
     source_record = None
 
+    task = asyncio.current_task()
+    if task:
+        job_manager.attach_task(job_id, task)
+
+    acquired_sem = False
     sem = job_manager.get_semaphore()
     if sem.locked():
         await job_manager.emit_event(
@@ -85,11 +92,11 @@ async def _execute_upload_and_assess(
             progress_percent=0,
             metadata={"filename": original_filename},
         )
-    acquired_sem = False
-    await sem.acquire()
-    acquired_sem = True
 
     try:
+        await sem.acquire()
+        acquired_sem = True
+
         # Stage 1: Validating Source
         await job_manager.emit_event(
             job_id=job_id,
@@ -100,42 +107,105 @@ async def _execute_upload_and_assess(
             metadata={"filename": original_filename},
         )
 
-        try:
-            source_record, persistent_file = register_source(temp_path, original_filename, uploaded_by=student_id)
-        except ValueError as val_err:
-            await job_manager.fail_job(
+        if existing_source_record is not None and existing_persistent_file is not None:
+            source_record = existing_source_record
+            persistent_file = existing_persistent_file
+            source_id = source_record.source_id
+            asset_id = source_record.asset_id
+            await job_manager.emit_event(
                 job_id=job_id,
                 stage="validating_source",
-                error_message=f"Source validation rejected: {val_err}",
-                metadata={"filename": original_filename},
+                status="completed",
+                message=f"Source validated and registered as {source_id} (retry resumed).",
+                progress_percent=12,
+                metadata={"source_id": source_id, "asset_id": asset_id, "file_size": source_record.file_size},
             )
-            return
+        else:
+            try:
+                source_record, persistent_file = register_source(temp_path, original_filename, uploaded_by=student_id)
+            except ValueError as val_err:
+                await job_manager.fail_job(
+                    job_id=job_id,
+                    stage="validating_source",
+                    error_message=f"Source validation rejected: {val_err}",
+                    metadata={"filename": original_filename},
+                )
+                return
 
-        source_id = source_record.source_id
-        asset_id = source_record.asset_id
+            source_id = source_record.source_id
+            asset_id = source_record.asset_id
 
-        await job_manager.emit_event(
-            job_id=job_id,
-            stage="validating_source",
-            status="completed",
-            message=f"Source validated and registered as {source_id}.",
-            progress_percent=12,
-            metadata={"source_id": source_id, "asset_id": asset_id, "file_size": source_record.file_size},
-        )
+            await job_manager.emit_event(
+                job_id=job_id,
+                stage="validating_source",
+                status="completed",
+                message=f"Source validated and registered as {source_id}.",
+                progress_percent=12,
+                metadata={"source_id": source_id, "asset_id": asset_id, "file_size": source_record.file_size},
+            )
 
         # Stage 2: Extracting Content
+        initial_msg = (
+            "18% — Preparing image for visual understanding"
+            if persistent_file.suffix.lstrip(".").lower() in IMAGE_EXTENSIONS
+            else "Extracting multimodal content via modality dispatcher..."
+        )
         await job_manager.emit_event(
             job_id=job_id,
             stage="extracting_content",
             status="running",
-            message="Extracting multimodal content via modality dispatcher...",
+            message=initial_msg,
             progress_percent=18,
             metadata={"source_id": source_id},
         )
 
+        extraction_deadline = float(
+            getattr(
+                settings,
+                "extraction_stage_timeout_seconds",
+                getattr(settings, "vision_stage_timeout_seconds", 90.0) + 10.0,
+            )
+        )
+        logger.info("[pipeline] extraction_stage_start source_id=%s deadline=%.1fs", source_id, extraction_deadline)
+
+        loop = asyncio.get_running_loop()
+
+        def on_extraction_progress(substage_msg: str) -> None:
+            asyncio.run_coroutine_threadsafe(
+                job_manager.emit_event(
+                    job_id=job_id,
+                    stage="extracting_content",
+                    status="running",
+                    message=f"18% — {substage_msg}",
+                    progress_percent=18,
+                    metadata={"source_id": source_id, "substage": substage_msg},
+                ),
+                loop,
+            )
+
         try:
-            extraction_result = await asyncio.to_thread(dispatch,persistent_file, source_id=source_id, asset_id=asset_id)
+            extraction_result = await asyncio.wait_for(
+                dispatch_async(
+                    persistent_file,
+                    source_id=source_id,
+                    asset_id=asset_id,
+                    on_progress=on_extraction_progress,
+                ),
+                timeout=extraction_deadline,
+            )
             raw_units = extraction_result.units
+            logger.info("[pipeline] extraction_stage_complete source_id=%s units_count=%d", source_id, len(raw_units))
+        except asyncio.TimeoutError:
+            logger.error("[pipeline] extraction_stage_failed source_id=%s reason=timeout", source_id)
+            err_msg = "VISION_TIMEOUT: Image understanding exceeded the configured time limit. Please retry."
+            update_source_status(source_id, "FAILED", error_message=err_msg)
+            await job_manager.fail_job(
+                job_id=job_id,
+                stage="extracting_content",
+                error_message=err_msg,
+                metadata={"source_id": source_id, "status": "FAILED", "failure_code": "VISION_TIMEOUT"},
+            )
+            return
         except UnsupportedFileType as exc:
             await job_manager.fail_job(
                 job_id=job_id,
@@ -145,15 +215,31 @@ async def _execute_upload_and_assess(
             )
             return
         except VisionExtractionFailed as exc:
-            logger.warning("[pipeline] Vision extraction failed for source %s: %s", source_id, exc)
-            update_source_status(source_id, "VISION_EXTRACTION_FAILED", error_message=str(exc))
+            err_code = getattr(exc, "error_code", "VISION_PROVIDER_FAILED")
+            logger.warning("[pipeline] Vision extraction failed for source %s (code=%s): %s", source_id, err_code, exc)
+            if err_code == "VISION_TIMEOUT":
+                safe_msg = "VISION_TIMEOUT: Image understanding exceeded the configured time limit. Please retry."
+            else:
+                safe_msg = f"{err_code}: {exc}"
+            update_source_status(source_id, "FAILED", error_message=safe_msg)
             await job_manager.fail_job(
                 job_id=job_id,
                 stage="extracting_content",
-                error_message=f"VISION_EXTRACTION_FAILED: {exc}",
-                metadata={"source_id": source_id, "status": "VISION_EXTRACTION_FAILED"},
+                error_message=safe_msg,
+                metadata={"source_id": source_id, "status": "FAILED", "failure_code": err_code},
             )
             return
+        except asyncio.CancelledError:
+            logger.info("[pipeline] extraction_stage_cancelled source_id=%s", source_id)
+            update_source_status(source_id, "FAILED", error_message="Job was cancelled")
+            await job_manager.cancel_job(
+                job_id=job_id,
+                stage="extracting_content",
+                error_message="Job was cancelled.",
+                metadata={"source_id": source_id, "status": "cancelled"},
+            )
+            raise
+
         except Exception as exc:
             logger.exception("[pipeline] Content extraction failed for %s", persistent_file.name)
             update_source_status(source_id, "FAILED", error_message=str(exc))
@@ -272,7 +358,7 @@ async def _execute_upload_and_assess(
         if not knowledge_graph or not knowledge_graph.concepts:
             update_source_status(
                 source_id,
-                "EXTRACTION_INSUFFICIENT",
+                "FAILED",
                 error_message="Knowledge graph construction failed: no valid source-grounded concepts could be extracted.",
             )
             await job_manager.fail_job(
@@ -576,17 +662,20 @@ async def _execute_upload_and_assess(
             error_message=f"Internal pipeline failure: {unhandled_exc}",
         )
     finally:
+        job_manager.detach_task(job_id)
         try:
             if source_record:
                 current = get_source_record(source_record.source_id)
                 if current and current.status != "READY":
                     update_source_status(current.source_id, "FAILED", error_message="Ingestion did not complete; see pipeline diagnostics")
-            temp_path.unlink(missing_ok=True)
+            if existing_persistent_file is None:
+                temp_path.unlink(missing_ok=True)
             if dedup_key:
                 job_manager.release_dedup_key(dedup_key)
         finally:
             if acquired_sem:
                 sem.release()
+
 
 
 async def _execute_assess_existing(
@@ -597,6 +686,11 @@ async def _execute_assess_existing(
 ) -> None:
     """Execute assessment generation for an existing source emitting operational progress."""
     start_time = time.time()
+    task = asyncio.current_task()
+    if task:
+        job_manager.attach_task(job_id, task)
+
+    acquired_sem = False
     sem = job_manager.get_semaphore()
     if sem.locked():
         await job_manager.emit_event(
@@ -607,11 +701,11 @@ async def _execute_assess_existing(
             progress_percent=0,
             metadata={"source_id": source_id},
         )
-    acquired_sem = False
-    await sem.acquire()
-    acquired_sem = True
 
     try:
+        await sem.acquire()
+        acquired_sem = True
+
         await job_manager.emit_event(
             job_id=job_id,
             stage="validating_source",
@@ -734,6 +828,15 @@ async def _execute_assess_existing(
             result={"assessment": assessment_resp, "source_id": source_id},
             message=f"Assessment ready ({gen_count} questions in {elapsed_ms}ms).",
         )
+    except asyncio.CancelledError:
+        logger.info("[pipeline] assess_existing job %s cancelled", job_id)
+        await job_manager.cancel_job(
+            job_id=job_id,
+            stage="generating_questions",
+            error_message="Job was cancelled.",
+            metadata={"source_id": source_id, "status": "cancelled"},
+        )
+        raise
     except Exception as exc:
         logger.error("[pipeline_job] Error assessing existing source %s: %s", source_id, exc, exc_info=True)
         await job_manager.fail_job(
@@ -743,8 +846,10 @@ async def _execute_assess_existing(
             metadata={"source_id": source_id},
         )
     finally:
+        job_manager.detach_task(job_id)
         if acquired_sem:
             sem.release()
+
 
 
 @router.post("/upload-and-assess", response_model=JobCreationResponse)
@@ -784,21 +889,20 @@ async def create_upload_job(
         raise
 
     file_sha256 = hasher.hexdigest()
-    dedup_key = f"{student_id}:{file_sha256}:{max_questions}"
+    pipeline_version = getattr(settings, "pipeline_config_version", "v1")
+    dedup_key = f"{student_id}:{file_sha256}:{pipeline_version}"
 
-    # Dedup check: if an identical upload is already active/pending, return that job
-    existing_job = job_manager.find_active_job_by_key(dedup_key)
-    if existing_job and not existing_job.is_finished:
+    # Atomic dedup check & creation: if an identical upload is already active/pending, return that job
+    job, created = await job_manager.get_or_create_active_job(dedup_key, job_type="upload_and_assess")
+    if not created:
         temp_path.unlink(missing_ok=True)
-        logger.info("[pipeline] Reusing active job %s for dedup_key=%s", existing_job.job_id, dedup_key)
+        logger.info("[pipeline] Reusing active job %s for dedup_key=%s", job.job_id, dedup_key)
         return JobCreationResponse(
-            job_id=existing_job.job_id,
-            status=existing_job.status,
+            job_id=job.job_id,
+            status=job.status,
             message="Reusing active upload and assessment job.",
         )
 
-    job = job_manager.create_job(job_type="upload_and_assess")
-    job_manager.register_dedup_key(dedup_key, job.job_id)
 
     background_tasks.add_task(
         _execute_upload_and_assess,
@@ -872,6 +976,9 @@ async def stream_job_events(job_id: str):
                     yield ": ping\n\n"
                     if job.is_finished:
                         break
+        except asyncio.CancelledError:
+            logger.debug("[pipeline] SSE stream cancelled by client for job %s", job_id)
+            return
         finally:
             job_manager.unsubscribe(job_id, queue)
 
@@ -885,3 +992,126 @@ async def get_job_status(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return job.model_dump()
+
+
+@router.post("/jobs/{job_id}/retry", response_model=JobCreationResponse)
+async def retry_failed_job(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+) -> JobCreationResponse:
+    """Idempotently retry extraction for a failed pipeline job reusing persistent files and source metadata."""
+    old_job = job_manager.get_job(job_id)
+    if not old_job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+
+    if not old_job.is_finished or old_job.status != "failed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only failed jobs can be retried. Job '{job_id}' is currently '{old_job.status}'.",
+        )
+
+    # Resolve source_id and filename from job events metadata
+    source_id: str | None = None
+    original_filename: str | None = None
+    for ev in reversed(old_job.events):
+        if ev.metadata:
+            if not source_id and "source_id" in ev.metadata:
+                source_id = str(ev.metadata["source_id"])
+            if not original_filename and "filename" in ev.metadata:
+                original_filename = str(ev.metadata["filename"])
+        if source_id and original_filename:
+            break
+
+    if not source_id:
+        raise HTTPException(status_code=400, detail="Cannot retry job: no source_id found in job history.")
+
+    source_record = get_source_record(source_id)
+    if not source_record:
+        raise HTTPException(status_code=404, detail=f"Source record '{source_id}' not found in registry.")
+
+    if source_record.status == "READY":
+        raise HTTPException(status_code=400, detail=f"Source '{source_id}' is already successfully processed.")
+
+    original_filename = original_filename or source_record.filename
+    user_id = source_record.user_id or source_record.uploaded_by or "student_default"
+
+    # Locate persistent original file on disk
+    ext = Path(original_filename).suffix.lower()
+    persistent_candidates: list[Path] = [
+        settings.upload_dir / user_id / source_id / f"original{ext}",
+        settings.upload_dir / source_id / f"original{ext}",
+    ]
+    user_dir = settings.upload_dir / user_id / source_id
+    if user_dir.exists():
+        persistent_candidates.extend(list(user_dir.glob("original.*")))
+    legacy_dir = settings.upload_dir / source_id
+    if legacy_dir.exists():
+        persistent_candidates.extend(list(legacy_dir.glob("original.*")))
+
+    persistent_file: Path | None = None
+    for cand in persistent_candidates:
+        if cand.is_file() and cand.stat().st_size > 0:
+            persistent_file = cand
+            break
+
+    if not persistent_file:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Persistent file for source '{source_id}' does not exist on disk.",
+        )
+
+    # Idempotency guard: if an active retry job exists for this source, return it
+    dedup_key = f"retry:{source_id}"
+    active_retry = job_manager.find_active_job_by_key(dedup_key)
+    if active_retry and not active_retry.is_finished:
+        logger.info("[pipeline] Reusing active retry job %s for source %s", active_retry.job_id, source_id)
+        return JobCreationResponse(
+            job_id=active_retry.job_id,
+            status=active_retry.status,
+            message=f"Reusing active retry job for source {source_id}.",
+        )
+
+    if not job_manager.can_accept_job():
+        raise HTTPException(
+            status_code=429,
+            detail=f"System job capacity reached ({settings.max_pending_jobs} active/queued jobs). Please retry later.",
+            headers={"Retry-After": "30"},
+        )
+
+    new_job = job_manager.create_job(job_type="retry_extraction")
+    job_manager.register_dedup_key(dedup_key, new_job.job_id)
+
+    # Reset source status to UPLOADED
+    update_source_status(source_id, "UPLOADED", error_message=None)
+
+    background_tasks.add_task(
+        _execute_upload_and_assess,
+        job_id=new_job.job_id,
+        temp_path=persistent_file,
+        original_filename=original_filename,
+        student_id=user_id,
+        max_questions=5,
+        dedup_key=dedup_key,
+        existing_source_record=source_record,
+        existing_persistent_file=persistent_file,
+    )
+
+    logger.info("[pipeline] Queued retry job %s for source %s (old_job=%s)", new_job.job_id, source_id, job_id)
+    return JobCreationResponse(
+        job_id=new_job.job_id,
+        status="pending",
+        message=f"Retry job queued for source {source_id}.",
+    )
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=dict[str, Any])
+async def cancel_pipeline_job(job_id: str) -> dict[str, Any]:
+    """Explicitly cancel a running or pending pipeline job."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    if job.is_finished:
+        return {"job_id": job_id, "status": job.status, "message": "Job is already finished."}
+    await job_manager.cancel_job(job_id, error_message="User requested cancellation.")
+    return {"job_id": job_id, "status": "cancelled", "message": "Job cancellation initiated."}
+

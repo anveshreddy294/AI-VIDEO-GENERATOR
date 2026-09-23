@@ -261,14 +261,34 @@ def update_source_status(
     status: str,
     error_message: str | None = None,
 ) -> SourceRecord:
-    """Update status of a source in the registry."""
+    """Update status of a source in the registry with defensive domain normalization."""
     index = _load_sources_index()
     if source_id not in index:
         raise KeyError(f"Source ID '{source_id}' not found in registry.")
 
     record_data = index[source_id]
-    record_data["status"] = status
-    record_data["error_message"] = error_message
+    valid_statuses = {
+        "UPLOADED",
+        "PROCESSING",
+        "EXTRACTING",
+        "NORMALIZING",
+        "INDEXING",
+        "READY",
+        "FAILED",
+        "VISION_EXTRACTION_FAILED",
+    }
+    if status not in valid_statuses:
+        logger.warning(
+            "[registry] Non-standard source status '%s' mapped to 'FAILED' for source %s",
+            status,
+            source_id,
+        )
+        record_data["status"] = "FAILED"
+        record_data["error_message"] = error_message or f"Operation terminated with status: {status}"
+    else:
+        record_data["status"] = status
+        record_data["error_message"] = error_message
+
     record = SourceRecord.model_validate(record_data)
     save_source_record(record)
     return record

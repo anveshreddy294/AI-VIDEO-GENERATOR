@@ -10,6 +10,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
+from contextlib import asynccontextmanager
 from .core.config import settings
 
 from fastapi import FastAPI, Request
@@ -32,6 +33,15 @@ from .api.learning import router as learning_router
 _cors_origins_raw = os.getenv("VISUALAI_CORS_ORIGINS", "http://localhost:8000,http://127.0.0.1:8000")
 ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    # Gracefully cancel and await all active pipeline tasks on server shutdown
+    from .services.pipeline_tracker import job_manager
+    await job_manager.shutdown_active_jobs(timeout=5.0)
+
+
 app = FastAPI(
     title="VisualAI - Personalized Educational Assessment & Video Generation Platform",
     description=(
@@ -46,7 +56,9 @@ app = FastAPI(
     version="0.4.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
+
 
 # SEC-011: Explicit CORS policy - prevent unintended cross-origin access
 app.add_middleware(

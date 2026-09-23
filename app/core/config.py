@@ -119,9 +119,14 @@ class Settings:
             or os.getenv("VISION_MODEL")
             or "openrouter/free"
         ).strip()
-        self.vision_fallback_model: str = os.getenv("VISION_FALLBACK_MODEL", "inclusionai/ling-3.0-flash-vl:free").strip()
-        self.vision_timeout_seconds: float = float(os.getenv("VISION_TIMEOUT_SECONDS", "60"))
+        self.vision_fallback_model: str = os.getenv("VISION_FALLBACK_MODEL", "").strip()
+        self.vision_timeout_seconds: float = float(os.getenv("VISION_TIMEOUT_SECONDS", "45.0"))
+        self.vision_stage_timeout_seconds: float = float(os.getenv("VISION_STAGE_TIMEOUT_SECONDS", "90.0"))
+        self.extraction_stage_timeout_seconds: float = float(
+            os.getenv("EXTRACTION_STAGE_TIMEOUT_SECONDS", str(self.vision_stage_timeout_seconds + 10.0))
+        )
         self.vision_max_retries: int = int(os.getenv("VISION_MAX_RETRIES", "1"))
+        self.pipeline_config_version: str = os.getenv("PIPELINE_CONFIG_VERSION", "v1").strip()
 
 
 

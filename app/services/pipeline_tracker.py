@@ -122,6 +122,7 @@ class JobManager:
         self._semaphore: asyncio.Semaphore | None = None
         self._lock = asyncio.Lock()
         self._active_dedup_jobs: dict[str, str] = {}
+        self._running_tasks: dict[str, asyncio.Task] = {}
 
     def find_active_job_by_key(self, dedup_key: str) -> PipelineJob | None:
         """Find active (unfinished) pipeline job for a deterministic dedup key."""
@@ -129,7 +130,7 @@ class JobManager:
         if not jid:
             return None
         job = self._jobs.get(jid)
-        if job and not job.is_finished and job.status in ("pending", "running"):
+        if job and not job.is_finished and job.status in ("pending", "running", "warning"):
             return job
         self._active_dedup_jobs.pop(dedup_key, None)
         return None
@@ -141,6 +142,69 @@ class JobManager:
     def release_dedup_key(self, dedup_key: str) -> None:
         """Release dedup key when job finishes or is canceled."""
         self._active_dedup_jobs.pop(dedup_key, None)
+
+    async def get_or_create_active_job(
+        self,
+        dedup_key: str,
+        job_type: str,
+    ) -> tuple[PipelineJob, bool]:
+        """Atomically find active job for dedup_key or create and register a new one under lock."""
+        async with self._lock:
+            existing = self.find_active_job_by_key(dedup_key)
+            if existing and not existing.is_finished and existing.status in ("pending", "running", "warning"):
+                return existing, False
+            job = self.create_job(job_type=job_type)
+            self.register_dedup_key(dedup_key, job.job_id)
+            return job, True
+
+    def attach_task(self, job_id: str, task: asyncio.Task) -> None:
+        """Track running asyncio Task for cancellation lifecycle."""
+        self._running_tasks[job_id] = task
+
+    def detach_task(self, job_id: str) -> None:
+        """Remove tracked task upon job completion or termination."""
+        self._running_tasks.pop(job_id, None)
+
+    async def cancel_job(
+        self,
+        job_id: str,
+        stage: str = "extracting_content",
+        error_message: str = "Job cancelled.",
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        """Mark job as cancelled, notify subscribers, and cancel running task."""
+        job = self._jobs.get(job_id)
+        if job:
+            job.error = error_message
+            job.status = "cancelled"
+            job.is_finished = True
+
+        task = self._running_tasks.pop(job_id, None)
+        if task and not task.done() and task != asyncio.current_task():
+            task.cancel()
+
+        await self.emit_event(
+            job_id=job_id,
+            stage=stage,
+            status="failed",
+            message=error_message,
+            terminal=True,
+            progress_percent=job.progress_percent if job else 0,
+            metadata=metadata or {"status": "cancelled"},
+        )
+
+    async def shutdown_active_jobs(self, timeout: float = 5.0) -> None:
+        """Gracefully cancel and await all active pipeline tasks on server shutdown."""
+        tasks = [t for t in self._running_tasks.values() if not t.done()]
+        if not tasks:
+            return
+        logger.info("[job_manager] Shutting down %d active pipeline tasks...", len(tasks))
+        for t in tasks:
+            t.cancel()
+        done, pending = await asyncio.wait(tasks, timeout=timeout)
+        if pending:
+            logger.warning("[job_manager] %d tasks did not terminate within %.1fs shutdown timeout", len(pending), timeout)
+        self._running_tasks.clear()
 
     def get_semaphore(self) -> asyncio.Semaphore:
         """Return per-process concurrency control semaphore for background tasks."""

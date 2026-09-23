@@ -21,13 +21,27 @@ from ..video.video_compositor import validate_video_artifact
 from .attempt_models import AssessmentAttempt
 from .attempt_repository import AssessmentAttemptRepository
 from .dependency_provider import ConceptDependencyProvider
-from .models import DomainInvariantViolation, MasteryRecord, MasteryState
+from .models import (
+    DomainInvariantViolation,
+    InvalidStateTransitionError,
+    MasteryRecord,
+    MasteryState,
+)
 from .question_registry import AuthoritativeQuestion, QuestionRegistry
 from .remediation_models import RemediationJob, RemediationJobStatus
 from .remediation_repository import RemediationJobRepository
 from .repository import MasteryRepository
 from .roadmap_models import LearningActionType, NextLearningAction
-from .state_machine import InvalidStateTransitionError, MasteryStateMachine
+from .misconception_models import (
+    MisconceptionEvidence,
+    TeachingStrategyDecision,
+    TeachingStrategyType,
+)
+from .misconception_repository import (
+    InMemoryMisconceptionRepository,
+    MisconceptionRepository,
+)
+from .strategy_selector import TeachingStrategySelector
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +60,8 @@ class RemediationOrchestrator:
         dependency_provider: ConceptDependencyProvider | None = None,
         knowledge_graph: KnowledgeGraph | None = None,
         curriculum_concepts: dict[str, Any] | None = None,
+        misconception_repo: MisconceptionRepository | None = None,
+        strategy_selector: TeachingStrategySelector | None = None,
     ) -> None:
         self.mastery_repo = mastery_repo
         self.remediation_repo = remediation_repo
@@ -55,6 +71,8 @@ class RemediationOrchestrator:
         self.dependency_provider = dependency_provider
         self.knowledge_graph = knowledge_graph
         self.curriculum_concepts = curriculum_concepts or {}
+        self.misconception_repo = misconception_repo or InMemoryMisconceptionRepository()
+        self.strategy_selector = strategy_selector or TeachingStrategySelector(dependency_provider=dependency_provider)
 
         if video_engine_fn is None:
             from ..video.engine import execute_video_generation_job
@@ -101,11 +119,12 @@ class RemediationOrchestrator:
     ) -> RemediationJob:
         """Execute or retrieve a grounded remediation video job for the learner."""
         # Normalize input from NextLearningAction or direct parameters
-        if isinstance(action_or_user_id, NextLearningAction):
+        if isinstance(action_or_user_id, NextLearningAction) or (hasattr(action_or_user_id, "action_type") and hasattr(action_or_user_id, "user_id")):
             action = action_or_user_id
-            if action.action_type != LearningActionType.REMEDIATE:
+            act_val = getattr(action.action_type, "value", str(action.action_type))
+            if act_val != "REMEDIATE" and action.action_type != LearningActionType.REMEDIATE:
                 raise DomainInvariantViolation(
-                    f"Cannot execute remediation for action of type '{action.action_type.value}'; expected REMEDIATE."
+                    f"Cannot execute remediation for action of type '{act_val}'; expected REMEDIATE."
                 )
             user_id = action.user_id.strip()
             source_id = action.source_id.strip()
@@ -243,6 +262,13 @@ class RemediationOrchestrator:
                     concept_id=concept_id,
                     record=record,
                 )
+                job.strategy_used = target.teaching_strategy
+                job.misconception_code = target.misconception_code
+                job.evidence_attempt_ids = list(target.evidence_attempt_ids)
+                job.metadata["strategy_used"] = target.teaching_strategy
+                job.metadata["misconception_code"] = target.misconception_code
+                job.metadata["evidence_attempt_ids"] = list(target.evidence_attempt_ids)
+                self.remediation_repo.save(job)
 
         # If waiting on an existing active job from another worker
         if active_event_to_await and active_job_to_await:
@@ -418,9 +444,49 @@ class RemediationOrchestrator:
         if self.dependency_provider:
             prereqs = self.dependency_provider.get_prerequisites(concept_id)
 
-        directive = f"Generate a {target_seconds}-second remedial AI animation explaining {concept_name}"
+        # Resolve active misconception if any
+        active_misconception = None
+        if self.misconception_repo:
+            misconceptions = self.misconception_repo.list_for_concept(user_id, source_id, concept_id)
+            active_list = [m for m in misconceptions if m.status in ("ACTIVE", "RECURRENT")]
+            if active_list:
+                active_misconception = active_list[0]
+
+        # Prior strategies used for this concept
+        previous_strategies = []
+        prior_jobs = self.remediation_repo.list_for_concept(user_id, source_id, concept_id)
+        for pj in prior_jobs:
+            s_used = pj.strategy_used or pj.metadata.get("strategy_used")
+            if s_used:
+                try:
+                    previous_strategies.append(TeachingStrategyType(s_used))
+                except Exception:
+                    pass
+
+        mastered_cids = set()
+        all_records = self.mastery_repo.list_by_user_source(user_id, source_id)
+        for r in all_records:
+            if r.mastery_state == MasteryState.MASTERED:
+                mastered_cids.add(r.concept_id)
+
+        decision = self.strategy_selector.select_strategy(
+            concept_id=concept_id,
+            attempt_number=record.remediation_attempt_count,
+            misconception=active_misconception,
+            previous_strategies=previous_strategies,
+            mastered_concept_ids=mastered_cids,
+        )
+
+        teaching_strategy = decision.strategy.value
+        misconception_code = decision.misconception_code
+        misconception_label = active_misconception.misconception_label if active_misconception else None
+        confidence = active_misconception.confidence_state.value if active_misconception else None
+        previous_strategy = previous_strategies[-1].value if previous_strategies else None
+        evidence_attempt_ids = list(decision.supporting_evidence_ids)
+
+        directive = f"Generate a {target_seconds}-second remedial AI animation explaining {concept_name} using {teaching_strategy} strategy"
         video_objective = (
-            f"Remediate conceptual gap in '{concept_name}' ({difficulty}): "
+            f"Remediate conceptual gap in '{concept_name}' ({difficulty}) via {teaching_strategy}: "
             f"address misconception '{misconception[:100]}' using grounded source evidence."
         )
 
@@ -449,4 +515,10 @@ class RemediationOrchestrator:
             source_content_ids=source_content_ids,
             authoritative_evidence=authoritative_evidence,
             scope="current_session",
+            misconception_code=misconception_code,
+            misconception_label=misconception_label,
+            confidence=confidence,
+            teaching_strategy=teaching_strategy,
+            previous_strategy=previous_strategy,
+            evidence_attempt_ids=evidence_attempt_ids,
         )

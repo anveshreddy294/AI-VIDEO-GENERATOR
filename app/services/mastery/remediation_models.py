@@ -39,6 +39,9 @@ class RemediationJob(BaseModel):
 
     attempt_number: int = Field(default=1, ge=1, description="Educational remediation attempt cycle (1-3)")
     idempotency_key: str
+    strategy_used: str | None = Field(default=None, description="Pedagogical strategy applied for this video generation")
+    misconception_code: str | None = Field(default=None, description="Diagnostic misconception code addressed by this remediation")
+    evidence_attempt_ids: list[str] = Field(default_factory=list, description="IDs of learner attempts evidencing this gap")
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -56,6 +59,13 @@ class RemediationJob(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     def __init__(self, **data: Any) -> None:
+        if "job_id" in data and "remediation_job_id" not in data:
+            data["remediation_job_id"] = data.pop("job_id")
+        if "idempotency_key" not in data or not data["idempotency_key"]:
+            u = data.get("user_id", "user")
+            c = data.get("concept_id", "concept")
+            att = data.get("attempt_number", 1)
+            data["idempotency_key"] = f"IDEMP_{u}_{c}_{att}"
         try:
             super().__init__(**data)
         except Exception as err:
@@ -75,3 +85,7 @@ class RemediationJob(BaseModel):
                 f"Field '{info.field_name}' cannot be empty or whitespace only."
             )
         return v.strip()
+
+    @property
+    def job_id(self) -> str:
+        return self.remediation_job_id

@@ -7,12 +7,14 @@ Supported modalities:
 - Video -> Multimodal A/V fusion -> ContentUnits
 """
 
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 from .extractor import extract_from_pdf
 from .schemas import ContentUnit
-from .vision import VisionExtractionFailed, describe_image_file
+from .vision import VisionExtractionFailed, describe_image_file, describe_image_file_async
 
 IMAGE_EXTENSIONS: set[str] = {"png", "jpg", "jpeg"}
 VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
@@ -34,7 +36,10 @@ class ExtractionResult:
 
 
 def dispatch(
-    file_path: Path, source_id: str, asset_id: str
+    file_path: Path,
+    source_id: str,
+    asset_id: str,
+    on_progress: Callable[[str], None] | None = None,
 ) -> ExtractionResult:
     """Route a validated source file to its modality extractor."""
     ext = file_path.suffix.lstrip(".").lower()
@@ -46,7 +51,7 @@ def dispatch(
         )
 
     if ext in IMAGE_EXTENSIONS:
-        description = describe_image_file(file_path)
+        description = describe_image_file(file_path, on_progress=on_progress)
         unit = ContentUnit(
             source_id=source_id,
             asset_id=asset_id,
@@ -115,3 +120,34 @@ def dispatch(
     raise UnsupportedFileType(
         f"Unsupported extension '.{ext}'. Allowed: pdf, png, jpg, jpeg, txt, mp4, mov, mkv."
     )
+
+
+async def dispatch_async(
+    file_path: Path,
+    source_id: str,
+    asset_id: str,
+    on_progress: Callable[[str], None] | None = None,
+) -> ExtractionResult:
+    """Route a validated source file to its modality extractor asynchronously."""
+    ext = file_path.suffix.lstrip(".").lower()
+
+    if ext in IMAGE_EXTENSIONS:
+        description = await describe_image_file_async(file_path, on_progress=on_progress)
+        unit = ContentUnit(
+            source_id=source_id,
+            asset_id=asset_id,
+            modality="image",
+            text=f"[IMAGE: {file_path.name}]\n{description}",
+            visual_description=description,
+            sequence_index=0,
+            image_id=f"IMG_{file_path.stem}",
+            image_path=str(file_path),
+            extraction_method="vision_model",
+            confidence_score=0.95,
+        )
+        return ExtractionResult(
+            source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
+        )
+
+    # For other extractors (PDF, TXT, Video), run in thread pool to prevent blocking event loop
+    return await asyncio.to_thread(dispatch, file_path, source_id, asset_id, on_progress)

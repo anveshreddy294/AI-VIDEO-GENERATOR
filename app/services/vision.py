@@ -10,7 +10,9 @@ Performs SOURCE EXTRACTION ONLY.
 
 from __future__ import annotations
 
+import asyncio
 import base64
+import concurrent.futures
 import copy
 import hashlib
 import json
@@ -18,18 +20,67 @@ import logging
 import mimetypes
 import os
 import re
+import socket
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+import httpx
 
 from ..core.config import settings
 from .schemas import VisionExtractionData
 
 logger = logging.getLogger(__name__)
 
-# In-memory deterministic vision cache: image_sha256:model:v1 -> VisionExtractionData
+# Error classifications for vision extraction
+VISION_TIMEOUT = "VISION_TIMEOUT"
+VISION_RATE_LIMIT = "VISION_RATE_LIMIT"
+VISION_AUTH_FAILED = "VISION_AUTH_FAILED"
+VISION_INVALID_RESPONSE = "VISION_INVALID_RESPONSE"
+VISION_PROVIDER_FAILED = "VISION_PROVIDER_FAILED"
+VISION_STRUCTURED_OUTPUT_UNAVAILABLE = "VISION_STRUCTURED_OUTPUT_UNAVAILABLE"
+VISION_FALLBACK_UNAVAILABLE = "VISION_FALLBACK_UNAVAILABLE"
+
+# Explicit cache schema versioning
+VISION_CACHE_SCHEMA_VERSION = "v1"
+VISION_PROMPT_VERSION = "v1"
+
+# In-memory deterministic vision cache: image_sha256:model:prompt_ver:schema_ver -> VisionExtractionData
 _VISION_EXTRACTION_CACHE: dict[str, VisionExtractionData] = {}
+
+
+def _normalize_json_schema_for_openrouter(schema: dict[str, Any]) -> dict[str, Any]:
+    """Recursively sanitize Pydantic JSON schema for OpenRouter / OpenAI strict structured output."""
+    res = copy.deepcopy(schema)
+
+    def _clean(node: Any) -> None:
+        if not isinstance(node, dict):
+            return
+        node.pop("title", None)
+        node.pop("default", None)
+        node_type = node.get("type")
+        if node_type == "object" and "properties" in node:
+            node["additionalProperties"] = False
+            node["required"] = list(node["properties"].keys())
+            for child in node["properties"].values():
+                _clean(child)
+        elif node_type == "array":
+            items = node.get("items")
+            if not items:
+                node["items"] = {"type": "object"}
+            else:
+                _clean(items)
+
+    _clean(res)
+    return res
+
+
+def get_vision_extraction_json_schema() -> dict[str, Any]:
+    """Generate normalized strict JSON schema derived directly from VisionExtractionData."""
+    raw_schema = VisionExtractionData.model_json_schema()
+    return _normalize_json_schema_for_openrouter(raw_schema)
 
 
 class VisionExtractionError(Exception):
@@ -39,7 +90,10 @@ class VisionExtractionError(Exception):
 
 class VisionExtractionFailed(VisionExtractionError):
     """Raised when vision extraction is rejected, malformed, or fails validation."""
-    pass
+
+    def __init__(self, message: str, error_code: str = VISION_PROVIDER_FAILED):
+        super().__init__(message)
+        self.error_code = error_code
 
 
 _OPENROUTER_VISION_PROMPT = """You are the image-ingestion component of an educational RAG system.
@@ -141,7 +195,10 @@ def _detect_image_mime(image_bytes: bytes, filename: str = "") -> str:
 def _clean_json_response(raw_text: str) -> dict[str, Any]:
     """Strip markdown code fences and parse JSON robustly."""
     cleaned = raw_text.strip()
-    if cleaned.startswith("```"):
+    fence_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", cleaned, re.DOTALL)
+    if fence_match:
+        cleaned = fence_match.group(1).strip()
+    elif cleaned.startswith("```"):
         lines = cleaned.splitlines()
         if lines and lines[0].startswith("```"):
             lines = lines[1:]
@@ -160,13 +217,17 @@ def _clean_json_response(raw_text: str) -> dict[str, Any]:
         try:
             return json.loads(cleaned_no_trailing)
         except Exception:
-            raise VisionExtractionFailed(f"Malformed JSON response from vision model: {err}") from err
+            logger.warning("[vision] raw_text_failed_json_loads: %r", raw_text[:300])
+            raise VisionExtractionFailed(
+                f"Malformed JSON response from vision model: {err}. Raw: {raw_text[:120]!r}",
+                error_code=VISION_INVALID_RESPONSE,
+            ) from err
 
 
 def _validate_vision_extraction(data: dict[str, Any], source: str) -> VisionExtractionData:
     """Strictly validate extracted vision data against quality and grounding rules."""
     if not isinstance(data, dict) or not data:
-        raise VisionExtractionFailed("Vision extraction returned empty response.")
+        raise VisionExtractionFailed("Vision extraction returned empty response.", error_code=VISION_INVALID_RESPONSE)
 
     visible_text = [str(x).strip() for x in data.get("visible_text", []) if str(x).strip()]
     headings = [str(x).strip() for x in data.get("headings", []) if str(x).strip()]
@@ -191,7 +252,10 @@ def _validate_vision_extraction(data: dict[str, Any], source: str) -> VisionExtr
     textual_evidence = visible_text or headings or paragraphs or bullet_points
     diagram_evidence = diagram_entities or labels or arrows or relationships or tables or formulas
     if not textual_evidence and not diagram_evidence:
-        raise VisionExtractionFailed("Image extraction rejected: visible_text is empty and no diagram evidence exists.")
+        raise VisionExtractionFailed(
+            "Image extraction rejected: visible_text is empty and no diagram evidence exists.",
+            error_code=VISION_INVALID_RESPONSE,
+        )
 
     # 2. Check if output contains only the filename
     clean_src = Path(source).name.lower()
@@ -201,7 +265,10 @@ def _validate_vision_extraction(data: dict[str, Any], source: str) -> VisionExtr
     ).strip().lower()
 
     if all_tokens in (clean_src, clean_stem, f"image: {clean_src}", f"image: {clean_stem}"):
-        raise VisionExtractionFailed("Image extraction rejected: output contains only the filename.")
+        raise VisionExtractionFailed(
+            "Image extraction rejected: output contains only the filename.",
+            error_code=VISION_INVALID_RESPONSE,
+        )
 
     # 3. Check if output contains only generic phrases
     normalized_all = re.sub(r"[^a-z0-9\s]", " ", all_tokens).strip()
@@ -214,7 +281,10 @@ def _validate_vision_extraction(data: dict[str, Any], source: str) -> VisionExtr
     has_generic_phrase = any(phrase in normalized_all for phrase in _GENERIC_PHRASES)
     remaining_words = {w for w in words if w not in placeholder_tokens and not w.isdigit() and w != clean_stem}
     if not remaining_words or (has_generic_phrase and len(remaining_words) < 2 and not diagram_evidence):
-        raise VisionExtractionFailed("Image extraction rejected: output contains only generic placeholder phrases.")
+        raise VisionExtractionFailed(
+            "Image extraction rejected: output contains only generic placeholder phrases.",
+            error_code=VISION_INVALID_RESPONSE,
+        )
 
 
     return VisionExtractionData(
@@ -297,70 +367,233 @@ def format_vision_markdown(extracted: VisionExtractionData) -> str:
     return "\n".join(sections).strip()
 
 
-def extract_vision_openrouter(image_bytes: bytes, source: str = "image") -> VisionExtractionData:
-    """Send image to OpenRouter multimodal endpoint with automatic free model fallback."""
+async def extract_vision_openrouter_async(
+    image_bytes: bytes,
+    source: str = "image",
+    on_progress: Callable[[str], None] | None = None,
+) -> VisionExtractionData:
+    """Send image to OpenRouter multimodal endpoint asynchronously with strict schema validation and true cancellation."""
     api_key = getattr(settings, "openrouter_api_key", "").strip()
     if not api_key:
-        raise VisionExtractionFailed("OPENROUTER_API_KEY is not configured. Vision extraction cannot proceed.")
+        raise VisionExtractionFailed(
+            "OPENROUTER_API_KEY is not configured. Vision extraction cannot proceed.",
+            error_code=VISION_AUTH_FAILED,
+        )
 
     primary_model = getattr(settings, "vision_model", "openrouter/free").strip()
     image_sha = hashlib.sha256(image_bytes).hexdigest()
-    cache_key = f"{image_sha}:{primary_model}:v1"
+    cache_key = f"{image_sha}:{primary_model}:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
 
     if cache_key in _VISION_EXTRACTION_CACHE:
         logger.info("[vision] Vision cache hit for image sha256=%s model=%s (0 network calls)", image_sha[:10], primary_model)
         return copy.deepcopy(_VISION_EXTRACTION_CACHE[cache_key])
 
+    start_mono = time.monotonic()
+    stage_timeout = float(getattr(settings, "vision_stage_timeout_seconds", 90.0))
+    deadline = start_mono + stage_timeout
+    logger.info("[vision] extraction_start source=%s stage_budget=%.1fs", source, stage_timeout)
+
+    if on_progress:
+        try:
+            on_progress("Preparing image for visual understanding")
+        except Exception:
+            pass
+
     mime_type = _detect_image_mime(image_bytes, filename=source)
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
     data_url = f"data:{mime_type};base64,{b64_data}"
 
-    fallback_model = getattr(settings, "vision_fallback_model", "inclusionai/ling-3.0-flash-vl:free").strip()
-    timeout_sec = float(getattr(settings, "vision_timeout_seconds", 60.0))
+    fallback_model = getattr(settings, "vision_fallback_model", "").strip()
+    per_request_timeout = float(getattr(settings, "vision_timeout_seconds", 45.0))
     endpoint = "https://openrouter.ai/api/v1/chat/completions"
 
-    candidate_models = [primary_model]
+    # Strictly bounded 2-request sequence:
+    # Attempt 1: primary_model with strict json_schema
+    # Attempt 2: fallback_model (if configured) or primary_model with json_object
+    schema = get_vision_extraction_json_schema()
+    attempt_plan: list[dict[str, Any]] = [
+        {
+            "model": primary_model,
+            "mode": "json_schema",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "vision_extraction",
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+            "is_fallback": False,
+        }
+    ]
+
     if fallback_model and fallback_model != primary_model:
-        candidate_models.append(fallback_model)
+        attempt_plan.append({
+            "model": fallback_model,
+            "mode": "json_object",
+            "response_format": {"type": "json_object"},
+            "is_fallback": True,
+        })
+    else:
+        attempt_plan.append({
+            "model": primary_model,
+            "mode": "json_object",
+            "response_format": {"type": "json_object"},
+            "is_fallback": False,
+        })
 
     last_error: Exception | None = None
+    last_error_code: str = VISION_PROVIDER_FAILED
 
-    for model_name in candidate_models:
-        payload = json.dumps({
-            "model": model_name,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": _OPENROUTER_VISION_PROMPT},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": data_url},
-                        },
-                    ],
-                }
-            ],
-        }).encode("utf-8")
+    async with httpx.AsyncClient() as client:
+        for attempt_idx, attempt in enumerate(attempt_plan, 1):
+            model_name = attempt["model"]
+            mode = attempt["mode"]
+            resp_format = attempt["response_format"]
+            is_fallback = attempt["is_fallback"]
 
-        req = urllib.request.Request(
-            endpoint,
-            data=payload,
-            headers={
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                total_ms = int((time.monotonic() - start_mono) * 1000)
+                logger.error(
+                    "[vision] extraction_failed failure_code=%s total_ms=%d reason=stage_deadline_exceeded",
+                    VISION_TIMEOUT,
+                    total_ms,
+                )
+                raise VisionExtractionFailed(
+                    f"Image understanding exceeded configured time limit ({stage_timeout:.1f}s) before attempt {attempt_idx}.",
+                    error_code=VISION_TIMEOUT,
+                )
+
+            req_read_timeout = max(0.5, min(per_request_timeout, remaining))
+            timeout = httpx.Timeout(connect=10.0, read=req_read_timeout, write=20.0, pool=10.0)
+
+            if on_progress:
+                try:
+                    on_progress(f"Visual understanding ({model_name} [{mode}])")
+                except Exception:
+                    pass
+
+            logger.info(
+                "[vision] request_start attempt=%d/2 model=%s mode=%s req_timeout=%.1fs remaining_stage=%.1fs",
+                attempt_idx,
+                model_name,
+                mode,
+                req_read_timeout,
+                remaining,
+            )
+
+            req_start_mono = time.monotonic()
+            payload = {
+                "model": model_name,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": _OPENROUTER_VISION_PROMPT},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url},
+                            },
+                        ],
+                    }
+                ],
+                "response_format": resp_format,
+                "temperature": 0,
+            }
+
+            headers = {
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
                 "HTTP-Referer": "https://github.com/visualai/ai-video-generator",
                 "X-Title": "VisualAI Multimodal Extraction",
-            },
-            method="POST",
-        )
+            }
 
-        try:
-            logger.info("[vision] Invoking OpenRouter vision model=%s for source=%s", model_name, source)
-            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
-                resp_bytes = resp.read()
-                raw_json = json.loads(resp_bytes.decode("utf-8"))
+            try:
+                response = await client.post(
+                    endpoint,
+                    json=payload,
+                    headers=headers,
+                    timeout=timeout,
+                )
 
-                # Check OpenRouter API error payloads
+                if time.monotonic() > deadline:
+                    raise TimeoutError("Stage deadline exceeded while reading response stream")
+
+                req_elapsed_ms = int((time.monotonic() - req_start_mono) * 1000)
+                status_code = response.status_code
+
+                if status_code in (401, 403):
+                    last_error_code = VISION_AUTH_FAILED
+                    total_ms = int((time.monotonic() - start_mono) * 1000)
+                    logger.error(
+                        "[vision] extraction_failed failure_code=%s total_ms=%d http_code=%d",
+                        VISION_AUTH_FAILED,
+                        total_ms,
+                        status_code,
+                    )
+                    raise VisionExtractionFailed(
+                        f"OpenRouter authentication failed (HTTP {status_code}). Please verify OPENROUTER_API_KEY.",
+                        error_code=VISION_AUTH_FAILED,
+                    )
+
+                if status_code == 404:
+                    if is_fallback:
+                        last_error_code = VISION_FALLBACK_UNAVAILABLE
+                    else:
+                        last_error_code = VISION_STRUCTURED_OUTPUT_UNAVAILABLE
+                    logger.warning(
+                        "[vision] Model '%s' endpoint unavailable (HTTP 404, code=%s) elapsed_ms=%d.",
+                        model_name,
+                        last_error_code,
+                        req_elapsed_ms,
+                    )
+                    raise RuntimeError(f"HTTP 404 Model {model_name} unavailable")
+
+                if status_code in (400, 422):
+                    if attempt_idx == 1:
+                        last_error_code = VISION_STRUCTURED_OUTPUT_UNAVAILABLE
+                    else:
+                        last_error_code = VISION_PROVIDER_FAILED
+                    logger.warning(
+                        "[vision] Model '%s' schema/request rejected (HTTP %d, code=%s) elapsed_ms=%d.",
+                        model_name,
+                        status_code,
+                        last_error_code,
+                        req_elapsed_ms,
+                    )
+                    raise RuntimeError(f"HTTP {status_code} schema rejected: {response.text[:200]}")
+
+                if status_code == 429:
+                    last_error_code = VISION_RATE_LIMIT
+                    logger.warning(
+                        "[vision] Model '%s' rate limited (HTTP 429) elapsed_ms=%d.",
+                        model_name,
+                        req_elapsed_ms,
+                    )
+                    raise RuntimeError("HTTP 429 Rate limited")
+
+                if status_code != 200:
+                    last_error_code = VISION_PROVIDER_FAILED
+                    logger.warning(
+                        "[vision] Model '%s' failed (HTTP %d: %s) elapsed_ms=%d.",
+                        model_name,
+                        status_code,
+                        response.text[:200],
+                        req_elapsed_ms,
+                    )
+                    raise RuntimeError(f"HTTP {status_code}: {response.text[:200]}")
+
+                logger.info(
+                    "[vision] request_complete attempt=%d model=%s mode=%s status=200 bytes=%d elapsed_ms=%d",
+                    attempt_idx,
+                    model_name,
+                    mode,
+                    len(response.content),
+                    req_elapsed_ms,
+                )
+
+                raw_json = response.json()
                 if "error" in raw_json:
                     err_info = raw_json["error"]
                     err_msg = err_info.get("message", str(err_info)) if isinstance(err_info, dict) else str(err_info)
@@ -370,66 +603,157 @@ def extract_vision_openrouter(image_bytes: bytes, source: str = "image") -> Visi
                 if not choices:
                     raise RuntimeError("OpenRouter returned empty choices list.")
 
-                # Capture actual routed model returned by OpenRouter without exposing keys
                 resolved_model = raw_json.get("model") or model_name
-                logger.info(
-                    "[vision] OpenRouter routing metadata: requested_model=%s, resolved_model=%s",
+                content_str = choices[0].get("message", {}).get("content", "").strip()
+                logger.warning(
+                    "[vision] OpenRouter routing metadata: requested_model=%s, resolved_model=%s, content_len=%d, preview=%r",
                     model_name,
                     resolved_model,
+                    len(content_str),
+                    content_str[:120],
                 )
-
-                content_str = choices[0].get("message", {}).get("content", "").strip()
                 if not content_str:
                     raise RuntimeError("Vision model returned empty message content.")
 
+                if on_progress:
+                    try:
+                        on_progress("Validating extracted visual evidence")
+                    except Exception:
+                        pass
+
                 parsed_data = _clean_json_response(content_str)
+                logger.info("[vision] parsing_complete model=%s mode=%s", model_name, mode)
+
                 validated = _validate_vision_extraction(parsed_data, source=source)
-                _VISION_EXTRACTION_CACHE[cache_key] = validated
                 logger.info(
-                    "[vision] Successfully extracted vision data via model=%s (resolved=%s, confidence=%.2f)",
+                    "[vision] validation_complete attempt=%d model=%s confidence=%.2f",
+                    attempt_idx,
+                    model_name,
+                    validated.confidence,
+                )
+
+                _VISION_EXTRACTION_CACHE[cache_key] = validated
+
+                total_ms = int((time.monotonic() - start_mono) * 1000)
+                logger.info(
+                    "[vision] extraction_complete model=%s resolved=%s mode=%s total_ms=%d",
                     model_name,
                     resolved_model,
-                    validated.confidence,
+                    mode,
+                    total_ms,
                 )
                 return validated
 
-        except urllib.error.HTTPError as http_err:
-            last_error = http_err
-            status_code = http_err.code
-            try:
-                err_body = http_err.read().decode("utf-8")
-            except Exception:
-                err_body = ""
-
-            # If primary free model is rate-limited upstream (HTTP 429), log warning and continue to fallback model
-            if status_code == 429:
-                logger.warning(
-                    "[vision] OpenRouter model '%s' rate limited (HTTP 429). Attempting fallback model...",
+            except asyncio.CancelledError:
+                logger.info(
+                    "[vision] In-flight OpenRouter request cancelled cleanly for model=%s attempt=%d",
                     model_name,
+                    attempt_idx,
+                )
+                raise
+
+            except (httpx.TimeoutException, TimeoutError) as timeout_err:
+                last_error = timeout_err
+                last_error_code = VISION_TIMEOUT
+                req_elapsed_ms = int((time.monotonic() - req_start_mono) * 1000)
+                logger.warning(
+                    "[vision] Model '%s' timed out elapsed_ms=%d.",
+                    model_name,
+                    req_elapsed_ms,
                 )
 
-            if status_code in (401, 403):
-                logger.warning("[vision] OpenRouter authentication error (HTTP %d). Check API key.", status_code)
-                raise VisionExtractionFailed(
-                    f"OpenRouter authentication failed (HTTP {status_code}). Please verify OPENROUTER_API_KEY."
-                ) from http_err
+            except VisionExtractionFailed as vef:
+                last_error = vef
+                last_error_code = vef.error_code
+                req_elapsed_ms = int((time.monotonic() - req_start_mono) * 1000)
+                logger.warning(
+                    "[vision] Model '%s' returned invalid extraction (%s) elapsed_ms=%d.",
+                    model_name,
+                    vef,
+                    req_elapsed_ms,
+                )
 
-            logger.warning(
-                "[vision] OpenRouter model '%s' failed (HTTP %d: %s). Trying fallback if available...",
-                model_name, status_code, err_body[:200]
-            )
+            except Exception as exc:
+                last_error = exc
+                req_elapsed_ms = int((time.monotonic() - req_start_mono) * 1000)
+                logger.warning(
+                    "[vision] Model '%s' failed (%s) elapsed_ms=%d.",
+                    model_name,
+                    exc,
+                    req_elapsed_ms,
+                )
 
-        except Exception as exc:
-            last_error = exc
-            logger.warning("[vision] OpenRouter model '%s' failed (%s). Trying fallback if available...", model_name, exc)
+            if attempt_idx < len(attempt_plan):
+                logger.info(
+                    "[vision] Attempt %d failed (%s). Transitioning to controlled Attempt %d...",
+                    attempt_idx,
+                    last_error_code,
+                    attempt_idx + 1,
+                )
 
-    # All candidate models failed
-    if isinstance(last_error, urllib.error.HTTPError) and last_error.code == 429:
+    # All candidate attempts failed or stage budget exhausted
+    total_ms = int((time.monotonic() - start_mono) * 1000)
+    if time.monotonic() >= deadline:
+        last_error_code = VISION_TIMEOUT
+
+    logger.error(
+        "[vision] extraction_failed failure_code=%s total_ms=%d last_error=%s",
+        last_error_code,
+        total_ms,
+        last_error,
+    )
+
+    if last_error_code == VISION_TIMEOUT:
         raise VisionExtractionFailed(
-            f"All OpenRouter vision models failed for source '{source}'. Rate limit or quota reached (HTTP 429)."
+            f"Image understanding exceeded the configured time limit for source '{source}'. Please retry.",
+            error_code=VISION_TIMEOUT,
+        ) from last_error
+    if last_error_code == VISION_RATE_LIMIT:
+        raise VisionExtractionFailed(
+            f"All OpenRouter vision models rate-limited (HTTP 429) for source '{source}'.",
+            error_code=VISION_RATE_LIMIT,
+        ) from last_error
+    if last_error_code == VISION_STRUCTURED_OUTPUT_UNAVAILABLE:
+        raise VisionExtractionFailed(
+            f"Structured visual output is not supported by current provider for source '{source}'.",
+            error_code=VISION_STRUCTURED_OUTPUT_UNAVAILABLE,
+        ) from last_error
+    if last_error_code == VISION_FALLBACK_UNAVAILABLE:
+        raise VisionExtractionFailed(
+            f"Vision fallback model is currently unavailable for source '{source}'.",
+            error_code=VISION_FALLBACK_UNAVAILABLE,
+        ) from last_error
+    if last_error_code == VISION_INVALID_RESPONSE:
+        raise VisionExtractionFailed(
+            f"Vision extraction rejected or invalid response for source '{source}': {last_error}",
+            error_code=VISION_INVALID_RESPONSE,
         ) from last_error
 
-    raise VisionExtractionFailed(f"All OpenRouter vision models failed for source '{source}'. Last error: {last_error}")
+    raise VisionExtractionFailed(
+        f"All OpenRouter vision models failed for source '{source}'. Last error: {last_error}",
+        error_code=last_error_code,
+    ) from last_error
+
+
+def extract_vision_openrouter(
+    image_bytes: bytes,
+    source: str = "image",
+    on_progress: Callable[[str], None] | None = None,
+) -> VisionExtractionData:
+    """Synchronous bridge for existing tests/callers."""
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(
+                lambda: asyncio.run(extract_vision_openrouter_async(image_bytes, source, on_progress))
+            ).result()
+    else:
+        return asyncio.run(extract_vision_openrouter_async(image_bytes, source, on_progress))
+
 
 
 def _mock_vision_extraction(source: str = "image") -> VisionExtractionData:
@@ -479,30 +803,66 @@ def _mock_vision_extraction(source: str = "image") -> VisionExtractionData:
     )
 
 
-def describe_image(image_bytes: bytes, source: str = "image") -> str:
+def describe_image(
+    image_bytes: bytes,
+    source: str = "image",
+    on_progress: Callable[[str], None] | None = None,
+) -> str:
     """Extract structured evidence from diagram or document image bytes.
     
     Routes through OpenRouter multimodal API when VISION_PROVIDER=openrouter.
     Raises VisionExtractionFailed if extraction is rejected, malformed, or unavailable.
+    NEVER silently falls through to mock extraction when VISION_PROVIDER=openrouter.
     """
     if not isinstance(image_bytes, bytes):
         raise TypeError(f"describe_image expects raw bytes, got {type(image_bytes).__name__}")
 
     provider = getattr(settings, "vision_provider", "openrouter").strip().lower()
 
-    # 1. Deterministic Mock Provider for offline tests
+    # 1. Deterministic Mock Provider for offline testing only
     if provider in ("mock", "test"):
         mock_data = _mock_vision_extraction(source=source)
         return format_vision_markdown(mock_data)
 
-    # 2. OpenRouter Vision Provider (Primary)
+    # 2. OpenRouter Vision Provider (Primary) - Fail closed, never fallback to mock
     if provider == "openrouter":
-        data = extract_vision_openrouter(image_bytes, source=source)
+        data = extract_vision_openrouter(image_bytes, source=source, on_progress=on_progress)
         return format_vision_markdown(data)
 
     # 3. Unsupported or misconfigured provider
     raise VisionExtractionFailed(
-        f"Unsupported VISION_PROVIDER: '{provider}'. Supported providers are 'openrouter' and 'mock'."
+        f"Unsupported VISION_PROVIDER: '{provider}'. Supported providers are 'openrouter' and 'mock'.",
+        error_code=VISION_PROVIDER_FAILED,
+    )
+
+
+async def describe_image_async(
+    image_bytes: bytes,
+    source: str = "image",
+    on_progress: Callable[[str], None] | None = None,
+) -> str:
+    """Extract structured evidence from diagram or document image bytes asynchronously.
+    
+    Routes through OpenRouter multimodal endpoint asynchronously when VISION_PROVIDER=openrouter.
+    Raises VisionExtractionFailed if extraction is rejected, malformed, or unavailable.
+    NEVER silently falls through to mock extraction when VISION_PROVIDER=openrouter.
+    """
+    if not isinstance(image_bytes, bytes):
+        raise TypeError(f"describe_image_async expects raw bytes, got {type(image_bytes).__name__}")
+
+    provider = getattr(settings, "vision_provider", "openrouter").strip().lower()
+
+    if provider in ("mock", "test"):
+        mock_data = _mock_vision_extraction(source=source)
+        return format_vision_markdown(mock_data)
+
+    if provider == "openrouter":
+        data = await extract_vision_openrouter_async(image_bytes, source=source, on_progress=on_progress)
+        return format_vision_markdown(data)
+
+    raise VisionExtractionFailed(
+        f"Unsupported VISION_PROVIDER: '{provider}'. Supported providers are 'openrouter' and 'mock'.",
+        error_code=VISION_PROVIDER_FAILED,
     )
 
 
@@ -525,8 +885,24 @@ def describe_frame(image_bytes: bytes, source: str = "frame") -> str:
     return f"Lecture video keyframe {source}: visual board contents and instructional notes."
 
 
-def describe_image_file(file_path: Path) -> str:
+def describe_image_file(
+    file_path: Path,
+    on_progress: Callable[[str], None] | None = None,
+) -> str:
     """Convenience wrapper for standalone image uploads."""
     with open(file_path, "rb") as fh:
-        return describe_image(fh.read(), source=file_path.name)
+        return describe_image(fh.read(), source=file_path.name, on_progress=on_progress)
+
+
+async def describe_image_file_async(
+    file_path: Path,
+    on_progress: Callable[[str], None] | None = None,
+) -> str:
+    """Convenience async wrapper for standalone image uploads."""
+    def _read_file():
+        with open(file_path, "rb") as fh:
+            return fh.read()
+
+    image_bytes = await asyncio.to_thread(_read_file)
+    return await describe_image_async(image_bytes, source=file_path.name, on_progress=on_progress)
 

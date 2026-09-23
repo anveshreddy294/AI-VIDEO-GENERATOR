@@ -347,19 +347,39 @@ def generate_question(
                 if len({opt.get("text", "").strip().casefold() for opt in raw_options}) != 4:
                     raise ValueError("Duplicate options")
 
-                # Authoritative correct answer text before shuffling
-                correct_answer_text = raw_options[raw_corr_int].get("text", "").strip()
+                # Authoritative correct answer item before shuffling
+                correct_item = raw_options[raw_corr_int]
+                correct_answer_text = correct_item.get("text", "").strip()
 
                 # Randomize option placement across 0-3 while strictly maintaining correct_index mapping
                 import random
-                texts = [opt.get("text", "").strip() for opt in raw_options]
-                random.shuffle(texts)
-                new_correct_index = texts.index(correct_answer_text) if correct_answer_text in texts else 0
+                shuffled_raw = list(raw_options)
+                random.shuffle(shuffled_raw)
+                new_correct_index = [opt.get("text", "").strip() for opt in shuffled_raw].index(correct_answer_text)
 
-                options = [
-                    AssessmentOption(index=i, text=t)
-                    for i, t in enumerate(texts)
-                ]
+                from ..mastery.misconception_models import normalize_misconception_code
+
+                options = []
+                for i, opt in enumerate(shuffled_raw):
+                    opt_text = opt.get("text", "").strip()
+                    if i == new_correct_index:
+                        options.append(AssessmentOption(index=i, text=opt_text))
+                    else:
+                        m_code = normalize_misconception_code(opt.get("misconception_code"))
+                        if not m_code:
+                            clean_cid = re.sub(r"[^A-Z0-9_]+", "_", concept.concept_id.upper()).strip("_")
+                            m_code = f"MISCONCEPTION_{clean_cid}_{i}"
+                        m_label = opt.get("misconception_label") or f"Misconception regarding {concept.name}"
+                        m_type = opt.get("misconception_type") or "general"
+                        options.append(
+                            AssessmentOption(
+                                index=i,
+                                text=opt_text,
+                                misconception_code=m_code,
+                                misconception_label=m_label,
+                                misconception_type=m_type,
+                            )
+                        )
 
                 duration_ms = round((time.time() - t0) * 1000, 2)
                 diagnostics = StageDiagnostics(
@@ -495,19 +515,56 @@ def _generate_grounded_fallback(
     h_val = int(hashlib.md5(f"{concept.concept_id}_{variant_type}".encode("utf-8")).hexdigest(), 16)
     correct_index = h_val % 4
 
-    option_texts = []
+    clean_cid = re.sub(r"[^A-Z0-9_]+", "_", concept.concept_id.upper()).strip("_")
+    distractor_meta = [
+        {
+            "code": f"CONFLATION_{clean_cid}",
+            "label": f"Conflation of {concept.name} with related principles",
+            "type": "conflation",
+        },
+        {
+            "code": f"CAUSAL_MISCONCEPTION_{clean_cid}",
+            "label": f"Incorrect causal mechanism for {concept.name}",
+            "type": "causal",
+        },
+        {
+            "code": f"DEFINITION_CONFUSION_{clean_cid}",
+            "label": f"Confusion regarding the scope of {concept.name}",
+            "type": "definition",
+        },
+    ]
+
+    # Specific grounded physics taxonomy mapping
+    name_l = (concept.name + " " + concept.concept_id).lower()
+    if "force" in name_l or "second_law" in name_l or "acceleration" in name_l:
+        distractor_meta[0] = {
+            "code": "SAME_FORCE_SAME_ACCELERATION",
+            "label": "Same force assumed to mean same acceleration",
+            "type": "causal",
+        }
+        distractor_meta[1] = {
+            "code": "MASS_FORCE_CONFLATION",
+            "label": "Mass and applied force conflation",
+            "type": "conflation",
+        }
+
+    options = []
     d_idx = 0
     for i in range(4):
         if i == correct_index:
-            option_texts.append(correct_text)
+            options.append(AssessmentOption(index=i, text=correct_text))
         else:
-            option_texts.append(distractors[d_idx])
+            meta = distractor_meta[d_idx]
+            options.append(
+                AssessmentOption(
+                    index=i,
+                    text=distractors[d_idx],
+                    misconception_code=meta["code"],
+                    misconception_label=meta["label"],
+                    misconception_type=meta["type"],
+                )
+            )
             d_idx += 1
-
-    options = [
-        AssessmentOption(index=i, text=text)
-        for i, text in enumerate(option_texts)
-    ]
 
     # Extract grounded evidence quote and text for validation pass
     evidence_quote = ""

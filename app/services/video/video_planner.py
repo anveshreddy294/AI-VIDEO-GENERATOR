@@ -44,7 +44,7 @@ SOURCE EVIDENCE:
 {source_chunks}
 TARGET DURATION: {duration}
 STUDENT SCORE: {score}%
-
+{strategy_directive}
 TASK:
 Design a short remedial educational animation ({duration} seconds).
 The video must:
@@ -276,8 +276,106 @@ def _synthesize_grounded_fallback_plan(
     else:
         eq = None
 
-    # Multi-tier pedagogical scene allocation based on target duration
-    if dur <= 50:
+    # Multi-tier pedagogical scene allocation based on teaching strategy and target duration
+    strategy = getattr(target, "teaching_strategy", None)
+    if strategy == "CONTRAST":
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Conceptual Contrast: Case Comparison", None, None, "force_box" if is_physics else None, "Mass (m)" if is_physics else None, "Force (F)" if is_physics else None, "Acceleration (a)" if is_physics else None),
+            (SceneType.EXPLANATION, "Case Comparison: Pitfall vs Verified Fact", None, f"Distinguishing {target.concept_name}: {clean_snippet[:130]}", None, None, None, None, None),
+            (SceneType.DIAGRAM if not is_physics else (SceneType.EQUATION if eq and " = " in eq else SceneType.DIAGRAM), "Side-by-Side Architectural Contrast", "Comparative Model", None, eq if is_physics else None, "force_box" if is_physics else "concept_flow", "Case A (Flawed)", "Case B (Grounded)", None),
+            (SceneType.EXAMPLE, "Comparative Demonstration in Action", "Applied Distinction", f"Contrasting both cases highlights why {target.concept_name} operates predictably under source rules.", None, None, None, None, None),
+            (SceneType.SUMMARY, "Contrasting Takeaways & Rule Checklist", None, None, None, None, None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this targeted contrast review on {target.concept_name}. Let's examine two distinct cases side by side.",
+            f"A frequent pitfall is conflating related principles: {target.misconception_label or 'confusing system properties'}. Contrast that with the grounded curriculum: {clean_snippet[:100]}.",
+            f"Comparing Case A with Case B directly reveals the critical conceptual boundary governing this system.",
+            f"In practical problem solving, maintaining this side-by-side distinction guarantees accurate reasoning.",
+            f"To achieve full mastery, remember the distinguishing criteria and review prerequisite definitions before your reassessment.",
+        ]
+    elif strategy == "COUNTEREXAMPLE":
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Counterexample Pedagogical Review", None, None, "force_box" if is_physics else None, "Mass (m)" if is_physics else None, "Force (F)" if is_physics else None, "Acceleration (a)" if is_physics else None),
+            (SceneType.EXPLANATION, "Flawed Assumption Under Analysis", None, f"Learner's assumption: {target.misconception_label or 'same force assumed to mean same acceleration'}.", None, None, None, None, None),
+            (SceneType.DIAGRAM if not is_physics else (SceneType.EQUATION if eq and " = " in eq else SceneType.DIAGRAM), "Grounded Counterexample", "Physical Disproof", None, eq if is_physics else None, "force_box" if is_physics else "concept_flow", "Varied Mass (2m)", "Constant Force (F)", "Halved Accel (a/2)"),
+            (SceneType.EXAMPLE, "Evidence-Based Refutation", "Proof Case", f"This grounded counterexample conclusively refutes the assumption: {clean_snippet[:120]}.", None, None, None, None, None),
+            (SceneType.SUMMARY, "Refined Understanding & Correct Rule", None, None, None, None, None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this targeted review on {target.concept_name}. Today we examine a common misconception and test it with a direct counterexample.",
+            f"A frequent misunderstanding is: {target.misconception_label or 'assuming same force means identical acceleration'}. But does that hold under all conditions?",
+            f"Examine this direct counterexample: when we change the underlying mass, the resulting acceleration changes proportionally under the exact same force.",
+            f"This grounded counterexample disproves the flawed assumption and reinforces the true curriculum principle: {clean_snippet[:90]}.",
+            f"Keep this counterexample in mind so you can identify and reject this distractor on your upcoming reassessment.",
+        ]
+    elif strategy == "VISUAL_COMPARISON":
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Visual Comparison & Dynamic Variables", None, None, "force_box" if is_physics else None, "Mass (m)" if is_physics else None, "Force (F)" if is_physics else None, "Acceleration (a)" if is_physics else None),
+            (SceneType.EXPLANATION, "Simultaneous Parameter Dynamics", None, f"Comparing variables simultaneously: {clean_snippet[:130]}", None, None, None, None, None),
+            (SceneType.DIAGRAM if not is_physics else (SceneType.EQUATION if eq and " = " in eq else SceneType.DIAGRAM), "Simultaneous Variable Response", "Dynamic Tracking", None, eq if is_physics else None, "force_box" if is_physics else "concept_flow", "Input Variable", "Mediating State", "Output Response"),
+            (SceneType.EXAMPLE, "Coordinated Response in Action", "Applied Visual Test", f"Observing all variables simultaneously demonstrates their direct mathematical coupling.", None, None, None, None, None),
+            (SceneType.SUMMARY, "Visual Model Takeaways", None, None, None, None, None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this visual comparison review on {target.concept_name}. Let's watch the core variables change simultaneously.",
+            f"Understanding this relationship requires observing how multiple properties interact at the same time: {clean_snippet[:100]}.",
+            f"Look at the dynamic visual model on screen. As one variable increases, the paired variable adjusts in immediate response.",
+            f"Watching both parameters simultaneously builds genuine physical intuition that equations alone cannot convey.",
+            f"Remember this visual interaction when evaluating scenario problems on your next assessment.",
+        ]
+    elif strategy == "WORKED_EXAMPLE":
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Step-by-Step Worked Example", None, None, "force_box" if is_physics else None, "Mass (m)" if is_physics else None, "Force (F)" if is_physics else None, "Acceleration (a)" if is_physics else None),
+            (SceneType.EXPLANATION, "Problem Formulation & Given State", None, f"Setting up the problem: {clean_snippet[:130]}", None, None, None, None, None),
+            (SceneType.DIAGRAM if not is_physics else (SceneType.EQUATION if eq and " = " in eq else SceneType.DIAGRAM), "Step 1: Transformation & Core Equation", "Method Step", None, eq if is_physics else None, "force_box" if is_physics else "concept_flow", "Given Data", "Governing Rule", "Derived State"),
+            (SceneType.EXAMPLE, "Step 2: Validation of Solution", "Executed Method", f"Carrying out the step-by-step transformation confirms the authoritative result.", None, None, None, None, None),
+            (SceneType.SUMMARY, "Worked Method Summary Checklist", None, None, None, None, None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this step-by-step worked example on {target.concept_name}. Let's break down the procedure together.",
+            f"First, we identify the given conditions and fundamental definition from your materials: {clean_snippet[:100]}.",
+            f"In step one, we apply the governing relationship to isolate the unknown quantity and set up our calculation.",
+            f"In step two, we execute the transformation and verify that units and physical constraints are fully satisfied.",
+            f"Follow this systematic procedure whenever you encounter diagnostic problems on this topic.",
+        ]
+    elif strategy == "PREREQUISITE_REVIEW":
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        prereq_name = target.prerequisite_concept_ids[0] if target.prerequisite_concept_ids else "Foundational Principles"
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, f"Prerequisite Review: Building on {prereq_name}", None, None, "force_box" if is_physics else None, "Mass (m)" if is_physics else None, "Force (F)" if is_physics else None, "Acceleration (a)" if is_physics else None),
+            (SceneType.EXPLANATION, f"Foundational Review: {prereq_name}", None, f"Reviewing foundational concepts required before mastering {target.concept_name}.", None, None, None, None, None),
+            (SceneType.DIAGRAM, "Bridging Prerequisite to Target Concept", "Hierarchical Flow", None, None, "concept_flow", None, None, None),
+            (SceneType.EXAMPLE, f"Applying Prerequisites to {target.concept_name}", "Integrated Context", f"Once the foundation is solid, {target.concept_name} follows naturally: {clean_snippet[:120]}.", None, None, None, None, None),
+            (SceneType.SUMMARY, "Integrated Understanding & Next Steps", None, None, None, None, None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this prerequisite review for {target.concept_name}. Before diving into advanced rules, let's secure the foundational concepts.",
+            f"A solid grasp of prerequisite principles is essential. Without them, diagnostic questions on {target.concept_name} can be confusing.",
+            f"Notice how the prerequisite directly provides the necessary inputs and constraints that define {target.concept_name}.",
+            f"Now that the foundation is reinforced: {clean_snippet[:100]}. Everything connects logically.",
+            f"With your prerequisite foundation refreshed, you are ready to demonstrate mastery on your reassessment.",
+        ]
+    elif strategy == "PREDICTION_AND_REVEAL":
+        weights = [0.12, 0.28, 0.28, 0.18, 0.14]
+        scene_configs = [
+            (SceneType.TITLE, target.concept_name, "Predict & Reveal Challenge", None, None, "force_box" if is_physics else None, "Mass (m)" if is_physics else None, "Force (F)" if is_physics else None, "Acceleration (a)" if is_physics else None),
+            (SceneType.EXPLANATION, "Prediction Scenario: What Will Occur?", None, f"Consider this scenario regarding {target.concept_name}: what outcome do you predict?", None, None, None, None, None),
+            (SceneType.DIAGRAM if not is_physics else (SceneType.EQUATION if eq and " = " in eq else SceneType.DIAGRAM), "The Reveal: Grounded Outcome", "Verified Result", None, eq if is_physics else None, "force_box" if is_physics else "concept_flow", "Hypothesis", "Grounded Law", "Observed Fact"),
+            (SceneType.EXAMPLE, "Why This Happens: The Underlying Law", "Physical Explanation", f"The authoritative evidence confirms: {clean_snippet[:120]}.", None, None, None, None, None),
+            (SceneType.SUMMARY, "Key Prediction Rules & Takeaways", None, None, None, None, None, None, None),
+        ]
+        narration_templates = [
+            f"Welcome to this interactive predict-and-reveal challenge on {target.concept_name}. Think carefully about what should happen here.",
+            f"Consider this physical scenario. Before looking ahead, pause and predict how the system will respond.",
+            f"Now for the reveal! According to the verified curriculum, here is the exact outcome determined by physical law.",
+            f"Why did this occur? Because: {clean_snippet[:100]}. Testing your prediction against evidence builds lasting understanding.",
+            f"Remember this prediction outcome when tackling your upcoming diagnostic questions.",
+        ]
+    elif dur <= 50:
         weights = [0.12, 0.28, 0.28, 0.18, 0.14]
         if is_physics:
             scene_configs = [
@@ -410,6 +508,7 @@ def _synthesize_grounded_fallback_plan(
             "Review definitions to ensure complete understanding",
         ] if stype == SceneType.SUMMARY else []
 
+        fitted_narr = shorten_narration_to_budget(narr_text, seg_dur, wpm=140)
         scenes.append(
             ScenePlan(
                 scene_index=idx,
@@ -417,6 +516,7 @@ def _synthesize_grounded_fallback_plan(
                 title=title,
                 subtitle=sub,
                 text=text,
+                narration=fitted_narr,
                 equation=eq_val,
                 label=sub or title,
                 diagram_type=diag_type,
@@ -430,7 +530,6 @@ def _synthesize_grounded_fallback_plan(
                 page_end=target.page_end,
             )
         )
-        fitted_narr = shorten_narration_to_budget(narr_text, seg_dur, wpm=140)
         narration.append(
             NarrationSegment(
                 scene_index=idx,
@@ -500,6 +599,23 @@ def plan_video_for_target(
 
     dur = float(target.target_seconds or (30 if target.difficulty == "foundational" else (60 if target.difficulty == "advanced" else 45)))
 
+    strategy_directive = ""
+    if getattr(target, "teaching_strategy", None):
+        st = target.teaching_strategy
+        strategy_directive = f"TEACHING STRATEGY DIRECTIVE: {st}\n"
+        if st == "CONTRAST":
+            strategy_directive += "MANDATORY PEDAGOGICAL APPROACH: Show two cases side-by-side contrasting the flawed assumption with the grounded fact.\n"
+        elif st == "COUNTEREXAMPLE":
+            strategy_directive += f"MANDATORY PEDAGOGICAL APPROACH: Present the learner's flawed assumption ({target.misconception_label or 'gap'}), then show a grounded counterexample refuting it.\n"
+        elif st == "VISUAL_COMPARISON":
+            strategy_directive += "MANDATORY PEDAGOGICAL APPROACH: Animate key variables simultaneously to demonstrate their proportional response.\n"
+        elif st == "WORKED_EXAMPLE":
+            strategy_directive += "MANDATORY PEDAGOGICAL APPROACH: Show step-by-step transformation from problem formulation to validated result.\n"
+        elif st == "PREREQUISITE_REVIEW":
+            strategy_directive += "MANDATORY PEDAGOGICAL APPROACH: Briefly explain the required prerequisite first before presenting the target concept.\n"
+        elif st == "PREDICTION_AND_REVEAL":
+            strategy_directive += "MANDATORY PEDAGOGICAL APPROACH: Ask for an intuitive prediction, then reveal and explain the grounded result.\n"
+
     prompt = _VIDEO_PLAN_PROMPT.format(
         concept_id=target.concept_id,
         concept_name=target.concept_name,
@@ -507,6 +623,7 @@ def plan_video_for_target(
         source_chunks=chunk_texts,
         duration=int(dur),
         score=int(target.score),
+        strategy_directive=strategy_directive,
     )
 
     chunk_ids = target.chunk_ids or [c.get("chunk_id", "") for c in evidence if c.get("chunk_id")]

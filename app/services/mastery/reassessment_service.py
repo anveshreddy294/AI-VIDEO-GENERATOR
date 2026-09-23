@@ -18,6 +18,14 @@ from ..assessment.generator import generate_question
 from ..assessment.schemas import Question, SafeQuestion
 from ..registry import load_knowledge_graph, load_rich_chunks
 from .attempt_service import AssessmentServiceError, GroundingIntegrityError
+from .misconception_models import (
+    DistractorMisconceptionMetadata,
+    MisconceptionStatus,
+)
+from .misconception_repository import (
+    InMemoryMisconceptionRepository,
+    MisconceptionRepository,
+)
 from .models import MasteryRecord, MasteryState
 from .question_registry import AuthoritativeQuestion, QuestionRegistry
 from .repository import MasteryRepository
@@ -32,9 +40,11 @@ class ReassessmentService:
         self,
         mastery_repo: MasteryRepository,
         question_registry: QuestionRegistry,
+        misconception_repo: MisconceptionRepository | None = None,
     ) -> None:
         self.mastery_repo = mastery_repo
         self.question_registry = question_registry
+        self.misconception_repo = misconception_repo or InMemoryMisconceptionRepository()
 
     def generate_reassessment_question(
         self,
@@ -109,14 +119,24 @@ class ReassessmentService:
                 f"No grounded source chunks found for source '{source_id}'. Cannot generate grounded reassessment."
             )
 
-        # 3. Retrieve Previous Question for Differentiation
+        # 3. Retrieve Previous Question for Differentiation & Check Active Misconceptions
         prev_q: AuthoritativeQuestion | None = None
         if previous_question_id:
             prev_q = self.question_registry.get(previous_question_id.strip())
 
+        active_misconception = None
+        if self.misconception_repo:
+            misconceptions = self.misconception_repo.list_for_concept(user_id, source_id, concept_id)
+            active_list = [m for m in misconceptions if m.status in (MisconceptionStatus.ACTIVE, MisconceptionStatus.RECURRENT)]
+            if active_list:
+                active_misconception = active_list[0]
+
         # 4. Generate New Question with Novelty Guarantee
-        # Use variant_type "application" or "mechanism" for reassessment to avoid identical definitions
-        variant = "application" if prev_q and getattr(prev_q, "variant_type", "") == "definition" else "mechanism"
+        # If an active misconception exists, target it specifically via "misconception" variant
+        if active_misconception:
+            variant = "misconception"
+        else:
+            variant = "application" if prev_q and getattr(prev_q, "variant_type", "") == "definition" else "mechanism"
 
         new_question: Question | None = None
         for attempt_round in range(3):
@@ -151,7 +171,32 @@ class ReassessmentService:
                 f"Failed to generate a valid, novel grounded reassessment question for concept '{concept.name}'."
             )
 
-        # 5. Register Authoritative Question
+        # 5. Register Authoritative Question with Distractor Misconception Mapping
+        distractor_map: dict[int, DistractorMisconceptionMetadata] = {}
+        found_target_code = False
+        for opt in new_question.options:
+            if getattr(opt, "misconception_code", None) and opt.index != new_question.correct_index:
+                distractor_map[opt.index] = DistractorMisconceptionMetadata(
+                    misconception_code=opt.misconception_code,
+                    misconception_label=getattr(opt, "misconception_label", None) or opt.misconception_code,
+                    misconception_description=getattr(opt, "text", ""),
+                    misconception_type=getattr(opt, "misconception_type", None) or "general",
+                )
+                if active_misconception and opt.misconception_code == active_misconception.misconception_code:
+                    found_target_code = True
+
+        # If an active misconception exists and was not already mapped, ensure one distractor targets it
+        if active_misconception and not found_target_code:
+            for idx in range(len(new_question.options)):
+                if idx != new_question.correct_index:
+                    distractor_map[idx] = DistractorMisconceptionMetadata(
+                        misconception_code=active_misconception.misconception_code,
+                        misconception_label=active_misconception.misconception_label,
+                        misconception_description=active_misconception.misconception_description or getattr(new_question.options[idx], "text", ""),
+                        misconception_type=active_misconception.misconception_type,
+                    )
+                    break
+
         authoritative = AuthoritativeQuestion(
             question_id=new_question.question_id,
             concept_id=concept_id.strip(),
@@ -164,6 +209,7 @@ class ReassessmentService:
             difficulty=new_question.difficulty,
             explanation=new_question.explanation,
             status="PENDING",
+            distractor_misconceptions=distractor_map,
         )
         self.question_registry.register(authoritative)
 

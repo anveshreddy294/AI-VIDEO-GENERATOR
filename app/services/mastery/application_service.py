@@ -45,6 +45,15 @@ from .models import DomainInvariantViolation, MasteryRecord, MasteryState
 from .personalization_service import PersonalizationService
 from .question_registry import AuthoritativeQuestion, InMemoryQuestionRegistry, QuestionRegistry
 from .reassessment_service import ReassessmentService
+from .misconception_models import (
+    MisconceptionEvidence,
+    MisconceptionStatus,
+)
+from .misconception_repository import (
+    InMemoryMisconceptionRepository,
+    MisconceptionRepository,
+)
+from .strategy_selector import TeachingStrategySelector
 from .remediation_models import RemediationJob, RemediationJobStatus
 from .remediation_orchestrator import RemediationOrchestrator
 from .remediation_repository import InMemoryRemediationJobRepository, RemediationJobRepository
@@ -82,23 +91,29 @@ class AdaptiveLearningService:
         remediation_repo: RemediationJobRepository | None = None,
         state_machine: MasteryStateMachine | None = None,
         video_engine_fn: Any | None = None,
+        misconception_repo: MisconceptionRepository | None = None,
+        strategy_selector: TeachingStrategySelector | None = None,
     ) -> None:
         self.mastery_repo = mastery_repo or InMemoryMasteryRepository()
         self.attempt_repo = attempt_repo or InMemoryAssessmentAttemptRepository()
         self.question_registry = question_registry or InMemoryQuestionRegistry()
         self.remediation_repo = remediation_repo or InMemoryRemediationJobRepository()
         self.state_machine = state_machine or MasteryStateMachine()
+        self.misconception_repo = misconception_repo or InMemoryMisconceptionRepository()
+        self.strategy_selector = strategy_selector or TeachingStrategySelector()
 
         self.attempt_service = AssessmentAttemptService(
             attempt_repo=self.attempt_repo,
             mastery_repo=self.mastery_repo,
             question_registry=self.question_registry,
             state_machine=self.state_machine,
+            misconception_repo=self.misconception_repo,
         )
 
         self.reassessment_service = ReassessmentService(
             mastery_repo=self.mastery_repo,
             question_registry=self.question_registry,
+            misconception_repo=self.misconception_repo,
         )
 
         self.personalization_service = PersonalizationService(
@@ -112,6 +127,8 @@ class AdaptiveLearningService:
             question_registry=self.question_registry,
             state_machine=self.state_machine,
             video_engine_fn=video_engine_fn,
+            misconception_repo=self.misconception_repo,
+            strategy_selector=self.strategy_selector,
         )
 
     # -------------------------------------------------------------------------
@@ -191,6 +208,35 @@ class AdaptiveLearningService:
                             "difficulty": pending_q.difficulty,
                         }
 
+        # M7 Explainable history for NextAction
+        why_chosen = None
+        active_label = None
+        if action.concept_id and self.misconception_repo:
+            misc_list = self.misconception_repo.list_for_concept(action.user_id, action.source_id, action.concept_id)
+            act_m = next((m for m in misc_list if m.status in (MisconceptionStatus.ACTIVE, MisconceptionStatus.RECURRENT)), None)
+            corr_m = next((m for m in misc_list if m.status == MisconceptionStatus.CORRECTED), None)
+            if act_m:
+                active_label = act_m.misconception_label
+                jobs = self.remediation_repo.list_for_concept(action.user_id, action.source_id, action.concept_id)
+                st_used = (jobs[0].strategy_used or jobs[0].metadata.get("strategy_used")) if jobs else "Targeted review"
+                status_label = "Under review" if act_m.status == MisconceptionStatus.ACTIVE else "Recurrent"
+                why_chosen = {
+                    "detected_learning_gap": act_m.misconception_label,
+                    "evidence": f"{act_m.evidence_count} assessment attempt{'s' if act_m.evidence_count > 1 else ''}",
+                    "teaching_approach": st_used,
+                    "status": status_label,
+                }
+            elif corr_m:
+                active_label = corr_m.misconception_label
+                jobs = self.remediation_repo.list_for_concept(action.user_id, action.source_id, action.concept_id)
+                st_used = (jobs[0].strategy_used or jobs[0].metadata.get("strategy_used")) if jobs else "Targeted review"
+                why_chosen = {
+                    "detected_learning_gap": corr_m.misconception_label,
+                    "evidence": f"{corr_m.evidence_count} assessment attempt{'s' if corr_m.evidence_count > 1 else ''}",
+                    "teaching_approach": st_used,
+                    "status": "Corrected",
+                }
+
         return NextActionResponse(
             user_id=action.user_id,
             source_id=action.source_id,
@@ -204,6 +250,8 @@ class AdaptiveLearningService:
             lifetime_accuracy=action.lifetime_accuracy,
             dependency_status=action.dependency_status,
             metadata=meta,
+            why_chosen=why_chosen,
+            active_misconception_label=active_label,
         )
 
     # -------------------------------------------------------------------------
@@ -224,6 +272,95 @@ class AdaptiveLearningService:
             knowledge_graph=kg,
         )
 
+        clean_user = user_id.strip()
+        clean_source = source_id.strip()
+        records = self.mastery_repo.list_by_user_source(clean_user, clean_source)
+        rec_map = {r.concept_id: r for r in records}
+
+        concept_summaries: list[ConceptMasterySummary] = []
+        misconception_journey: list[dict[str, Any]] = []
+
+        for cid in kg.concepts.keys():
+            rec = rec_map.get(cid)
+            m_state = rec.mastery_state if rec else MasteryState.UNASSESSED
+            m_score = rec.mastery_score if rec else 0.0
+            l_acc = rec.lifetime_accuracy if rec else 0.0
+            att_cnt = rec.attempt_count if rec else 0
+            reass_cnt = rec.reassessment_attempt_count if rec else 0
+            rem_cnt = rec.remediation_attempt_count if rec else 0
+            last_ass = rec.last_assessed_at if rec else None
+            last_rem = rec.last_remediation_at if rec else None
+
+            # Misconceptions for this concept
+            misc_list = self.misconception_repo.list_for_concept(clean_user, clean_source, cid)
+            act_m = next((m for m in misc_list if m.status in (MisconceptionStatus.ACTIVE, MisconceptionStatus.RECURRENT)), None)
+            corr_m = next((m for m in misc_list if m.status == MisconceptionStatus.CORRECTED), None)
+            m_target = act_m or corr_m
+
+            # Jobs for strategy
+            c_jobs = self.remediation_repo.list_for_concept(clean_user, clean_source, cid)
+            st_used = (c_jobs[0].strategy_used or c_jobs[0].metadata.get("strategy_used")) if c_jobs else None
+
+            # Reassessment result
+            reass_res = None
+            if reass_cnt > 0:
+                c_atts = self.attempt_repo.list_for_concept(clean_user, clean_source, cid)
+                reass_atts = [a for a in c_atts if getattr(a, "assessment_type", None) in (AssessmentType.REASSESSMENT, "REASSESSMENT")]
+                if reass_atts:
+                    latest_reass = max(reass_atts, key=lambda a: a.submitted_at or a.created_at)
+                    reass_res = "PASSED" if latest_reass.is_correct else "FAILED"
+
+            why_c = None
+            if act_m:
+                st_display = st_used or "Targeted review"
+                status_display = "Under review" if act_m.status == MisconceptionStatus.ACTIVE else "Recurrent"
+                why_c = (
+                    f"Detected learning gap: {act_m.misconception_label}. "
+                    f"Evidence: {act_m.occurrence_count} assessment attempt{'s' if act_m.occurrence_count > 1 else ''}. "
+                    f"Teaching approach: {st_display}. "
+                    f"Status: {status_display}."
+                )
+            elif corr_m:
+                why_c = (
+                    f"Detected learning gap: {corr_m.misconception_label}. "
+                    f"Evidence: {corr_m.occurrence_count} assessment attempts. "
+                    f"Status: Corrected."
+                )
+
+            summary = ConceptMasterySummary(
+                concept_id=cid,
+                mastery_state=m_state,
+                mastery_score=m_score,
+                lifetime_accuracy=l_acc,
+                attempt_count=att_cnt,
+                reassessment_attempt_count=reass_cnt,
+                remediation_attempt_count=rem_cnt,
+                last_assessed_at=last_ass,
+                last_remediation_at=last_rem,
+                initial_state=MasteryState.WEAK if att_cnt > 0 and (act_m or corr_m) else (MasteryState.UNASSESSED if att_cnt == 0 else m_state),
+                current_state=m_state,
+                active_misconception_label=m_target.misconception_label if m_target else None,
+                misconception_confidence=m_target.confidence_state.value if m_target else None,
+                strategy_used=st_used,
+                reassessment_result=reass_res,
+                misconception_status=m_target.status.value if m_target else None,
+                why_chosen=why_c,
+            )
+            concept_summaries.append(summary)
+
+            if m_target:
+                misconception_journey.append({
+                    "concept_id": cid,
+                    "initial_state": summary.initial_state.value if summary.initial_state else None,
+                    "current_state": summary.current_state.value if summary.current_state else None,
+                    "active_misconception_label": m_target.misconception_label,
+                    "misconception_confidence": m_target.confidence_state.value,
+                    "strategy_used": st_used,
+                    "reassessment_result": reass_res,
+                    "misconception_status": m_target.status.value,
+                    "why_chosen": why_c,
+                })
+
         return RoadmapResponse(
             user_id=roadmap.user_id,
             source_id=roadmap.source_id,
@@ -238,6 +375,8 @@ class AdaptiveLearningService:
             needs_support_concepts=roadmap.needs_support_concepts,
             completed=roadmap.completed,
             next_action=self._to_next_action_dto(roadmap.next_action),
+            concept_summaries=concept_summaries,
+            misconception_journey=misconception_journey,
         )
 
     def get_next_action(
@@ -255,6 +394,8 @@ class AdaptiveLearningService:
             knowledge_graph=kg,
         )
         return self._to_next_action_dto(action)
+
+    get_next_learning_action = get_next_action
 
     def get_learning_state(
         self,
@@ -283,6 +424,13 @@ class AdaptiveLearningService:
                 elif r.mastery_state in (MasteryState.WEAK, MasteryState.REMEDIATING, MasteryState.NEEDS_SUPPORT):
                     weak_count += 1
 
+                misc_list = self.misconception_repo.list_for_concept(clean_user, clean_source, cid)
+                act_m = next((m for m in misc_list if m.status in (MisconceptionStatus.ACTIVE, MisconceptionStatus.RECURRENT)), None)
+                corr_m = next((m for m in misc_list if m.status == MisconceptionStatus.CORRECTED), None)
+                m_target = act_m or corr_m
+                c_jobs = self.remediation_repo.list_for_concept(clean_user, clean_source, cid)
+                st_used = (c_jobs[0].strategy_used or c_jobs[0].metadata.get("strategy_used")) if c_jobs else None
+
                 concept_summaries.append(
                     ConceptMasterySummary(
                         concept_id=cid,
@@ -294,6 +442,12 @@ class AdaptiveLearningService:
                         remediation_attempt_count=r.remediation_attempt_count,
                         last_assessed_at=r.last_assessed_at,
                         last_remediation_at=r.last_remediation_at,
+                        initial_state=MasteryState.WEAK if r.attempt_count > 0 and (act_m or corr_m) else r.mastery_state,
+                        current_state=r.mastery_state,
+                        active_misconception_label=m_target.misconception_label if m_target else None,
+                        misconception_confidence=m_target.confidence_state.value if m_target else None,
+                        strategy_used=st_used,
+                        misconception_status=m_target.status.value if m_target else None,
                     )
                 )
             else:
@@ -306,6 +460,8 @@ class AdaptiveLearningService:
                         attempt_count=0,
                         reassessment_attempt_count=0,
                         remediation_attempt_count=0,
+                        initial_state=MasteryState.UNASSESSED,
+                        current_state=MasteryState.UNASSESSED,
                     )
                 )
 

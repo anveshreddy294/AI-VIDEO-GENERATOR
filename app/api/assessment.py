@@ -483,8 +483,19 @@ def start_assessment(
     try:
         from .learning import get_adaptive_learning_service
         from ..services.mastery.question_registry import AuthoritativeQuestion
+        from ..services.mastery.misconception_models import DistractorMisconceptionMetadata
         adaptive_service = get_adaptive_learning_service()
         for q in questions:
+            distractor_map = {}
+            for opt in q.options:
+                if getattr(opt, "misconception_code", None) and opt.index != q.correct_index:
+                    distractor_map[opt.index] = DistractorMisconceptionMetadata(
+                        misconception_code=opt.misconception_code,
+                        misconception_label=getattr(opt, "misconception_label", None) or opt.misconception_code,
+                        misconception_description=getattr(opt, "text", ""),
+                        misconception_type=getattr(opt, "misconception_type", None) or "general",
+                    )
+
             authoritative_q = AuthoritativeQuestion(
                 question_id=q.question_id,
                 concept_id=q.concept_id,
@@ -497,6 +508,7 @@ def start_assessment(
                 difficulty=q.difficulty or "intermediate",
                 explanation=q.explanation or "",
                 status="PENDING",
+                distractor_misconceptions=distractor_map,
             )
             adaptive_service.question_registry.register(authoritative_q)
     except Exception as reg_exc:

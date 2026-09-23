@@ -16,7 +16,16 @@ from pydantic import BaseModel, Field
 
 from .attempt_models import AssessmentAttempt, AssessmentType
 from .attempt_repository import AssessmentAttemptRepository
-from .models import DomainInvariantViolation, MasteryRecord
+from .misconception_models import (
+    MisconceptionConfidenceState,
+    MisconceptionEvidence,
+    MisconceptionStatus,
+)
+from .misconception_repository import (
+    InMemoryMisconceptionRepository,
+    MisconceptionRepository,
+)
+from .models import DomainInvariantViolation, MasteryRecord, MasteryState
 from .question_registry import QuestionRegistry
 from .repository import MasteryRepository
 from .state_machine import MasteryStateMachine
@@ -56,6 +65,14 @@ class AssessmentAttemptResult(BaseModel):
     mastery: MasteryRecord
     is_duplicate: bool = False
 
+    @property
+    def is_correct(self) -> bool:
+        return self.attempt.is_correct
+
+    @property
+    def mastery_state(self) -> MasteryState:
+        return self.mastery.mastery_state
+
 
 class AssessmentAttemptService:
     """Core service for grading attempts and updating concept mastery."""
@@ -66,11 +83,13 @@ class AssessmentAttemptService:
         mastery_repo: MasteryRepository,
         question_registry: QuestionRegistry,
         state_machine: MasteryStateMachine | None = None,
+        misconception_repo: MisconceptionRepository | None = None,
     ) -> None:
         self.attempt_repo = attempt_repo
         self.mastery_repo = mastery_repo
         self.question_registry = question_registry
         self.state_machine = state_machine or MasteryStateMachine()
+        self.misconception_repo = misconception_repo or InMemoryMisconceptionRepository()
 
     def submit_attempt(
         self,
@@ -180,8 +199,83 @@ class AssessmentAttemptService:
                 raise AssessmentServiceError(f"Persistence operation failed: {err}") from err
             raise
 
+        # 8. Misconception Intelligence (M2, M3, M6)
+        if self.misconception_repo:
+            if not is_correct:
+                distractor_meta = None
+                if hasattr(question, "distractor_misconceptions") and question.distractor_misconceptions:
+                    distractor_meta = question.distractor_misconceptions.get(request.selected_answer)
+
+                if distractor_meta:
+                    m_code = distractor_meta.misconception_code
+                    existing = self.misconception_repo.find_active_by_code(
+                        user_id=request.user_id.strip(),
+                        source_id=request.source_id.strip(),
+                        concept_id=request.concept_id.strip(),
+                        misconception_code=m_code,
+                    )
+                    if existing is None:
+                        past = self.misconception_repo.find_by_code(
+                            user_id=request.user_id.strip(),
+                            source_id=request.source_id.strip(),
+                            concept_id=request.concept_id.strip(),
+                            misconception_code=m_code,
+                        )
+                        if past is not None:
+                            past.record_occurrence(
+                                question_id=request.question_id.strip(),
+                                attempt_id=clean_attempt_id,
+                            )
+                            self.misconception_repo.save(past)
+                        else:
+                            from uuid import uuid4
+                            new_evidence = MisconceptionEvidence(
+                                misconception_id=f"MISC_{uuid4().hex[:10]}",
+                                user_id=request.user_id.strip(),
+                                source_id=request.source_id.strip(),
+                                session_id=request.session_id.strip() if request.session_id else None,
+                                concept_id=request.concept_id.strip(),
+                                misconception_code=m_code,
+                                misconception_label=distractor_meta.misconception_label,
+                                misconception_description=distractor_meta.misconception_description,
+                                misconception_type=distractor_meta.misconception_type,
+                                evidence_question_ids=[request.question_id.strip()],
+                                evidence_attempt_ids=[clean_attempt_id],
+                                occurrence_count=1,
+                                confidence_state=MisconceptionConfidenceState.POSSIBLE,
+                                status=MisconceptionStatus.ACTIVE,
+                            )
+                            self.misconception_repo.save(new_evidence)
+                    else:
+                        existing.record_occurrence(
+                            question_id=request.question_id.strip(),
+                            attempt_id=clean_attempt_id,
+                        )
+                        self.misconception_repo.save(existing)
+            else:
+                # Learner answered correctly without selecting the misconception distractor
+                # If this was a reassessment or learner achieved mastery, mark active misconceptions as CORRECTED
+                is_reassessment = (
+                    request.assessment_type in (AssessmentType.REASSESSMENT, "REASSESSMENT")
+                    or (mastery and mastery.mastery_state == MasteryState.REASSESSING)
+                    or updated_mastery.mastery_state == MasteryState.MASTERED
+                )
+                if is_reassessment:
+                    active_misconceptions = self.misconception_repo.list_for_concept(
+                        user_id=request.user_id.strip(),
+                        source_id=request.source_id.strip(),
+                        concept_id=request.concept_id.strip(),
+                    )
+                    for m in active_misconceptions:
+                        if m.status in (MisconceptionStatus.ACTIVE, MisconceptionStatus.RECURRENT):
+                            m.mark_corrected()
+                            self.misconception_repo.save(m)
+
         return AssessmentAttemptResult(
             attempt=saved_attempt,
             mastery=saved_mastery,
             is_duplicate=False,
         )
+
+    # Convenient alias
+    record_attempt = submit_attempt

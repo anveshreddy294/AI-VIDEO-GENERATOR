@@ -25,6 +25,10 @@ class AuthoritativeQuestion(BaseModel):
     difficulty: str = "intermediate"
     explanation: str = ""
     status: str = "PENDING"  # PENDING or ANSWERED
+    distractor_misconceptions: dict[int, Any] = Field(
+        default_factory=dict,
+        description="Diagnostic misconception metadata mapped by distractor option index",
+    )
 
 
 @runtime_checkable

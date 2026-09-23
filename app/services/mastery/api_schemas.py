@@ -33,6 +33,16 @@ class ConceptMasterySummary(BaseModel):
     last_assessed_at: datetime | None = None
     last_remediation_at: datetime | None = None
 
+    # M7 Explainable Misconception History & Journey
+    initial_state: MasteryState | None = None
+    current_state: MasteryState | None = None
+    active_misconception_label: str | None = None
+    misconception_confidence: str | None = None
+    strategy_used: str | None = None
+    reassessment_result: str | None = None
+    misconception_status: str | None = None
+    why_chosen: str | None = None
+
 
 class NextActionResponse(BaseModel):
     """Deterministic next pedagogical action for the learner."""
@@ -49,6 +59,8 @@ class NextActionResponse(BaseModel):
     lifetime_accuracy: float | None = None
     dependency_status: str = "NONE"
     metadata: dict[str, Any] = Field(default_factory=dict)
+    why_chosen: dict[str, Any] | str | None = None
+    active_misconception_label: str | None = None
 
 
 class RoadmapResponse(BaseModel):
@@ -67,6 +79,8 @@ class RoadmapResponse(BaseModel):
     needs_support_concepts: list[str] = Field(default_factory=list)
     completed: bool = False
     next_action: NextActionResponse
+    concept_summaries: list[ConceptMasterySummary] = Field(default_factory=list)
+    misconception_journey: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class LearningStateResponse(BaseModel):

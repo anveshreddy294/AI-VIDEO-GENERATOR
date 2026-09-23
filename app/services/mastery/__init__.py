@@ -66,6 +66,21 @@ from .application_service import (
     SourceAccessDeniedError,
     SourceNotFoundError,
 )
+from .misconception_models import (
+    DistractorMisconceptionMetadata,
+    MisconceptionConfidenceState,
+    MisconceptionEvidence,
+    MisconceptionStatus,
+    TeachingStrategyDecision,
+    TeachingStrategyReasonCode,
+    TeachingStrategyType,
+    normalize_misconception_code,
+)
+from .misconception_repository import (
+    InMemoryMisconceptionRepository,
+    MisconceptionRepository,
+)
+from .strategy_selector import TeachingStrategySelector
 
 __all__ = [
     "DomainInvariantViolation",
@@ -117,5 +132,16 @@ __all__ = [
     "SourceAccessDeniedError",
     "ConceptNotEligibleForRemediationError",
     "RemediationJobNotFoundError",
+    "DistractorMisconceptionMetadata",
+    "MisconceptionConfidenceState",
+    "MisconceptionEvidence",
+    "MisconceptionStatus",
+    "TeachingStrategyType",
+    "TeachingStrategyReasonCode",
+    "TeachingStrategyDecision",
+    "normalize_misconception_code",
+    "MisconceptionRepository",
+    "InMemoryMisconceptionRepository",
+    "TeachingStrategySelector",
 ]
 

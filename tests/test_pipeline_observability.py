@@ -180,7 +180,10 @@ class TestPipelineObservability(unittest.IsolatedAsyncioTestCase):
 
         temp_path = BASE_DIR / "storage" / "runtime" / "test_scratch" / "empty_kg_sample.txt"
         temp_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path.write_text("Hello.", encoding="utf-8")
+        temp_path.write_text(
+            "This is a comprehensive study guide on classical thermodynamics, covering closed systems, heat engines, and entropy.\n\nWork and heat are path functions.",
+            encoding="utf-8",
+        )
 
         from app.services.schemas import KnowledgeGraph
 

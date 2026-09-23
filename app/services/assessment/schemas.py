@@ -34,6 +34,9 @@ class AssessmentOption(BaseModel):
     """A single multiple-choice option."""
     index: int = Field(ge=0, le=3, description="0-3 option index")
     text: str = Field(description="The option text")
+    misconception_code: str | None = Field(default=None, description="Standardized misconception code if this option represents a specific distractor")
+    misconception_label: str | None = Field(default=None, description="Human-readable misconception label")
+    misconception_type: str | None = Field(default=None, description="Type of misunderstanding (definition, conflation, causal, procedural, prediction)")
 
 
 class SafeOption(BaseModel):
@@ -231,6 +234,12 @@ class VideoTarget(BaseModel):
     timestamp_end: float | str | None = None
     authoritative_evidence: list[str] = Field(default_factory=list, description="Exact source text excerpts from Qdrant chunks or fallback ContentUnits")
     scope: Literal["current_session", "historical_review"] = Field(default="current_session", description="Distinguishes current-session failures from historical review")
+    misconception_code: str | None = Field(default=None, description="Standardized misconception code if targeting a specific misconception")
+    misconception_label: str | None = Field(default=None, description="Human readable misconception label")
+    confidence: str | None = Field(default=None, description="Misconception confidence state (POSSIBLE, LIKELY, CONFIRMED)")
+    teaching_strategy: str | None = Field(default=None, description="Deterministic teaching strategy selected for remediation")
+    previous_strategy: str | None = Field(default=None, description="Previously attempted teaching strategy if retrying")
+    evidence_attempt_ids: list[str] = Field(default_factory=list, description="IDs of learner attempts evidencing this gap")
 
 
 class VideoTargetMatrix(BaseModel):

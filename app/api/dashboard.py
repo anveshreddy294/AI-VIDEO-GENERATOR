@@ -1386,6 +1386,30 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                     <!-- Adaptive Feedback Notice -->
                     <div id="adaptiveFeedbackBox" style="display:none;padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;"></div>
+
+                    <!-- Why this review was chosen (Misconception Intelligence) -->
+                    <div id="misconceptionReviewCard" style="display:none;background:var(--bg-surface);border:1px solid var(--border-card);border-radius:var(--radius-sm);padding:14px 16px;margin-top:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                            <span style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:0.5px;">
+                                Why this review was chosen
+                            </span>
+                            <span id="lblMisconceptionStatus" class="badge badge-amber">Under review</span>
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px;font-size:12px;">
+                            <div>
+                                <span style="color:var(--text-muted);display:block;margin-bottom:2px;">Detected learning gap:</span>
+                                <strong id="lblDetectedGap" style="color:var(--text-ink);">-</strong>
+                            </div>
+                            <div>
+                                <span style="color:var(--text-muted);display:block;margin-bottom:2px;">Evidence:</span>
+                                <strong id="lblEvidenceAttempts" style="color:var(--text-ink);">-</strong>
+                            </div>
+                            <div>
+                                <span style="color:var(--text-muted);display:block;margin-bottom:2px;">Teaching approach:</span>
+                                <strong id="lblTeachingApproach" style="color:var(--peach-green);">-</strong>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -1734,6 +1758,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
             const card = document.getElementById('timelineCard');
             card.style.display = 'block';
+            const statusBox = document.getElementById('statusBox');
+            if (statusBox) statusBox.style.display = 'none';
             document.getElementById('timelineProgressBar').style.width = '0%';
             document.getElementById('timelinePercent').textContent = '0%';
             document.getElementById('timelineTimer').textContent = '0.0s';
@@ -1792,12 +1818,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             let stopped = false;
             let pollTimer = null;
             let failures = 0;
+            const WATCHDOG_INTERVAL_MS = 3000;
             const stream = new EventSource(`/pipeline/jobs/${jobId}/events`);
             activeEventSource = stream;
             const stop = () => {
                 stopped = true;
+                if (pollTimer) {
+                    clearTimeout(pollTimer);
+                    pollTimer = null;
+                }
                 stream.close();
-                clearTimeout(pollTimer);
                 if (activeEventSource === stream) activeEventSource = null;
                 if (timelineTimerInterval) clearInterval(timelineTimerInterval);
                 timelineTimerInterval = null;
@@ -1822,20 +1852,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     if (stopped) return;
                     failures = 0;
                     if (data.status === 'completed') return finish(null, data);
-                    if (data.status === 'failed') return finish(new Error(data.error || 'Job failed'));
+                    if (data.status === 'failed' || data.status === 'cancelled') return finish(new Error(data.error || `Job ${data.status}`));
                 } catch (err) {
                     if (stopped) return;
                     if (++failures >= 5) return finish(new Error(`Progress tracking failed: ${err.message}. Check the job before uploading again.`));
                 }
-                if (!stopped) pollTimer = setTimeout(poll, 2000);
+                if (!stopped) {
+                    clearTimeout(pollTimer);
+                    pollTimer = setTimeout(poll, WATCHDOG_INTERVAL_MS);
+                }
             };
             stream.onmessage = event => {
                 if (stopped || !event.data) return;
                 try {
                     const ev = JSON.parse(event.data);
                     updateTimelineEvent(ev);
+                    // Defer watchdog polling when active SSE events arrive
+                    if (!stopped) {
+                        clearTimeout(pollTimer);
+                        pollTimer = setTimeout(poll, WATCHDOG_INTERVAL_MS);
+                    }
                     if (ev.terminal && ev.status === 'completed') finish(null, ev);
-                    else if (ev.terminal && ev.status === 'failed') finish(new Error(ev.message || 'Job failed'));
+                    else if (ev.terminal && (ev.status === 'failed' || ev.status === 'cancelled')) finish(new Error(ev.message || `Job ${ev.status}`));
                 } catch (err) {
                     finish(err);
                 }
@@ -1843,10 +1881,99 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             stream.onerror = () => {
                 stream.close();
                 clearTimeout(pollTimer);
-                if (!stopped) pollTimer = setTimeout(poll, 0);
+                if (!stopped) pollTimer = setTimeout(poll, 500);
             };
-            // Poll periodically even if the stream silently stalls.
-            pollTimer = setTimeout(poll, 2000);
+            // Watchdog poll runs only if SSE does not deliver within interval
+            pollTimer = setTimeout(poll, WATCHDOG_INTERVAL_MS);
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (stopJobTracking) stopJobTracking();
+        });
+
+        const VISION_ERROR_MESSAGES = {
+            'VISION_TIMEOUT': 'Visual understanding took too long. Please retry.',
+            'VISION_RATE_LIMIT': 'Visual service temporarily unavailable. Please retry shortly.',
+            'VISION_INVALID_RESPONSE': 'Visual provider returned an unusable result. Please retry.',
+            'VISION_AUTH_FAILED': 'Visual service configuration unavailable.',
+            'VISION_PROVIDER_FAILED': 'Visual understanding could not be completed.',
+            'VISION_STRUCTURED_OUTPUT_UNAVAILABLE': 'Structured visual output is not supported by current provider.',
+            'VISION_FALLBACK_UNAVAILABLE': 'Vision fallback service is currently unavailable.'
+        };
+
+        function mapPipelineError(rawMsg) {
+            if (!rawMsg) return 'Pipeline execution failed. Please retry.';
+            for (const [code, userMsg] of Object.entries(VISION_ERROR_MESSAGES)) {
+                if (rawMsg.includes(code)) {
+                    return userMsg;
+                }
+            }
+            return rawMsg;
+        }
+
+        function showPipelineError(errMessage, jobId) {
+            if (timelineTimerInterval) clearInterval(timelineTimerInterval);
+            timelineTimerInterval = null;
+            const userMsg = mapPipelineError(errMessage);
+            const statusBox = document.getElementById('statusBox');
+            if (statusBox) {
+                statusBox.style.display = 'block';
+                statusBox.style.background = '#fef2f2';
+                statusBox.style.border = '1px solid #f87171';
+                statusBox.style.color = '#991b1b';
+                statusBox.innerHTML = `
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                        <div>
+                            <strong>Pipeline Notice:</strong> <span>${escapeHtml(userMsg)}</span>
+                        </div>
+                        ${jobId ? `<button class="neo-btn neo-btn-peach-green" id="btnRetryExtraction" onclick="retryJob('${escapeHtml(jobId)}')" style="padding:6px 14px;font-size:13px;white-space:nowrap;"><span> Retry Extraction</span></button>` : ''}
+                    </div>
+                `;
+            }
+        }
+
+        async function retryJob(jobId) {
+            const retryBtn = document.getElementById('btnRetryExtraction');
+            if (retryBtn) {
+                retryBtn.disabled = true;
+                retryBtn.innerHTML = '<span> Retrying...</span>';
+            }
+            const statusBox = document.getElementById('statusBox');
+            if (statusBox) statusBox.style.display = 'none';
+
+            const btn = document.getElementById('btnUpload');
+            btn.disabled = true;
+            btn.innerHTML = '<span> Retrying Extraction...</span>';
+            resetTimeline();
+
+            try {
+                const res = await fetch(`/pipeline/jobs/${encodeURIComponent(jobId)}/retry`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || JSON.stringify(data));
+
+                if (data.job_id) {
+                    trackJobSSE(data.job_id, async () => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
+                        const resultRes = await fetch(`/pipeline/jobs/${data.job_id}`);
+                        if (!resultRes.ok) throw new Error("Cannot retrieve completed assessment");
+                        const resultData = await resultRes.json();
+                        if (!resultData.result?.assessment?.questions?.length) throw new Error("Completed job has no quiz");
+                        startQuiz(resultData.result.assessment);
+                        loadSources();
+                    }, (err) => {
+                        btn.disabled = false;
+                        btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
+                        showPipelineError(err.message, data.job_id);
+                    });
+                }
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
+                showPipelineError(`Retry failed: ${err.message}`, jobId);
+            }
         }
 
         async function runUpload() {
@@ -1889,7 +2016,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     }, (err) => {
                         btn.disabled = false;
                         btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
-                        alert(`Pipeline Error: ${err.message}`);
+                        showPipelineError(err.message, data.job_id);
                     });
                 }
             } catch (err) {
@@ -1897,7 +2024,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 btn.innerHTML = '<span> Ingest Material &amp; Start Diagnostic Assessment</span>';
                 if (timelineTimerInterval) clearInterval(timelineTimerInterval);
                 timelineTimerInterval = null;
-                alert(`Upload failed: ${err.message}`);
+                showPipelineError(err.message, null);
             }
         }
 
@@ -2720,6 +2847,23 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         card.appendChild(activeTag);
                     }
 
+                    // Expose safe learner-facing misconception journey tag
+                    const journeyItem = (roadmap.misconception_journey || []).find(j => (j.concept_id || j.id) === cid) ||
+                                        (roadmap.concept_summaries || []).find(s => (s.concept_id || s.id) === cid);
+                    if (journeyItem) {
+                        if (journeyItem.misconception_status === 'CORRECTED') {
+                            const corBadge = document.createElement('div');
+                            corBadge.style.cssText = 'font-size:10px;font-weight:700;color:var(--peach-green);margin-top:2px;';
+                            corBadge.textContent = '✓ Gap Corrected';
+                            card.appendChild(corBadge);
+                        } else if (journeyItem.active_misconception_label) {
+                            const gapBadge = document.createElement('div');
+                            gapBadge.style.cssText = 'font-size:10px;font-weight:600;color:var(--amber, #f59e0b);margin-top:2px;';
+                            gapBadge.textContent = `Gap: ${journeyItem.active_misconception_label}`;
+                            card.appendChild(gapBadge);
+                        }
+                    }
+
                     container.appendChild(card);
                 });
             });
@@ -2885,6 +3029,36 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     titleEl.textContent = `Current Step: ${action.action_type}`;
                     descEl.textContent = action.reason || '';
                     break;
+            }
+
+            // Misconception Intelligence Presentation ("Why this review was chosen")
+            const misCard = document.getElementById('misconceptionReviewCard');
+            if (misCard) {
+                const whyChosen = action.why_chosen || (action.metadata && action.metadata.why_chosen);
+                const misLabel = action.active_misconception_label || (whyChosen && whyChosen.detected_learning_gap);
+                if (whyChosen || misLabel) {
+                    misCard.style.display = 'block';
+                    const gapEl = document.getElementById('lblDetectedGap');
+                    const evEl = document.getElementById('lblEvidenceAttempts');
+                    const approachEl = document.getElementById('lblTeachingApproach');
+                    const statusBadge = document.getElementById('lblMisconceptionStatus');
+
+                    if (gapEl) gapEl.textContent = (whyChosen && whyChosen.detected_learning_gap) || misLabel || 'Diagnosed conceptual gap';
+                    if (evEl) evEl.textContent = (whyChosen && whyChosen.evidence) || (action.evidence_attempt_ids ? `${action.evidence_attempt_ids.length} assessment attempts` : 'Assessment evidence');
+                    if (approachEl) approachEl.textContent = (whyChosen && whyChosen.teaching_approach) || (action.strategy_used ? action.strategy_used.replace(/_/g, ' ') : 'Targeted review');
+
+                    const statusVal = (whyChosen && whyChosen.status) || (action.misconception_status === 'CORRECTED' ? 'Corrected' : 'Under review');
+                    if (statusBadge) {
+                        statusBadge.textContent = statusVal;
+                        if (statusVal.toLowerCase() === 'corrected') {
+                            statusBadge.className = 'badge badge-green';
+                        } else {
+                            statusBadge.className = 'badge badge-amber';
+                        }
+                    }
+                } else {
+                    misCard.style.display = 'none';
+                }
             }
         }
 
