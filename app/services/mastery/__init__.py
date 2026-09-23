@@ -40,6 +40,13 @@ from .roadmap_models import (
 )
 from .state_machine import ALLOWED_TRANSITIONS, MasteryStateMachine
 
+from .remediation_models import RemediationJob, RemediationJobStatus
+from .remediation_repository import (
+    InMemoryRemediationJobRepository,
+    RemediationJobRepository,
+)
+from .remediation_orchestrator import RemediationOrchestrator
+
 __all__ = [
     "DomainInvariantViolation",
     "InvalidStateTransitionError",
@@ -70,4 +77,9 @@ __all__ = [
     "LearningRoadmap",
     "ConceptDependencyProvider",
     "PersonalizationService",
+    "RemediationJobStatus",
+    "RemediationJob",
+    "RemediationJobRepository",
+    "InMemoryRemediationJobRepository",
+    "RemediationOrchestrator",
 ]
