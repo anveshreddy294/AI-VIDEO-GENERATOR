@@ -155,6 +155,7 @@ def _run_subprocess_sync(
     """
     proc = subprocess.Popen(
         cmd,
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
     )
@@ -267,6 +268,7 @@ async def composite_remedial_video(
     cmd = [
         ffmpeg_bin,
         "-y",
+        "-nostdin",
         "-nostats",
         "-loglevel",
         "error",
@@ -353,6 +355,7 @@ async def composite_remedial_video(
     fallback_cmd = [
         ffmpeg_bin,
         "-y",
+        "-nostdin",
         "-nostats",
         "-loglevel",
         "error",

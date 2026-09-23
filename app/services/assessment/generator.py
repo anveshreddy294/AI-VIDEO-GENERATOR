@@ -284,11 +284,17 @@ def generate_question(
     last_error: str | None = None
     provider_failed = False
 
-    # Set fast 8.0s timeout on provider so question generation never hangs
+    # Configure timeout on provider: respect explicit assessment_timeout or configured ollama_timeout
     old_timeout = getattr(provider, "timeout", None)
     try:
         if hasattr(provider, "timeout"):
-            provider.timeout = 8.0
+            effective_timeout = float(
+                getattr(settings, "assessment_timeout", None)
+                or old_timeout
+                or getattr(settings, "ollama_timeout", None)
+                or 60.0
+            )
+            provider.timeout = effective_timeout
 
         # Attempt LLM generation via provider (max 1 retry for speed)
         for attempt in range(min(retries, 1) + 1):

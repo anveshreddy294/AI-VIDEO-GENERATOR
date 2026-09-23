@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Literal, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class SourceRecord(BaseModel):
@@ -135,6 +135,18 @@ class RichChunk(BaseModel):
     chunk_id: str = Field(default_factory=lambda: f"CHUNK_{uuid4().hex[:12]}")
     source_id: str
     asset_id: str
+    session_id: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _extract_session_from_metadata(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            meta = data.get("metadata")
+            if isinstance(meta, dict) and "session_id" in meta and not data.get("session_id"):
+                data["session_id"] = meta["session_id"]
+        return data
+
     layer: Literal["A"] = "A"
     type: Literal["rich_chunk"] = "rich_chunk"
     text: str

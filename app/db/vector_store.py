@@ -297,6 +297,7 @@ def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> 
         ("layer", qmodels.PayloadSchemaType.KEYWORD),
         ("source_id", qmodels.PayloadSchemaType.KEYWORD),
         ("user_id", qmodels.PayloadSchemaType.KEYWORD),
+        ("session_id", qmodels.PayloadSchemaType.KEYWORD),
         ("source_version", qmodels.PayloadSchemaType.KEYWORD),
         ("type", qmodels.PayloadSchemaType.KEYWORD),
         ("retrieval_allowed", qmodels.PayloadSchemaType.BOOL),
@@ -456,6 +457,7 @@ def search_source_chunks(
             qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)),
             qmodels.FieldCondition(key="retrieval_allowed", match=qmodels.MatchValue(value=True)),
         ]
+        should_conditions: list[Any] = []
         if user_id:
             if user_id == "student_default":
                 must_conditions.append(
@@ -469,9 +471,13 @@ def search_source_chunks(
                     )
                 )
         if session_id:
-            must_conditions.append(
-                qmodels.FieldCondition(key="session_id", match=qmodels.MatchValue(value=session_id))
-            )
+            # Enforce session isolation: match this session's chunks OR canonical document chunks
+            # (which have no session_id). Never match chunks tagged with a different session_id.
+            should_conditions.extend([
+                qmodels.FieldCondition(key="session_id", match=qmodels.MatchValue(value=session_id)),
+                qmodels.IsNullCondition(is_null=qmodels.PayloadField(key="session_id")),
+                qmodels.IsEmptyCondition(is_empty=qmodels.PayloadField(key="session_id")),
+            ])
         if source_version:
             must_conditions.append(
                 qmodels.FieldCondition(key="source_version", match=qmodels.MatchValue(value=source_version))
@@ -493,11 +499,15 @@ def search_source_chunks(
         else:
             threshold = getattr(settings, "vector_similarity_threshold", 0.35)
 
+        filter_kwargs: dict[str, Any] = {"must": must_conditions}
+        if should_conditions:
+            filter_kwargs["should"] = should_conditions
+
         hits = client.search(
             collection_name=settings.collection_name,
             query_vector=vector,
             limit=top_k,
-            query_filter=qmodels.Filter(must=must_conditions),
+            query_filter=qmodels.Filter(**filter_kwargs),
             score_threshold=threshold,
         )
         results = []
