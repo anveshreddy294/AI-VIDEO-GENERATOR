@@ -23,6 +23,8 @@ from .models import (
     MasteryRecord,
     MasteryState,
 )
+from .dependency_provider import ConceptDependencyProvider
+from .personalization_service import PersonalizationService
 from .question_registry import (
     AuthoritativeQuestion,
     InMemoryQuestionRegistry,
@@ -30,6 +32,12 @@ from .question_registry import (
 )
 from .reassessment_service import ReassessmentService
 from .repository import InMemoryMasteryRepository, MasteryRepository
+from .roadmap_models import (
+    LearningActionType,
+    LearningRoadmap,
+    NextLearningAction,
+    ReasonCode,
+)
 from .state_machine import ALLOWED_TRANSITIONS, MasteryStateMachine
 
 __all__ = [
@@ -56,4 +64,10 @@ __all__ = [
     "GroundingIntegrityError",
     "UnknownQuestionError",
     "ReassessmentService",
+    "LearningActionType",
+    "ReasonCode",
+    "NextLearningAction",
+    "LearningRoadmap",
+    "ConceptDependencyProvider",
+    "PersonalizationService",
 ]
