@@ -1312,6 +1312,83 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 </div>
             </div>
 
+            <!--  Step 5: Personalized Adaptive Learning & Mastery Loop -->
+            <div id="adaptiveLearningPanel" class="quiz-card" style="display:none;margin-top:28px;">
+                <div class="quiz-header" style="border-bottom:1px solid var(--border-card);padding-bottom:12px;margin-bottom:16px;">
+                    <div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:20px;">🎯</span>
+                            <span style="font-weight:700;font-size:18px;color:var(--text-ink);">Personalized Adaptive Learning</span>
+                        </div>
+                        <p style="font-size:13px;color:var(--text-muted);margin:4px 0 0 0;">
+                            Deterministic mastery state machine driving grounded diagnostic review, video remediation, and practice reassessment
+                        </p>
+                    </div>
+                    <span class="badge badge-peach-green" id="lblAdaptiveBadge">ADAPTIVE LOOP</span>
+                </div>
+
+                <!-- Compact Learner Progress / Roadmap Component -->
+                <div id="adaptiveRoadmapWidget" style="background:var(--bg-surface);border:1px solid var(--border-card);border-radius:var(--radius-sm);padding:16px;margin-bottom:20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+                        <span style="font-size:12px;font-weight:700;text-transform:uppercase;color:var(--text-muted);">
+                            Curriculum Mastery Roadmap
+                        </span>
+                        <div id="roadmapStatusPill" class="badge badge-blue">Analyzing Path...</div>
+                    </div>
+                    <div id="roadmapConceptsContainer" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:10px;"></div>
+                </div>
+
+                <!-- Dynamic Action Guidance Card -->
+                <div id="adaptiveActionCard" style="background:var(--bg-card);border:1px solid var(--peach-green-border);border-radius:var(--radius-sm);padding:20px;display:flex;flex-direction:column;gap:14px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">
+                        <div>
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span class="badge badge-peach-green" id="lblActionBadge">ACTION</span>
+                                <h4 id="lblActionTitle" style="font-size:16px;font-weight:700;color:var(--text-ink);margin:0;">Recommended Next Step</h4>
+                            </div>
+                            <p id="lblActionDesc" style="font-size:13px;color:var(--text-muted);margin:6px 0 0 0;">Evaluating your learning state...</p>
+                        </div>
+                        <div id="actionControlsContainer" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <!-- Required Action Buttons (dynamically managed) -->
+                            <button id="btnStartReview" class="neo-btn neo-btn-peach" style="display:none;" onclick="triggerAdaptiveRemediation()">
+                                <span>Start Personalized Review</span>
+                            </button>
+                            <button id="btnTakeAssessmentAgain" class="neo-btn neo-btn-peach-green" style="display:none;" onclick="triggerReassessmentQuestion()">
+                                <span>Take Assessment Again</span>
+                            </button>
+                            <button id="btnNextQuestion" class="neo-btn neo-btn-peach-green" style="display:none;" onclick="triggerNextReassessmentQuestion()">
+                                <span>Next Question</span>
+                            </button>
+                            <button id="btnContinueNextConcept" class="neo-btn neo-btn-peach-green" style="display:none;" onclick="triggerContinueNextConcept()">
+                                <span>Continue to Next Concept</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Adaptive Reassessment Question Box -->
+                    <div id="adaptiveQuestionBox" style="display:none;background:var(--bg-surface);border:1px solid var(--border-card);border-radius:var(--radius-sm);padding:18px;margin-top:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                            <div>
+                                <span class="badge badge-peach-green" id="lblReassessConceptBadge">CONCEPT</span>
+                                <span class="badge badge-amber" id="lblReassessDifficultyBadge" style="margin-left:6px;">INTERMEDIATE</span>
+                            </div>
+                            <span class="badge badge-blue">GROUNDED REASSESSMENT</span>
+                        </div>
+                        <div class="question-stem" id="lblReassessStem" style="margin-bottom:16px;font-size:15px;font-weight:600;color:var(--text-ink);"></div>
+                        <div class="options-list" id="reassessOptionsContainer" style="margin-bottom:18px;"></div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <span style="font-size:12px;color:var(--text-muted);">Authoritative server-side evaluation · Zero answer leakage</span>
+                            <button class="neo-btn neo-btn-peach-green" id="btnSubmitAnswer" onclick="submitReassessmentAnswer()">
+                                <span>Submit Answer</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Adaptive Feedback Notice -->
+                    <div id="adaptiveFeedbackBox" style="display:none;padding:12px 16px;border-radius:var(--radius-sm);font-size:13px;font-weight:600;"></div>
+                </div>
+            </div>
+
         </section>
 
         <!--  Architectural Pipeline Flow Documentation -->
@@ -2033,6 +2110,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             // Render Step 3 Remedial Video Targets & Dual-Layer Video RAG
             displayVideoTargets(data);
 
+            // Step 5: Authoritative Adaptive Learning State & Roadmap Sync
+            if (currentSession && currentSession.source_id) {
+                syncAdaptiveLearning(currentSession.source_id);
+            }
+
             // Question-by-Question Review
             const reviewSection = document.getElementById('quizReviewSection');
             const reviewContainer = document.getElementById('quizReviewContainer');
@@ -2355,6 +2437,12 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                         document.getElementById('videoGenStatusBox').style.display = 'none';
                         playerBox.scrollIntoView({ behavior: 'smooth' });
+
+                        // Step 5: Refresh adaptive learning next-action after video lesson completes
+                        const activeSourceId = currentSession ? currentSession.source_id : (document.getElementById('sourceSelect')?.value || null);
+                        if (activeSourceId) {
+                            syncAdaptiveLearning(activeSourceId);
+                        }
                     } else if (st === 'FAILED') {
                         clearInterval(videoPollInterval);
                         videoPollInterval = null;
@@ -2368,7 +2456,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 } catch (e) {
                     console.error('Error polling video job:', e);
                 }
-            }, 2000);
+            }, 2500);
         }
 
         async function askVideoRAG() {
@@ -2464,10 +2552,611 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
+        // =========================================================================
+        //  Step 5: Client-Side Presentation State Layer & Adaptive Learning Loop
+        // =========================================================================
+        const adaptiveState = {
+            sourceId: null,
+            userId: 'student_default',
+            nextAction: null,
+            roadmap: null,
+            currentQuestion: null,
+            selectedOptionIdx: null,
+            activeJobId: null,
+            remediationPollInterval: null,
+            isSubmitting: false,
+            isGeneratingReassessment: false,
+            isRequestingRemediation: false
+        };
+
+        function getActiveUserId() {
+            const sid = (currentSession && currentSession.student_id) ||
+                document.getElementById('studentId')?.value.trim() ||
+                document.getElementById('studentIdExisting')?.value.trim() ||
+                'student_default';
+            return sid || 'student_default';
+        }
+
+        async function syncAdaptiveLearning(sourceId) {
+            if (!sourceId) return;
+            adaptiveState.sourceId = sourceId;
+            adaptiveState.userId = getActiveUserId();
+
+            const panel = document.getElementById('adaptiveLearningPanel');
+            if (panel) panel.style.display = 'block';
+
+            await Promise.all([
+                fetchAdaptiveRoadmap(sourceId),
+                fetchNextLearningAction(sourceId)
+            ]);
+        }
+
+        async function fetchAdaptiveRoadmap(sourceId) {
+            try {
+                const res = await fetch(`/api/learning/${encodeURIComponent(sourceId)}/roadmap?user_id=${encodeURIComponent(adaptiveState.userId)}`);
+                if (!res.ok) {
+                    if (res.status === 404) return;
+                    console.warn(`Roadmap returned HTTP ${res.status}`);
+                    return;
+                }
+                const data = await res.json();
+                adaptiveState.roadmap = data;
+                renderAdaptiveRoadmap(data);
+            } catch (err) {
+                console.error('Error fetching adaptive roadmap:', err);
+            }
+        }
+
+        function renderAdaptiveRoadmap(roadmap) {
+            const container = document.getElementById('roadmapConceptsContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            const statusPill = document.getElementById('roadmapStatusPill');
+            if (statusPill) {
+                const pct = roadmap.overall_progress_percent !== undefined ? roadmap.overall_progress_percent : 0;
+                statusPill.textContent = `${pct.toFixed(0)}% Overall Progress`;
+            }
+
+            const activeConceptId = roadmap.current_next_action ? roadmap.current_next_action.concept_id : null;
+
+            const categoryConfigs = [
+                { key: 'mastered_concepts', label: 'Mastered', badgeClass: 'badge-green', icon: '✓' },
+                { key: 'weak_concepts', label: 'Needs Review', badgeClass: 'badge-amber', icon: '⚠' },
+                { key: 'remediating_concepts', label: 'Remediating', badgeClass: 'badge-amber', icon: '▶' },
+                { key: 'reassessing_concepts', label: 'Reassessing', badgeClass: 'badge-blue', icon: '↻' },
+                { key: 'needs_support_concepts', label: 'Needs Support', badgeClass: 'badge-rose', icon: '!' },
+                { key: 'unassessed_concepts', label: 'Not Yet Assessed', badgeClass: 'badge-blue', icon: '○' }
+            ];
+
+            const totalKnown = (roadmap.mastered_concepts?.length || 0) +
+                               (roadmap.weak_concepts?.length || 0) +
+                               (roadmap.remediating_concepts?.length || 0) +
+                               (roadmap.reassessing_concepts?.length || 0) +
+                               (roadmap.needs_support_concepts?.length || 0) +
+                               (roadmap.unassessed_concepts?.length || 0);
+
+            if (statusPill && totalKnown > 0) {
+                const masteredCount = roadmap.mastered_concepts?.length || 0;
+                const calcPct = Math.round((masteredCount / totalKnown) * 100);
+                statusPill.textContent = `${calcPct}% Overall Progress`;
+            }
+
+            categoryConfigs.forEach(cat => {
+                const rawItems = roadmap[cat.key] || [];
+                rawItems.forEach(item => {
+                    const cid = typeof item === 'string' ? item : (item.concept_id || item.id);
+                    const cname = typeof item === 'string' ? item : (item.concept_name || item.name || cid);
+                    const isActive = cid === activeConceptId;
+                    const card = document.createElement('div');
+                    card.style.cssText = `background:var(--bg-card);border:1px solid ${isActive ? 'var(--peach-green)' : 'var(--border-card)'};border-radius:var(--radius-sm);padding:10px 12px;display:flex;flex-direction:column;gap:6px;position:relative;`;
+
+                    const topRow = document.createElement('div');
+                    topRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;';
+
+                    const nameSpan = document.createElement('strong');
+                    nameSpan.style.cssText = 'font-size:13px;color:var(--text-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;';
+                    nameSpan.textContent = cname;
+                    nameSpan.title = cname;
+
+                    const b = document.createElement('span');
+                    b.className = `badge ${cat.badgeClass}`;
+                    b.style.fontSize = '10px';
+                    b.textContent = `${cat.icon} ${cat.label}`;
+
+                    topRow.appendChild(nameSpan);
+                    topRow.appendChild(b);
+                    card.appendChild(topRow);
+
+                    if (isActive) {
+                        const activeTag = document.createElement('div');
+                        activeTag.style.cssText = 'font-size:11px;font-weight:700;color:var(--peach-green);';
+                        activeTag.textContent = '★ Active Focus Concept';
+                        card.appendChild(activeTag);
+                    }
+
+                    container.appendChild(card);
+                });
+            });
+
+            if (container.children.length === 0) {
+                container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);grid-column:1/-1;">No curriculum concepts detected yet.</div>';
+            }
+        }
+
+        async function fetchNextLearningAction(sourceId) {
+            try {
+                const res = await fetch(`/api/learning/${encodeURIComponent(sourceId)}/next-action?user_id=${encodeURIComponent(adaptiveState.userId)}`);
+                if (!res.ok) {
+                    if (res.status === 404) return;
+                    console.warn(`Next-action returned HTTP ${res.status}`);
+                    return;
+                }
+                const data = await res.json();
+                adaptiveState.nextAction = data;
+                renderAdaptiveAction(data);
+            } catch (err) {
+                console.error('Error fetching next learning action:', err);
+            }
+        }
+
+        function renderAdaptiveAction(action) {
+            const titleEl = document.getElementById('lblActionTitle');
+            const descEl = document.getElementById('lblActionDesc');
+            const badgeEl = document.getElementById('lblActionBadge');
+
+            const btnStartReview = document.getElementById('btnStartReview');
+            const btnTakeAssessmentAgain = document.getElementById('btnTakeAssessmentAgain');
+            const btnNextQuestion = document.getElementById('btnNextQuestion');
+            const btnContinueNextConcept = document.getElementById('btnContinueNextConcept');
+            const questionBox = document.getElementById('adaptiveQuestionBox');
+            const feedbackBox = document.getElementById('adaptiveFeedbackBox');
+
+            // Reset action buttons visibility
+            btnStartReview.style.display = 'none';
+            btnTakeAssessmentAgain.style.display = 'none';
+            btnNextQuestion.style.display = 'none';
+            btnContinueNextConcept.style.display = 'none';
+
+            if (!action || !action.action_type) {
+                titleEl.textContent = 'Learning Path in Progress';
+                descEl.textContent = 'Continue your diagnostic assessment or explore course material.';
+                return;
+            }
+
+            badgeEl.textContent = action.action_type;
+            const conceptLabel = action.concept_name || action.concept_id || 'Concept';
+
+            switch (action.action_type) {
+                case 'REMEDIATE':
+                    badgeEl.className = 'badge badge-amber';
+                    titleEl.textContent = `Concept needs review: ${conceptLabel}`;
+                    descEl.textContent = action.reason || 'Your recent assessment indicates a diagnosed gap. Watch a tailored remediation lesson to build solid ground truth.';
+                    btnStartReview.style.display = 'inline-flex';
+                    btnStartReview.disabled = false;
+                    btnStartReview.innerHTML = '<span>Start Personalized Review</span>';
+                    questionBox.style.display = 'none';
+                    break;
+
+                case 'REASSESS':
+                    badgeEl.className = 'badge badge-peach-green';
+                    titleEl.textContent = `Practice Assessment: ${conceptLabel}`;
+                    descEl.textContent = action.reason || 'You reviewed the remediation lesson. Verify your understanding with grounded practice questions.';
+
+                    if (!adaptiveState.currentQuestion) {
+                        // Not currently answering a question -> prompt learner to take assessment again
+                        btnTakeAssessmentAgain.style.display = 'inline-flex';
+                        btnTakeAssessmentAgain.disabled = false;
+                        btnTakeAssessmentAgain.innerHTML = '<span>Take Assessment Again</span>';
+                        questionBox.style.display = 'none';
+                    } else {
+                        // Current question is visible in the container
+                        questionBox.style.display = 'block';
+                    }
+                    break;
+
+                case 'ASSESS':
+                    badgeEl.className = 'badge badge-blue';
+                    titleEl.textContent = `Ready for Next Focus: ${conceptLabel}`;
+                    descEl.textContent = action.reason || 'Prerequisites are mastered! Proceed to the next curriculum concept.';
+                    btnContinueNextConcept.style.display = 'inline-flex';
+                    btnContinueNextConcept.disabled = false;
+                    btnContinueNextConcept.innerHTML = '<span>Continue to Next Concept</span>';
+                    questionBox.style.display = 'none';
+                    break;
+
+                case 'NEEDS_SUPPORT':
+                    badgeEl.className = 'badge badge-rose';
+                    titleEl.textContent = `Concept needs additional support: ${conceptLabel}`;
+                    descEl.textContent = action.reason || 'Multiple remediation attempts completed. We recommend consulting your instructor or reviewing foundational course material.';
+                    questionBox.style.display = 'none';
+                    if (feedbackBox) {
+                        feedbackBox.style.display = 'block';
+                        feedbackBox.className = 'badge badge-rose';
+                        feedbackBox.style.padding = '12px';
+                        feedbackBox.textContent = 'This concept needs additional support. Instructor assistance recommended before further attempts.';
+                    }
+                    break;
+
+                case 'COMPLETE':
+                    badgeEl.className = 'badge badge-green';
+                    titleEl.textContent = '🎉 Learning Path Complete!';
+                    descEl.textContent = action.reason || 'Outstanding achievement! You have mastered all concepts in this curriculum.';
+                    questionBox.style.display = 'none';
+                    if (feedbackBox) {
+                        feedbackBox.style.display = 'block';
+                        feedbackBox.className = 'badge badge-green';
+                        feedbackBox.style.padding = '14px';
+                        feedbackBox.textContent = '✓ All course concepts fully mastered according to authoritative ground truth evaluation.';
+                    }
+                    break;
+
+                default:
+                    titleEl.textContent = `Current Step: ${action.action_type}`;
+                    descEl.textContent = action.reason || '';
+                    break;
+            }
+        }
+
+        async function triggerAdaptiveRemediation() {
+            if (adaptiveState.isRequestingRemediation) return;
+            const sourceId = adaptiveState.sourceId;
+            if (!sourceId) return;
+
+            const btn = document.getElementById('btnStartReview');
+            btn.disabled = true;
+            btn.innerHTML = '<span>Preparing your explanation...</span>';
+            adaptiveState.isRequestingRemediation = true;
+
+            const statusBox = document.getElementById('videoGenStatusBox');
+            statusBox.style.display = 'block';
+            document.getElementById('lblVideoGenStage').textContent = 'Preparing personalized explanation...';
+            document.getElementById('videoGenProgressBar').style.width = '20%';
+            document.getElementById('lblVideoGenProgress').textContent = '20%';
+            document.getElementById('lblVideoGenDetails').textContent = 'Submitting remediation request to Step 5E orchestrator...';
+
+            try {
+                const res = await fetch(`/api/learning/${encodeURIComponent(sourceId)}/remediation?user_id=${encodeURIComponent(adaptiveState.userId)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        concept_id: adaptiveState.nextAction ? adaptiveState.nextAction.concept_id : null,
+                        force: false
+                    })
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = (errData.detail && errData.detail.message) || errData.detail || 'Remediation request rejected';
+                    throw new Error(msg);
+                }
+
+                const data = await res.json();
+                const jobId = data.remediation_job_id || data.job_id;
+                adaptiveState.activeJobId = jobId;
+
+                pollAdaptiveRemediationJob(sourceId, jobId);
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Start Personalized Review</span>';
+                adaptiveState.isRequestingRemediation = false;
+                document.getElementById('lblVideoGenStage').textContent = 'Remediation request could not start';
+                document.getElementById('lblVideoGenDetails').textContent = err.message;
+                alert(`Remediation error: ${err.message}`);
+            }
+        }
+
+        function pollAdaptiveRemediationJob(sourceId, jobId) {
+            if (adaptiveState.remediationPollInterval) {
+                clearInterval(adaptiveState.remediationPollInterval);
+                adaptiveState.remediationPollInterval = null;
+            }
+
+            adaptiveState.remediationPollInterval = setInterval(async () => {
+                try {
+                    const res = await fetch(`/api/learning/${encodeURIComponent(sourceId)}/remediation/${encodeURIComponent(jobId)}?user_id=${encodeURIComponent(adaptiveState.userId)}`);
+                    if (!res.ok) {
+                        if (res.status === 404) {
+                            clearInterval(adaptiveState.remediationPollInterval);
+                            adaptiveState.remediationPollInterval = null;
+                            adaptiveState.isRequestingRemediation = false;
+                        }
+                        return;
+                    }
+
+                    const data = await res.json();
+                    const st = (data.status || '').toUpperCase();
+
+                    document.getElementById('lblVideoGenStage').textContent = `Generating learning video... [${st}]`;
+                    if (data.progress_percent !== undefined && data.progress_percent !== null) {
+                        const pct = Math.max(20, Math.min(100, data.progress_percent));
+                        document.getElementById('videoGenProgressBar').style.width = `${pct}%`;
+                        document.getElementById('lblVideoGenProgress').textContent = `${pct}%`;
+                    }
+
+                    if (st === 'READY') {
+                        clearInterval(adaptiveState.remediationPollInterval);
+                        adaptiveState.remediationPollInterval = null;
+                        adaptiveState.isRequestingRemediation = false;
+
+                        // Display video player using safe stream URL
+                        const playerBox = document.getElementById('activeVideoPlayerBox');
+                        playerBox.style.display = 'block';
+                        document.getElementById('activeVideoTitle').textContent = `${data.concept_id} - Remedial Lesson`;
+
+                        const videoEl = document.getElementById('remedialVideoPlayer');
+                        const sourceEl = document.getElementById('videoSource');
+                        if (data.stream_url) {
+                            sourceEl.src = `${data.stream_url}?t=${Date.now()}`;
+                            videoEl.load();
+                        }
+
+                        document.getElementById('videoGenStatusBox').style.display = 'none';
+                        playerBox.scrollIntoView({ behavior: 'smooth' });
+
+                        // Sync authoritative next action -> expect REASSESS
+                        await syncAdaptiveLearning(sourceId);
+                    } else if (st === 'FAILED') {
+                        clearInterval(adaptiveState.remediationPollInterval);
+                        adaptiveState.remediationPollInterval = null;
+                        adaptiveState.isRequestingRemediation = false;
+
+                        const btn = document.getElementById('btnStartReview');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<span>Start Personalized Review</span>';
+                        }
+                        document.getElementById('lblVideoGenStage').textContent = 'Video explanation failed';
+                        document.getElementById('lblVideoGenDetails').textContent = data.error_message || 'Video compositor encountered an error.';
+                    }
+                } catch (e) {
+                    console.error('Error polling adaptive remediation job:', e);
+                }
+            }, 2500);
+        }
+
+        async function triggerReassessmentQuestion() {
+            if (adaptiveState.isGeneratingReassessment) return;
+            const sourceId = adaptiveState.sourceId;
+            if (!sourceId) return;
+
+            const btn = document.getElementById('btnTakeAssessmentAgain');
+            btn.disabled = true;
+            btn.innerHTML = '<span>Preparing next practice question...</span>';
+            adaptiveState.isGeneratingReassessment = true;
+
+            const conceptId = adaptiveState.nextAction ? adaptiveState.nextAction.concept_id : null;
+            const url = `/api/learning/${encodeURIComponent(sourceId)}/reassessment/generate?user_id=${encodeURIComponent(adaptiveState.userId)}${conceptId ? `&concept_id=${encodeURIComponent(conceptId)}` : ''}`;
+
+            try {
+                const res = await fetch(url, { method: 'POST' });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = (errData.detail && errData.detail.message) || errData.detail || 'Reassessment question generation failed';
+                    throw new Error(msg);
+                }
+
+                const question = await res.json();
+                renderReassessmentQuestion(question);
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Take Assessment Again</span>';
+                alert(`Could not generate reassessment question: ${err.message}`);
+            } finally {
+                adaptiveState.isGeneratingReassessment = false;
+            }
+        }
+
+        async function triggerNextReassessmentQuestion() {
+            if (adaptiveState.isGeneratingReassessment) return;
+            const sourceId = adaptiveState.sourceId;
+            if (!sourceId) return;
+
+            const btn = document.getElementById('btnNextQuestion');
+            btn.disabled = true;
+            btn.innerHTML = '<span>Preparing next practice question...</span>';
+            adaptiveState.isGeneratingReassessment = true;
+
+            const conceptId = adaptiveState.nextAction ? adaptiveState.nextAction.concept_id : null;
+            const prevQid = adaptiveState.currentQuestion ? adaptiveState.currentQuestion.question_id : null;
+            let url = `/api/learning/${encodeURIComponent(sourceId)}/reassessment/generate?user_id=${encodeURIComponent(adaptiveState.userId)}`;
+            if (conceptId) url += `&concept_id=${encodeURIComponent(conceptId)}`;
+            if (prevQid) url += `&previous_question_id=${encodeURIComponent(prevQid)}`;
+
+            try {
+                const res = await fetch(url, { method: 'POST' });
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = (errData.detail && errData.detail.message) || errData.detail || 'Next practice question generation failed';
+                    throw new Error(msg);
+                }
+
+                const question = await res.json();
+                btn.style.display = 'none';
+                renderReassessmentQuestion(question);
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Next Question</span>';
+                alert(`Could not load next question: ${err.message}`);
+            } finally {
+                adaptiveState.isGeneratingReassessment = false;
+            }
+        }
+
+        function renderReassessmentQuestion(q) {
+            adaptiveState.currentQuestion = q;
+            adaptiveState.selectedOptionIdx = null;
+
+            const box = document.getElementById('adaptiveQuestionBox');
+            box.style.display = 'block';
+
+            document.getElementById('lblReassessConceptBadge').textContent = q.concept_name || q.concept_id || 'PRACTICE';
+            document.getElementById('lblReassessDifficultyBadge').textContent = (q.difficulty || 'intermediate').toUpperCase();
+            document.getElementById('lblReassessStem').textContent = q.stem;
+
+            const container = document.getElementById('reassessOptionsContainer');
+            container.innerHTML = '';
+
+            (q.options || []).forEach((opt, idx) => {
+                const optId = `reassess_opt_${idx}`;
+                const label = document.createElement('label');
+                label.className = 'option-item';
+                label.htmlFor = optId;
+
+                const input = document.createElement('input');
+                input.type = 'radio';
+                input.name = 'reassessment_choice';
+                input.id = optId;
+                input.value = idx;
+                input.addEventListener('change', () => {
+                    adaptiveState.selectedOptionIdx = idx;
+                });
+
+                const span = document.createElement('span');
+                span.style.fontWeight = '600';
+                const strong = document.createElement('strong');
+                strong.textContent = `${String.fromCharCode(65 + idx)}. `;
+                span.appendChild(strong);
+                span.appendChild(document.createTextNode(opt.text || ''));
+
+                label.appendChild(input);
+                label.appendChild(span);
+                container.appendChild(label);
+            });
+
+            const submitBtn = document.getElementById('btnSubmitAnswer');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<span>Submit Answer</span>';
+
+            const feedbackBox = document.getElementById('adaptiveFeedbackBox');
+            if (feedbackBox) feedbackBox.style.display = 'none';
+
+            box.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function submitReassessmentAnswer() {
+            if (adaptiveState.isSubmitting) return;
+            if (adaptiveState.selectedOptionIdx === null || adaptiveState.selectedOptionIdx === undefined) {
+                alert('Please select an answer choice before submitting.');
+                return;
+            }
+            if (!adaptiveState.currentQuestion) return;
+
+            const sourceId = adaptiveState.sourceId;
+            const q = adaptiveState.currentQuestion;
+
+            const submitBtn = document.getElementById('btnSubmitAnswer');
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span>Checking your understanding...</span>';
+            adaptiveState.isSubmitting = true;
+
+            const attemptId = `ATT_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+            const payload = {
+                attempt_id: attemptId,
+                question_id: q.question_id,
+                concept_id: q.concept_id,
+                assessment_type: 'REASSESSMENT',
+                selected_answer: adaptiveState.selectedOptionIdx,
+                response_time_seconds: 15.0
+            };
+
+            try {
+                const res = await fetch(`/api/learning/${encodeURIComponent(sourceId)}/assessment/submit?user_id=${encodeURIComponent(adaptiveState.userId)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const errData = await res.json().catch(() => ({}));
+                    const msg = (errData.detail && errData.detail.message) || errData.detail || 'Assessment submission failed';
+                    throw new Error(msg);
+                }
+
+                const result = await res.json();
+
+                // Show safe feedback in the feedback box
+                const feedbackBox = document.getElementById('adaptiveFeedbackBox');
+                if (feedbackBox) {
+                    feedbackBox.style.display = 'block';
+                    feedbackBox.className = result.is_correct ? 'badge badge-green' : 'badge badge-rose';
+                    feedbackBox.style.padding = '12px 16px';
+                    feedbackBox.textContent = result.is_correct
+                        ? `✓ Correct! ${result.explanation || 'Great job applying the concept.'}`
+                        : `✗ Not quite. ${result.explanation || 'Review the explanation to reinforce your understanding.'}`;
+                }
+
+                // Hide question box until next question is loaded
+                document.getElementById('adaptiveQuestionBox').style.display = 'none';
+
+                // Re-sync authoritative next action and roadmap
+                await syncAdaptiveLearning(sourceId);
+
+                // Check authoritative next action to configure buttons
+                const nextAct = adaptiveState.nextAction;
+                if (nextAct && nextAct.action_type === 'REASSESS') {
+                    const nextQBtn = document.getElementById('btnNextQuestion');
+                    nextQBtn.style.display = 'inline-flex';
+                    nextQBtn.disabled = false;
+                    nextQBtn.innerHTML = '<span>Next Question</span>';
+                }
+            } catch (err) {
+                alert(`Submission error: ${err.message}`);
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<span>Submit Answer</span>';
+            } finally {
+                adaptiveState.isSubmitting = false;
+            }
+        }
+
+        async function triggerContinueNextConcept() {
+            const nextAct = adaptiveState.nextAction;
+            if (!nextAct || !nextAct.concept_id) return;
+            const sourceId = adaptiveState.sourceId;
+
+            // Generate diagnostic quiz for the next focus concept or prompt learner
+            const btn = document.getElementById('btnContinueNextConcept');
+            btn.disabled = true;
+            btn.innerHTML = '<span>Loading Next Assessment...</span>';
+
+            try {
+                const res = await fetch('/assessment/start', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        source_id: sourceId,
+                        student_id: adaptiveState.userId,
+                        max_questions: 3
+                    })
+                });
+
+                if (!res.ok) throw new Error('Could not start assessment for next concept');
+                const data = await res.json();
+                btn.disabled = false;
+                btn.innerHTML = '<span>Continue to Next Concept</span>';
+                startQuiz(data);
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = '<span>Continue to Next Concept</span>';
+                alert(`Next assessment error: ${err.message}`);
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
             loadSources();
             initCounters();
             loadModelOptions();
+
+            const srcSelect = document.getElementById('sourceSelect');
+            if (srcSelect) {
+                srcSelect.addEventListener('change', () => {
+                    const selectedSource = srcSelect.value;
+                    if (selectedSource) {
+                        syncAdaptiveLearning(selectedSource);
+                    }
+                });
+            }
         });
     
         function openModal(id) {

@@ -24,6 +24,7 @@ from .api.instructor import router as instructor_router
 from .api.video import router as video_router
 from .api.qa import router as qa_router
 from .api.models import router as models_router
+from .api.learning import router as learning_router
 
 # ---------------------------------------------------------------------------
 # Allowed origins - override via VISUALAI_CORS_ORIGINS env var (comma-sep)
@@ -64,6 +65,7 @@ app.include_router(instructor_router)
 app.include_router(video_router)
 app.include_router(qa_router)
 app.include_router(models_router)
+app.include_router(learning_router)
 
 
 @app.get("/health")

@@ -47,6 +47,26 @@ from .remediation_repository import (
 )
 from .remediation_orchestrator import RemediationOrchestrator
 
+from .api_schemas import (
+    AssessmentSubmissionRequestDTO,
+    AssessmentSubmissionResponseDTO,
+    ConceptMasterySummary,
+    LearningStateResponse,
+    NextActionResponse,
+    RemediationStartRequestDTO,
+    RemediationStartResponseDTO,
+    RemediationStatusResponseDTO,
+    RoadmapResponse,
+    SafeReassessmentQuestionResponse,
+)
+from .application_service import (
+    AdaptiveLearningService,
+    ConceptNotEligibleForRemediationError,
+    RemediationJobNotFoundError,
+    SourceAccessDeniedError,
+    SourceNotFoundError,
+)
+
 __all__ = [
     "DomainInvariantViolation",
     "InvalidStateTransitionError",
@@ -82,4 +102,20 @@ __all__ = [
     "RemediationJobRepository",
     "InMemoryRemediationJobRepository",
     "RemediationOrchestrator",
+    "AssessmentSubmissionRequestDTO",
+    "AssessmentSubmissionResponseDTO",
+    "ConceptMasterySummary",
+    "LearningStateResponse",
+    "NextActionResponse",
+    "RemediationStartRequestDTO",
+    "RemediationStartResponseDTO",
+    "RemediationStatusResponseDTO",
+    "RoadmapResponse",
+    "SafeReassessmentQuestionResponse",
+    "AdaptiveLearningService",
+    "SourceNotFoundError",
+    "SourceAccessDeniedError",
+    "ConceptNotEligibleForRemediationError",
+    "RemediationJobNotFoundError",
 ]
+
