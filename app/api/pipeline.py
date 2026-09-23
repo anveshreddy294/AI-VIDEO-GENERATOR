@@ -8,6 +8,7 @@ Routes:
 """
 
 import asyncio
+import hashlib
 import logging
 import shutil
 import time
@@ -68,6 +69,7 @@ async def _execute_upload_and_assess(
     original_filename: str,
     student_id: str,
     max_questions: int,
+    dedup_key: str | None = None,
 ) -> None:
     """Execute complete Step 1 & Step 2 pipeline emitting deterministic operational events."""
     start_time = time.time()
@@ -580,6 +582,8 @@ async def _execute_upload_and_assess(
                 if current and current.status != "READY":
                     update_source_status(current.source_id, "FAILED", error_message="Ingestion did not complete; see pipeline diagnostics")
             temp_path.unlink(missing_ok=True)
+            if dedup_key:
+                job_manager.release_dedup_key(dedup_key)
         finally:
             if acquired_sem:
                 sem.release()
@@ -765,6 +769,7 @@ async def create_upload_job(
 
     from .upload import _validate_mime, _MAX_UPLOAD_BYTES
     _validate_mime(filename, file.content_type)
+    hasher = hashlib.sha256()
     try:
         size = 0
         with temp_path.open("wb") as out:
@@ -772,12 +777,29 @@ async def create_upload_job(
                 size += len(chunk)
                 if size > _MAX_UPLOAD_BYTES:
                     raise HTTPException(status_code=413, detail="Upload exceeds size limit")
+                hasher.update(chunk)
                 out.write(chunk)
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise
 
+    file_sha256 = hasher.hexdigest()
+    dedup_key = f"{student_id}:{file_sha256}:{max_questions}"
+
+    # Dedup check: if an identical upload is already active/pending, return that job
+    existing_job = job_manager.find_active_job_by_key(dedup_key)
+    if existing_job and not existing_job.is_finished:
+        temp_path.unlink(missing_ok=True)
+        logger.info("[pipeline] Reusing active job %s for dedup_key=%s", existing_job.job_id, dedup_key)
+        return JobCreationResponse(
+            job_id=existing_job.job_id,
+            status=existing_job.status,
+            message="Reusing active upload and assessment job.",
+        )
+
     job = job_manager.create_job(job_type="upload_and_assess")
+    job_manager.register_dedup_key(dedup_key, job.job_id)
+
     background_tasks.add_task(
         _execute_upload_and_assess,
         job_id=job.job_id,
@@ -785,6 +807,7 @@ async def create_upload_job(
         original_filename=filename,
         student_id=student_id,
         max_questions=max_questions,
+        dedup_key=dedup_key,
     )
 
     return JobCreationResponse(

@@ -27,12 +27,14 @@ class ModelManager:
     def __init__(self) -> None:
         self.active_provider: str = getattr(settings, "llm_provider", "ollama").lower().strip()
         self.active_model: str = getattr(settings, "ollama_model", "llama3.2:3b")
-        # Ordered list of fallback models to try if the active model fails
         self.fallback_chain: list[dict[str, str]] = [
             {"model": self.active_model, "provider": self.active_provider},
         ]
-        if self.active_model != "mock":
-            self.fallback_chain.append({"model": "mock", "provider": "mock"})
+        # NON-NEGOTIABLE: Mock model must NEVER be part of normal runtime fallback chain.
+        # Permitted only under explicit test configuration (VISUALAI_ALLOW_MOCK_FALLBACK=true).
+        if os.getenv("VISUALAI_ALLOW_MOCK_FALLBACK", "").lower() in ("1", "true", "yes"):
+            if self.active_model != "mock":
+                self.fallback_chain.append({"model": "mock", "provider": "mock"})
         self.enable_fallback: bool = True
 
     def get_base_url(self) -> str:
@@ -136,11 +138,11 @@ class ModelManager:
                 if fb_clean != clean_name:
                     new_chain.append({"model": fb_clean, "provider": fb_provider})
         else:
-            # Default fallback includes mock as reliable safety net
             if clean_name != "llama3.2:3b":
                 new_chain.append({"model": "llama3.2:3b", "provider": "ollama"})
-            if clean_name != "mock":
-                new_chain.append({"model": "mock", "provider": "mock"})
+            if os.getenv("VISUALAI_ALLOW_MOCK_FALLBACK", "").lower() in ("1", "true", "yes"):
+                if clean_name != "mock":
+                    new_chain.append({"model": "mock", "provider": "mock"})
 
         self.fallback_chain = new_chain
         return self.get_status()

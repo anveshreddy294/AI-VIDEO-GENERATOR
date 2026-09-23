@@ -121,12 +121,32 @@ class JobManager:
         self._subscribers: dict[str, set[asyncio.Queue]] = {}
         self._semaphore: asyncio.Semaphore | None = None
         self._lock = asyncio.Lock()
+        self._active_dedup_jobs: dict[str, str] = {}
+
+    def find_active_job_by_key(self, dedup_key: str) -> PipelineJob | None:
+        """Find active (unfinished) pipeline job for a deterministic dedup key."""
+        jid = self._active_dedup_jobs.get(dedup_key)
+        if not jid:
+            return None
+        job = self._jobs.get(jid)
+        if job and not job.is_finished and job.status in ("pending", "running"):
+            return job
+        self._active_dedup_jobs.pop(dedup_key, None)
+        return None
+
+    def register_dedup_key(self, dedup_key: str, job_id: str) -> None:
+        """Associate an active dedup key with a job_id."""
+        self._active_dedup_jobs[dedup_key] = job_id
+
+    def release_dedup_key(self, dedup_key: str) -> None:
+        """Release dedup key when job finishes or is canceled."""
+        self._active_dedup_jobs.pop(dedup_key, None)
 
     def get_semaphore(self) -> asyncio.Semaphore:
         """Return per-process concurrency control semaphore for background tasks."""
         if self._semaphore is None:
             from ..core.config import settings
-            limit = max(1, int(getattr(settings, "max_background_jobs", 2)))
+            limit = max(1, int(getattr(settings, "ollama_max_concurrency", getattr(settings, "max_background_jobs", 1))))
             self._semaphore = asyncio.Semaphore(limit)
         return self._semaphore
 

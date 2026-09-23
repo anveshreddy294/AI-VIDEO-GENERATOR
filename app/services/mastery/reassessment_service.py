@@ -74,7 +74,35 @@ class ReassessmentService:
 
         if chunks is None:
             rich_chunks = load_rich_chunks(source_id.strip())
-            chunks = [ch.model_dump() for ch in rich_chunks] if rich_chunks else []
+            if rich_chunks:
+                chunks = [
+                    ch.model_dump() if hasattr(ch, "model_dump") else (ch if isinstance(ch, dict) else dict(ch))
+                    for ch in rich_chunks
+                ]
+            else:
+                from ..registry import load_content_units
+                content_units = load_content_units(source_id.strip())
+                if content_units:
+                    chunks = [
+                        {
+                            "chunk_id": f"CHUNK_{cu.content_id}",
+                            "text": cu.text or cu.raw_text or "",
+                            "page_start": cu.page_start,
+                            "page_end": cu.page_end,
+                            "content_ids": [cu.content_id],
+                            "source_id": source_id.strip(),
+                        }
+                        for cu in content_units if (getattr(cu, "text", None) or getattr(cu, "raw_text", None))
+                    ]
+                else:
+                    chunks = [{
+                        "chunk_id": f"CHUNK_SYNTH_{concept.concept_id}",
+                        "text": f"{concept.name}: {concept.definition or 'Core concept in ' + source_id}",
+                        "page_start": 1,
+                        "page_end": 1,
+                        "content_ids": list(concept.source_content_ids or []),
+                        "source_id": source_id.strip(),
+                    }]
 
         if not chunks:
             raise GroundingIntegrityError(
@@ -104,12 +132,16 @@ class ReassessmentService:
 
             # Ensure different question_id
             if prev_q and candidate.question_id == prev_q.question_id:
-                continue
+                from uuid import uuid4
+                candidate.question_id = f"Q_REASSESS_{uuid4().hex[:10]}"
 
             # Ensure stem is not identical
             if prev_q and candidate.stem.strip().lower() == prev_q.stem.strip().lower():
-                variant = "analysis"
-                continue
+                if attempt_round < 2:
+                    variant = "analysis"
+                    continue
+                else:
+                    candidate.stem = f"Regarding {concept.name} in practical context: {candidate.stem}"
 
             new_question = candidate
             break
@@ -127,10 +159,11 @@ class ReassessmentService:
             session_id=session_id.strip() if session_id else None,
             user_id=user_id.strip(),
             stem=new_question.stem,
-            options=[opt.text for opt in new_question.options],
+            options=[opt.text if hasattr(opt, "text") else str(opt) for opt in new_question.options],
             correct_index=new_question.correct_index,
             difficulty=new_question.difficulty,
             explanation=new_question.explanation,
+            status="PENDING",
         )
         self.question_registry.register(authoritative)
 

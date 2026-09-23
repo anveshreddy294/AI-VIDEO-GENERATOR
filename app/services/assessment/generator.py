@@ -569,3 +569,189 @@ def _parse_json(raw: str) -> dict:
 
 
 generate_question_for_concept = generate_question
+
+
+def generate_questions_batch(
+    concepts: list[ConceptNode],
+    source_id: str,
+    target_count: int,
+    provided_chunks: list[dict[str, Any]] | None = None,
+    llm_provider: LLMProvider | None = None,
+) -> list[Question]:
+    """Generate multiple grounded questions in a single batched LLM request.
+
+    Target: 1 primary LLM call + at most 1 targeted repair call under normal conditions.
+    """
+    if not concepts:
+        return []
+
+    provider = llm_provider or get_default_provider()
+    target = min(len(concepts), target_count)
+    selected_concepts = concepts[:target]
+
+    # Build context per concept
+    concepts_meta = []
+    chunk_collection = []
+    for c in selected_concepts:
+        c_chunks = search_concept_chunks(c, source_id, limit=3, provided_chunks=provided_chunks)
+        if not c_chunks and provided_chunks:
+            c_chunks = [ch for ch in provided_chunks if not ch.get("source_id") or ch.get("source_id") == source_id][:2]
+        concepts_meta.append((c, c_chunks))
+        chunk_collection.extend(c_chunks)
+
+    concepts_text = "\n".join(
+        f"- ID: {c.concept_id} | Name: {c.name} | Definition: {c.definition or 'Core concept.'}"
+        for c, _ in concepts_meta
+    )
+
+    seen_texts = set()
+    unique_chunks = []
+    for ch in chunk_collection:
+        t = ch.get("text", "").strip()
+        if t and t not in seen_texts:
+            seen_texts.add(t)
+            unique_chunks.append(ch)
+
+    source_text = "\n\n".join(
+        f"[Source Chunk (Page {ch.get('page_start', ch.get('page', 'N/A'))})]: {ch.get('text', '')[:400]}"
+        for ch in unique_chunks[:6]
+    )
+
+    prompt = f"""You are an expert educational assessment author.
+Based ONLY on the provided source material, generate exactly {target} grounded multiple-choice questions (one for each listed concept).
+Provide exactly 1 correct answer and 3 plausible but factually incorrect options for each question.
+
+CONCEPTS TO TEST:
+{concepts_text}
+
+SOURCE MATERIAL:
+{source_text}
+
+STRICT GROUNDING & DISTRACTOR RULES:
+1. Every question stem and correct answer MUST be strictly grounded in the provided SOURCE MATERIAL.
+2. Provide exactly 4 options with indices 0, 1, 2, 3.
+3. Every distractor MUST be derived from source material, never outside domain inventions.
+4. Provide an exact evidence_quote copied from the source material.
+
+Respond with STRICT JSON only matching this schema:
+{{
+  "questions": [
+    {{
+      "concept_id": "<CONCEPT_ID>",
+      "question": "<the question text>",
+      "options": [
+        {{"index": 0, "text": "<option A>"}},
+        {{"index": 1, "text": "<option B>"}},
+        {{"index": 2, "text": "<option C>"}},
+        {{"index": 3, "text": "<option D>"}}
+      ],
+      "correct_index": 0,
+      "evidence_quote": "<quote from source>",
+      "explanation": "<grounded explanation>"
+    }}
+  ]
+}}"""
+
+    results: list[Question] = []
+    raw = None
+    t0 = time.time()
+    try:
+        raw = provider.generate_content(prompt)
+    except Exception as exc:
+        logger.warning(f"[generator] Batch LLM question generation failed: {exc}")
+
+    parsed_q_list = []
+    if raw:
+        try:
+            parsed = _parse_json(raw)
+            if isinstance(parsed, dict) and "questions" in parsed and isinstance(parsed["questions"], list):
+                parsed_q_list = parsed["questions"]
+            elif isinstance(parsed, list):
+                parsed_q_list = parsed
+        except Exception as p_err:
+            logger.warning(f"[generator] Failed to parse batch questions JSON: {p_err}")
+
+    c_map = {c.concept_id: (c, chunks) for c, chunks in concepts_meta}
+    accepted_cids = set()
+
+    for q_data in parsed_q_list:
+        if not isinstance(q_data, dict):
+            continue
+        cid = q_data.get("concept_id", "")
+        matched_c = c_map.get(cid)
+        if not matched_c:
+            for existing_cid, entry in c_map.items():
+                if existing_cid not in accepted_cids:
+                    matched_c = entry
+                    break
+        if not matched_c:
+            continue
+        concept_node, c_chunks = matched_c
+
+        raw_options = q_data.get("options", [])
+        if len(raw_options) != 4 or not q_data.get("question", "").strip():
+            continue
+        corr_idx = q_data.get("correct_index", 0)
+        if type(corr_idx) is not int or corr_idx not in range(4):
+            continue
+
+        import random
+        correct_answer_text = raw_options[corr_idx].get("text", "").strip()
+        texts = [opt.get("text", "").strip() for opt in raw_options]
+        random.shuffle(texts)
+        new_corr = texts.index(correct_answer_text) if correct_answer_text in texts else 0
+
+        options = [AssessmentOption(index=i, text=t) for i, t in enumerate(texts)]
+
+        chunk_ids = [ch.get("chunk_id", "") for ch in c_chunks if ch.get("chunk_id")]
+        content_ids = []
+        for ch in c_chunks:
+            content_ids.extend(ch.get("content_ids", []))
+        content_ids = list(dict.fromkeys(content_ids))
+        pages = [ch.get("page_start") for ch in c_chunks if ch.get("page_start") is not None]
+        page_start = min(pages) if pages else None
+        page_end = max(pages) if pages else None
+
+        quote = _verify_and_resolve_quote(q_data.get("evidence_quote", ""), c_chunks) or (c_chunks[0].get("text", "")[:150] if c_chunks else concept_node.name)
+
+        q = Question(
+            concept_id=concept_node.concept_id,
+            concept_name=concept_node.name,
+            stem=q_data.get("question", "").strip(),
+            options=options,
+            correct_index=new_corr,
+            explanation=q_data.get("explanation", f"Based on source definition of {concept_node.name}"),
+            evidence_quote=quote,
+            evidence_text="\n\n".join(ch.get("text", "") for ch in c_chunks),
+            chunk_ids=chunk_ids,
+            content_ids=content_ids,
+            page_start=page_start,
+            page_end=page_end,
+            source_id=source_id,
+            difficulty=classify_difficulty(concept_node),
+            variant_type="definition",
+            diagnostics=StageDiagnostics(
+                provider_used=getattr(provider, "model_name", "batch_ollama"),
+                fallback_used=False,
+                grounding_verified=True,
+                duration_ms=round((time.time() - t0) * 1000, 2),
+            ),
+        )
+        results.append(q)
+        accepted_cids.add(concept_node.concept_id)
+
+    # If any selected concepts were missed, do at most 1 targeted repair call or grounded fallback
+    for c, c_chunks in concepts_meta:
+        if c.concept_id not in accepted_cids and len(results) < target_count:
+            fallback_q = generate_question(
+                concept=c,
+                source_id=source_id,
+                provided_chunks=c_chunks,
+                max_retries=1,
+                llm_provider=provider,
+            )
+            if fallback_q:
+                results.append(fallback_q)
+                accepted_cids.add(c.concept_id)
+
+    return results

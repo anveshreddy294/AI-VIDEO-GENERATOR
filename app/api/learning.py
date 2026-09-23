@@ -120,7 +120,7 @@ def _handle_domain_exception(exc: Exception) -> None:
         logger.error("[learning_api] Unexpected exception: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error_code": "INTERNAL_SERVER_ERROR", "message": "An internal error occurred during adaptive learning orchestration."},
+            detail={"error_code": "INTERNAL_SERVER_ERROR", "message": f"{type(exc).__name__}: {exc}"},
         )
 
 
@@ -239,15 +239,19 @@ def generate_reassessment(
     concept_id: str | None = Query(default=None, description="Target concept ID (defaults to current NextLearningAction concept)."),
     session_id: str | None = Query(default=None),
     previous_question_id: str | None = Query(default=None),
+    payload: Annotated[dict[str, Any] | None, Body()] = None,
     service: AdaptiveLearningService = Depends(get_adaptive_learning_service),
 ) -> SafeReassessmentQuestionResponse:
+    target_cid = (payload.get("concept_id") if payload and isinstance(payload, dict) else None) or concept_id
+    target_sid = (payload.get("session_id") if payload and isinstance(payload, dict) else None) or session_id
+    target_prev = (payload.get("previous_question_id") if payload and isinstance(payload, dict) else None) or previous_question_id
     try:
         return service.generate_reassessment(
             user_id=user_id,
             source_id=source_id,
-            concept_id=concept_id,
-            session_id=session_id,
-            previous_question_id=previous_question_id,
+            concept_id=target_cid,
+            session_id=target_sid,
+            previous_question_id=target_prev,
         )
     except Exception as exc:
         _handle_domain_exception(exc)

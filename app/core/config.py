@@ -103,15 +103,22 @@ class Settings:
         self.reasoning_model: str = self.ollama_model
         self.qdrant_collection: str = self.collection_name
 
-        # --- Concurrency & Admission Control (BUG-002) ---
-        self.max_background_jobs: int = int(os.getenv("MAX_BACKGROUND_JOBS", "2"))
+        # --- Concurrency & Admission Control ---
+        self.ollama_max_concurrency: int = int(os.getenv("OLLAMA_MAX_CONCURRENCY", "1"))
+        self.video_render_max_concurrency: int = int(os.getenv("VIDEO_RENDER_MAX_CONCURRENCY", "1"))
+        self.ollama_keep_alive: str = os.getenv("OLLAMA_KEEP_ALIVE", "15m")
+        self.max_background_jobs: int = int(os.getenv("MAX_BACKGROUND_JOBS", str(self.ollama_max_concurrency)))
         self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
 
         # --- Multimodal Vision Extraction (OpenRouter) ---
         self.openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
         self.vision_provider: str = os.getenv("VISION_PROVIDER", "openrouter").strip().lower()
-        self.vision_model: str = os.getenv("VISION_MODEL", "google/gemma-4-31b-it:free").strip()
+        self.vision_model: str = (
+            os.getenv("OPENROUTER_VISION_MODEL")
+            or os.getenv("VISION_MODEL")
+            or "openrouter/free"
+        ).strip()
         self.vision_fallback_model: str = os.getenv("VISION_FALLBACK_MODEL", "inclusionai/ling-3.0-flash-vl:free").strip()
         self.vision_timeout_seconds: float = float(os.getenv("VISION_TIMEOUT_SECONDS", "60"))
         self.vision_max_retries: int = int(os.getenv("VISION_MAX_RETRIES", "1"))

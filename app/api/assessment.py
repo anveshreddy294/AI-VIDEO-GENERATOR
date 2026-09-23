@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 from ..core.config import settings
 from ..services.storage import validate_id, serialized, commit_assessment, recover_assessment_commits
 from ..services.assessment.engine import grade_submission
-from ..services.assessment.generator import generate_question
+from ..services.assessment.generator import generate_question, generate_questions_batch
 from ..services.assessment.planner import _apply_prerequisite_pairing, classify_difficulty, plan_assessment
 from ..services.assessment.profile import get_or_create_profile, save_profile
 from ..services.assessment.schemas import (
@@ -339,61 +339,35 @@ def start_assessment(
         logger.info(f"[assessment] Accepted question {len(questions)}/{target_questions}: {concept.name} (variant={variant})")
         return True
 
-    # Pass 1: Primary candidates (Parallel generation with ThreadPoolExecutor)
-    from concurrent.futures import ThreadPoolExecutor
-
-    def _generate_candidate(c_node, v_type):
-        try:
-            q_res = _call_generate_question(
-                concept=c_node,
-                source_id=req_source_id,
-                provided_chunks=provided_chunks,
-                max_retries=MAX_RETRIES_PER_QUESTION,
-                variant_type=v_type,
-            )
-            return (c_node, v_type, q_res)
-        except Exception as exc:
-            logger.warning("[assessment] Parallel candidate generation failed for %s: %s", c_node.name, exc)
-            return (c_node, v_type, None)
-
+    # Pass 1: Primary candidates (Batched structured generation — 1 primary LLM call)
     candidates_to_run = primary_candidates[:target_questions]
-    if candidates_to_run:
-        with ThreadPoolExecutor(max_workers=min(len(candidates_to_run), 2)) as pool:
-            futures = [pool.submit(_generate_candidate, c, "definition") for c in candidates_to_run]
-            for f in futures:
+    if candidates_to_run and len(questions) < target_questions:
+        try:
+            batch_qs = generate_questions_batch(
+                concepts=candidates_to_run,
+                source_id=req_source_id,
+                target_count=target_questions,
+                provided_chunks=provided_chunks,
+            )
+            for q in batch_qs:
                 if len(questions) >= target_questions:
                     break
-                c, variant, q = f.result()
-                if q is None:
-                    if c.concept_id not in failed_concepts:
-                        failed_concepts.append(c.concept_id)
-                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason=generation returned None")
-                    continue
-
                 is_valid, err = validate_question(q, allowed_source_id=req_source_id)
                 if not is_valid:
-                    if c.concept_id not in failed_concepts:
-                        failed_concepts.append(c.concept_id)
-                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={err}")
+                    logger.warning(f"[assessment] Batch candidate rejected: {q.concept_name} reason={err}")
                     continue
-
                 grounding_ok, g_err = validate_grounding(q, q.evidence_text or context_text)
                 if not grounding_ok:
-                    if c.concept_id not in failed_concepts:
-                        failed_concepts.append(c.concept_id)
-                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={g_err}")
+                    logger.warning(f"[assessment] Batch candidate rejected: {q.concept_name} reason={g_err}")
                     continue
-
                 if is_duplicate(q, questions):
-                    if c.concept_id not in failed_concepts:
-                        failed_concepts.append(c.concept_id)
-                    logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason=duplicate question detected")
                     continue
-
-                concept_question_counts[c.concept_id] = concept_question_counts.get(c.concept_id, 0) + 1
-                concept_variants_used.setdefault(c.concept_id, set()).add(variant)
+                concept_question_counts[q.concept_id] = concept_question_counts.get(q.concept_id, 0) + 1
+                concept_variants_used.setdefault(q.concept_id, set()).add(q.variant_type or "definition")
                 questions.append(q)
-                logger.info(f"[assessment] Accepted parallel question {len(questions)}/{target_questions}: {c.name}")
+                logger.info(f"[assessment] Accepted batched question {len(questions)}/{target_questions}: {q.concept_name}")
+        except Exception as batch_exc:
+            logger.warning("[assessment] Batched candidate generation failed: %s; falling back to sequential reserve", batch_exc)
 
     # Pass 2: Reserve candidates if target not reached
     if len(questions) < target_questions:
@@ -504,6 +478,29 @@ def start_assessment(
     session.concept_queue = [q.concept_id for q in questions]
     session.status = "READY"
     save_session(session)
+
+    # Register questions into Step 5 Authoritative QuestionRegistry
+    try:
+        from .learning import get_adaptive_learning_service
+        from ..services.mastery.question_registry import AuthoritativeQuestion
+        adaptive_service = get_adaptive_learning_service()
+        for q in questions:
+            authoritative_q = AuthoritativeQuestion(
+                question_id=q.question_id,
+                concept_id=q.concept_id,
+                source_id=req_source_id,
+                session_id=session.session_id,
+                user_id=req_student_id,
+                stem=q.stem,
+                options=[opt.text for opt in q.options],
+                correct_index=q.correct_index,
+                difficulty=q.difficulty or "intermediate",
+                explanation=q.explanation or "",
+                status="PENDING",
+            )
+            adaptive_service.question_registry.register(authoritative_q)
+    except Exception as reg_exc:
+        logger.warning(f"[assessment] Failed to register question into adaptive QuestionRegistry: {reg_exc}")
 
     safe_questions: list[SafeQuestion] = []
     for q in questions:
@@ -696,6 +693,28 @@ def submit_assessment(submission: StudentSubmission) -> AssessmentSubmitResponse
     session.submission_response = response.model_dump()
     session.submitted_answers = {a.question_id: a.selected_index for a in submission.answers}
     commit_assessment(session, profile, video_matrix)
+
+    # Sync diagnostic submissions into Step 5 Authoritative AdaptiveLearningService
+    try:
+        from .learning import get_adaptive_learning_service
+        from ..services.mastery.attempt_service import AssessmentSubmissionRequest
+        from ..services.mastery.attempt_models import AssessmentType
+        adaptive_service = get_adaptive_learning_service()
+        for r in result.results:
+            req = AssessmentSubmissionRequest(
+                attempt_id=f"ATT_DIAG_{session.session_id}_{r.question_id}",
+                user_id=session.student_id,
+                source_id=session.source_id,
+                session_id=session.session_id,
+                concept_id=r.concept_id,
+                question_id=r.question_id,
+                selected_answer=r.selected_index,
+                assessment_type=AssessmentType.DIAGNOSTIC,
+            )
+            adaptive_service.attempt_service.submit_attempt(req)
+    except Exception as sync_exc:
+        logger.warning(f"[assessment] Could not sync diagnostic attempt into AdaptiveLearningService: {sync_exc}")
+
     return response
 
 

@@ -70,6 +70,7 @@ class OllamaProvider:
             "prompt": prompt,
             "stream": False,
             "think": False,
+            "keep_alive": getattr(settings, "ollama_keep_alive", "15m"),
         }
         if is_json:
             req_data["format"] = "json"

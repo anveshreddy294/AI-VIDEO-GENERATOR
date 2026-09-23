@@ -95,7 +95,8 @@ class RemediationOrchestrator:
         user_id: str | None = None,
         force: bool = False,
         raise_on_failure: bool = False,
-        wait_for_completion: bool = False,
+        wait_for_completion: bool = True,
+        run_in_background: bool = False,
         **engine_kwargs: Any,
     ) -> RemediationJob:
         """Execute or retrieve a grounded remediation video job for the learner."""
@@ -249,81 +250,87 @@ class RemediationOrchestrator:
             completed = self.remediation_repo.get(active_job_to_await.remediation_job_id)
             return completed or active_job_to_await
 
-        # 7. Execute Video Engine pipeline outside the serialization lock
-        try:
-            artifact = await self.video_engine_fn(
-                target=target,
-                job_id=job_id,
-                **engine_kwargs,
-            )
-
-            # Validate engine returned successful artifact
-            if artifact is None or artifact.status == VideoJobStatus.FAILED or not artifact.video_path:
-                error_msg = getattr(artifact, "error", None) or "Video engine returned failed status."
-                raise RuntimeError(f"Video engine error: {error_msg}")
-
-            # 8. Strictly validate final composited video artifact on disk
-            video_file = Path(artifact.video_path)
-            validation = validate_video_artifact(video_file, expect_audio=True)
-
-            # 9. Success: Acquire lock to finalize job READY and advance mastery to REASSESSING
-            async with lock:
-                job.status = RemediationJobStatus.READY
-                job.video_job_id = artifact.job_id
-                job.video_path = str(video_file)
-                job.duration_seconds = float(
-                    validation.get("duration", artifact.duration_seconds or 0)
+        async def _run_pipeline() -> RemediationJob:
+            try:
+                artifact = await self.video_engine_fn(
+                    target=target,
+                    job_id=job_id,
+                    **engine_kwargs,
                 )
-                job.completed_at = datetime.now(timezone.utc)
-                self.remediation_repo.save(job)
 
-                self.state_machine.confirm_remediation(record, session_id=session_id)
-                self.mastery_repo.save(record)
+                # Validate engine returned successful artifact
+                if artifact is None or artifact.status == VideoJobStatus.FAILED or not artifact.video_path:
+                    error_msg = getattr(artifact, "error", None) or "Video engine returned failed status."
+                    raise RuntimeError(f"Video engine error: {error_msg}")
 
-            logger.info(
-                "[remediation] Successfully generated video %s for concept %s (duration=%.1fs); advanced to REASSESSING",
-                job.video_path,
-                concept_id,
-                job.duration_seconds or 0,
-            )
-            return job
+                # 8. Strictly validate final composited video artifact on disk
+                video_file = Path(artifact.video_path)
+                validation = validate_video_artifact(video_file, expect_audio=True)
 
-        except Exception as exc:
-            # 10. Failure Handling: Record failure and protect educational attempt budget
-            logger.error(
-                "[remediation] Video generation failed for job %s: %s",
-                job_id,
-                exc,
-                exc_info=True,
-            )
-            async with lock:
-                job.status = RemediationJobStatus.FAILED
-                job.failed_at = datetime.now(timezone.utc)
-                job.failure_code = "INFRASTRUCTURE_FAILURE"
-                job.failure_message = str(exc)
-                job.is_infrastructure_failure = True
-                self.remediation_repo.save(job)
-
-                # Roll back educational attempt counter and return state to WEAK
-                if did_increment_attempt:
-                    record.remediation_attempt_count = max(0, record.remediation_attempt_count - 1)
-                    record.mastery_state = MasteryState.WEAK
-                    record.touch()
-                    self.mastery_repo.save(record)
-                    logger.info(
-                        "[remediation] Rolled back attempt counter for concept %s (attempts=%d, state=WEAK) due to infrastructure failure",
-                        concept_id,
-                        record.remediation_attempt_count,
+                # 9. Success: Acquire lock to finalize job READY and advance mastery to REASSESSING
+                async with lock:
+                    job.status = RemediationJobStatus.READY
+                    job.video_job_id = artifact.job_id
+                    job.video_path = str(video_file)
+                    job.duration_seconds = float(
+                        validation.get("duration", artifact.duration_seconds or 0)
                     )
+                    job.completed_at = datetime.now(timezone.utc)
+                    self.remediation_repo.save(job)
 
-            if raise_on_failure:
-                raise
+                    self.state_machine.confirm_remediation(record, session_id=session_id)
+                    self.mastery_repo.save(record)
+
+                logger.info(
+                    "[remediation] Successfully generated video %s for concept %s (duration=%.1fs); advanced to REASSESSING",
+                    job.video_path,
+                    concept_id,
+                    job.duration_seconds or 0,
+                )
+                return job
+
+            except Exception as exc:
+                # 10. Failure Handling: Record failure and protect educational attempt budget
+                logger.error(
+                    "[remediation] Video generation failed for job %s: %s",
+                    job_id,
+                    exc,
+                    exc_info=True,
+                )
+                async with lock:
+                    job.status = RemediationJobStatus.FAILED
+                    job.failed_at = datetime.now(timezone.utc)
+                    job.failure_code = "INFRASTRUCTURE_FAILURE"
+                    job.failure_message = str(exc)
+                    job.is_infrastructure_failure = True
+                    self.remediation_repo.save(job)
+
+                    # Roll back educational attempt counter and return state to WEAK
+                    if did_increment_attempt:
+                        record.remediation_attempt_count = max(0, record.remediation_attempt_count - 1)
+                        record.mastery_state = MasteryState.WEAK
+                        record.touch()
+                        self.mastery_repo.save(record)
+                        logger.info(
+                            "[remediation] Rolled back attempt counter for concept %s (attempts=%d, state=WEAK) due to infrastructure failure",
+                            concept_id,
+                            record.remediation_attempt_count,
+                        )
+
+                if raise_on_failure:
+                    raise
+                return job
+
+            finally:
+                if completion_event:
+                    completion_event.set()
+                    self._job_events.pop(job_id, None)
+
+        if run_in_background:
+            asyncio.create_task(_run_pipeline())
             return job
 
-        finally:
-            if completion_event:
-                completion_event.set()
-                self._job_events.pop(job_id, None)
+        return await _run_pipeline()
 
     def _build_video_target(
         self,

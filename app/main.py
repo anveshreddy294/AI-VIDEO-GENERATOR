@@ -73,8 +73,8 @@ def health() -> dict:
     return {
         "status": "ok",
         "service": "VisualAI",
-        "version": "0.3.0",
-        "steps": ["ingestion", "assessment", "video_engine", "instructor_analytics"],
+        "version": "1.0.0",
+        "steps": ["ingestion", "assessment", "video_engine", "instructor_analytics", "adaptive_learning"],
     }
 
 

@@ -306,10 +306,12 @@ get_content_units = load_content_units
 
 def save_knowledge_graph(source_id: str, kg: KnowledgeGraph) -> None:
     """Persist Knowledge Graph for a source to JSON in runtime registry."""
+    from .concept_id import normalize_knowledge_graph
+    normalized_kg, _ = normalize_knowledge_graph(kg, source_id=source_id)
     source_dir = get_registry_dir() / validate_id(source_id)
     source_dir.mkdir(parents=True, exist_ok=True)
     kg_file = source_dir / "knowledge_graph.json"
-    atomic_json(kg_file, kg.model_dump())
+    atomic_json(kg_file, normalized_kg.model_dump())
 
 
 def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
@@ -327,7 +329,10 @@ def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
         return None
     try:
         data = json.loads(kg_file.read_text(encoding="utf-8"))
-        return KnowledgeGraph.model_validate(data)
+        kg = KnowledgeGraph.model_validate(data)
+        from .concept_id import normalize_knowledge_graph
+        normalized_kg, _ = normalize_knowledge_graph(kg, source_id=source_id)
+        return normalized_kg
     except Exception as exc:
         logger.warning("[registry] Failed to load knowledge graph for %s: %s", source_id, exc)
         return None

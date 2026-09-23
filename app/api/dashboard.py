@@ -2318,8 +2318,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 btn.className = 'neo-btn neo-btn-peach-green';
                 btn.id = `btnGen_${tgt.concept_id}`;
                 btn.style.cssText = 'padding:8px 16px;font-size:12px;white-space:nowrap;';
-                btn.innerHTML = '<span> Generate Video Lesson</span>';
-                btn.onclick = () => triggerVideoGeneration(tgt.concept_id, tgt.concept_name, tgt.target_seconds, tgt.chunk_ids, tgt.source_content_ids);
+                btn.innerHTML = '<span> Start Personalized Review</span>';
+                // Authoritative remediation path flows through Step 5E AdaptiveLearningService
+                btn.onclick = () => {
+                    if (adaptiveState.sourceId || (currentSession && currentSession.source_id)) {
+                        triggerAdaptiveRemediation();
+                    } else {
+                        triggerVideoGeneration(tgt.concept_id, tgt.concept_name, tgt.target_seconds, tgt.chunk_ids, tgt.source_content_ids);
+                    }
+                };
 
                 card.appendChild(infoDiv);
                 card.appendChild(btn);
@@ -2328,6 +2335,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         async function triggerVideoGeneration(conceptId, conceptName, targetSeconds, chunkIds, sourceContentIds) {
+            // Adaptive remediation must never use legacy /video/generate directly
+            if (adaptiveState.sourceId || (currentSession && currentSession.source_id)) {
+                return triggerAdaptiveRemediation();
+            }
+
             const btn = document.getElementById(`btnGen_${conceptId}`);
             if (btn) {
                 btn.disabled = true;
@@ -2566,8 +2578,36 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             remediationPollInterval: null,
             isSubmitting: false,
             isGeneratingReassessment: false,
-            isRequestingRemediation: false
+            isRequestingRemediation: false,
+            hasAnsweredReassessment: false,
+            lastAnsweredQuestionId: null
         };
+
+        function cancelAllPolling() {
+            if (videoPollInterval) {
+                clearInterval(videoPollInterval);
+                videoPollInterval = null;
+            }
+            if (adaptiveState.remediationPollInterval) {
+                clearInterval(adaptiveState.remediationPollInterval);
+                adaptiveState.remediationPollInterval = null;
+            }
+            if (typeof stopJobTracking === 'function' && stopJobTracking) {
+                try { stopJobTracking(); } catch (e) {}
+            }
+        }
+
+        function showInlineError(elementId, message) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.style.display = 'block';
+                el.className = 'badge badge-rose';
+                el.style.padding = '12px 16px';
+                el.textContent = message;
+            } else {
+                console.error(message);
+            }
+        }
 
         function getActiveUserId() {
             const sid = (currentSession && currentSession.student_id) ||
@@ -2581,6 +2621,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             if (!sourceId) return;
             adaptiveState.sourceId = sourceId;
             adaptiveState.userId = getActiveUserId();
+
+            // Store safe active navigation context for refresh rehydration
+            try {
+                sessionStorage.setItem('visualai.active_source.' + adaptiveState.userId, sourceId);
+            } catch (e) {}
 
             const panel = document.getElementById('adaptiveLearningPanel');
             if (panel) panel.style.display = 'block';
@@ -2694,6 +2739,38 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 }
                 const data = await res.json();
                 adaptiveState.nextAction = data;
+
+                // Refresh rehydration checks
+                if (data.metadata) {
+                    // Active remediation running in background
+                    if (data.metadata.active_remediation_job_id &&
+                        !['READY', 'FAILED', 'CANCELLED'].includes((data.metadata.active_remediation_status || '').toUpperCase()) &&
+                        !adaptiveState.remediationPollInterval) {
+                        adaptiveState.activeJobId = data.metadata.active_remediation_job_id;
+                        pollAdaptiveRemediationJob(sourceId, data.metadata.active_remediation_job_id);
+                    }
+
+                    // Completed video ready for viewing
+                    if (data.metadata.video_ready && data.metadata.stream_url) {
+                        const playerBox = document.getElementById('activeVideoPlayerBox');
+                        if (playerBox) {
+                            playerBox.style.display = 'block';
+                            document.getElementById('activeVideoTitle').textContent = `${data.concept_name || data.concept_id || 'Concept'} - Remedial Lesson`;
+                            const videoEl = document.getElementById('remedialVideoPlayer');
+                            const sourceEl = document.getElementById('videoSource');
+                            if (sourceEl && (!sourceEl.src || !sourceEl.src.includes(data.metadata.stream_url))) {
+                                sourceEl.src = `${data.metadata.stream_url}?t=${Date.now()}`;
+                                videoEl.load();
+                            }
+                        }
+                    }
+
+                    // Restore pending uncompleted reassessment question
+                    if (data.metadata.pending_question && !adaptiveState.currentQuestion && !adaptiveState.hasAnsweredReassessment) {
+                        renderReassessmentQuestion(data.metadata.pending_question);
+                    }
+                }
+
                 renderAdaptiveAction(data);
             } catch (err) {
                 console.error('Error fetching next learning action:', err);
@@ -2743,15 +2820,28 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     titleEl.textContent = `Practice Assessment: ${conceptLabel}`;
                     descEl.textContent = action.reason || 'You reviewed the remediation lesson. Verify your understanding with grounded practice questions.';
 
-                    if (!adaptiveState.currentQuestion) {
-                        // Not currently answering a question -> prompt learner to take assessment again
+                    const attemptsCount = action.metadata ? (action.metadata.reassessment_attempts_count || 0) : 0;
+                    const hasAnswered = adaptiveState.hasAnsweredReassessment || (attemptsCount > 0);
+
+                    if (adaptiveState.currentQuestion) {
+                        // Current question is visible and answering in progress
+                        questionBox.style.display = 'block';
+                        btnTakeAssessmentAgain.style.display = 'none';
+                        btnNextQuestion.style.display = 'none';
+                    } else if (hasAnswered) {
+                        // At least one question answered, policy requires additional evidence -> show Next Question!
+                        btnNextQuestion.style.display = 'inline-flex';
+                        btnNextQuestion.disabled = false;
+                        btnNextQuestion.innerHTML = '<span>Next Question</span>';
+                        btnTakeAssessmentAgain.style.display = 'none';
+                        questionBox.style.display = 'none';
+                    } else {
+                        // Fresh reassessment entry -> prompt learner to take assessment again
                         btnTakeAssessmentAgain.style.display = 'inline-flex';
                         btnTakeAssessmentAgain.disabled = false;
                         btnTakeAssessmentAgain.innerHTML = '<span>Take Assessment Again</span>';
+                        btnNextQuestion.style.display = 'none';
                         questionBox.style.display = 'none';
-                    } else {
-                        // Current question is visible in the container
-                        questionBox.style.display = 'block';
                     }
                     break;
 
@@ -2804,8 +2894,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             if (!sourceId) return;
 
             const btn = document.getElementById('btnStartReview');
-            btn.disabled = true;
-            btn.innerHTML = '<span>Preparing your explanation...</span>';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span>Preparing your explanation...</span>';
+            }
             adaptiveState.isRequestingRemediation = true;
 
             const statusBox = document.getElementById('videoGenStatusBox');
@@ -2837,12 +2929,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 pollAdaptiveRemediationJob(sourceId, jobId);
             } catch (err) {
-                btn.disabled = false;
-                btn.innerHTML = '<span>Start Personalized Review</span>';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<span>Start Personalized Review</span>';
+                }
                 adaptiveState.isRequestingRemediation = false;
                 document.getElementById('lblVideoGenStage').textContent = 'Remediation request could not start';
                 document.getElementById('lblVideoGenDetails').textContent = err.message;
-                alert(`Remediation error: ${err.message}`);
+                showInlineError('adaptiveFeedbackBox', `Remediation error: ${err.message}`);
             }
         }
 
@@ -2896,7 +2990,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                         // Sync authoritative next action -> expect REASSESS
                         await syncAdaptiveLearning(sourceId);
-                    } else if (st === 'FAILED') {
+                    } else if (st === 'FAILED' || st === 'CANCELLED') {
                         clearInterval(adaptiveState.remediationPollInterval);
                         adaptiveState.remediationPollInterval = null;
                         adaptiveState.isRequestingRemediation = false;
@@ -2907,7 +3001,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             btn.innerHTML = '<span>Start Personalized Review</span>';
                         }
                         document.getElementById('lblVideoGenStage').textContent = 'Video explanation failed';
-                        document.getElementById('lblVideoGenDetails').textContent = data.error_message || 'Video compositor encountered an error.';
+                        document.getElementById('lblVideoGenDetails').textContent = data.failure_message || data.error_message || 'Video compositor encountered an error.';
                     }
                 } catch (e) {
                     console.error('Error polling adaptive remediation job:', e);
@@ -2941,7 +3035,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 btn.innerHTML = '<span>Take Assessment Again</span>';
-                alert(`Could not generate reassessment question: ${err.message}`);
+                showInlineError('adaptiveFeedbackBox', `Could not generate practice question: ${err.message}`);
             } finally {
                 adaptiveState.isGeneratingReassessment = false;
             }
@@ -2958,7 +3052,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             adaptiveState.isGeneratingReassessment = true;
 
             const conceptId = adaptiveState.nextAction ? adaptiveState.nextAction.concept_id : null;
-            const prevQid = adaptiveState.currentQuestion ? adaptiveState.currentQuestion.question_id : null;
+            const prevQid = adaptiveState.lastAnsweredQuestionId || (adaptiveState.currentQuestion ? adaptiveState.currentQuestion.question_id : null);
             let url = `/api/learning/${encodeURIComponent(sourceId)}/reassessment/generate?user_id=${encodeURIComponent(adaptiveState.userId)}`;
             if (conceptId) url += `&concept_id=${encodeURIComponent(conceptId)}`;
             if (prevQid) url += `&previous_question_id=${encodeURIComponent(prevQid)}`;
@@ -2977,7 +3071,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 btn.innerHTML = '<span>Next Question</span>';
-                alert(`Could not load next question: ${err.message}`);
+                showInlineError('adaptiveFeedbackBox', `Could not load next question: ${err.message}`);
             } finally {
                 adaptiveState.isGeneratingReassessment = false;
             }
@@ -3037,7 +3131,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         async function submitReassessmentAnswer() {
             if (adaptiveState.isSubmitting) return;
             if (adaptiveState.selectedOptionIdx === null || adaptiveState.selectedOptionIdx === undefined) {
-                alert('Please select an answer choice before submitting.');
+                showInlineError('adaptiveFeedbackBox', 'Please select an answer choice before submitting.');
                 return;
             }
             if (!adaptiveState.currentQuestion) return;
@@ -3076,6 +3170,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 const result = await res.json();
 
+                // Save answered question state and clear active currentQuestion
+                adaptiveState.lastAnsweredQuestionId = q.question_id;
+                adaptiveState.currentQuestion = null;
+                adaptiveState.hasAnsweredReassessment = true;
+
                 // Show safe feedback in the feedback box
                 const feedbackBox = document.getElementById('adaptiveFeedbackBox');
                 if (feedbackBox) {
@@ -3092,17 +3191,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
                 // Re-sync authoritative next action and roadmap
                 await syncAdaptiveLearning(sourceId);
-
-                // Check authoritative next action to configure buttons
-                const nextAct = adaptiveState.nextAction;
-                if (nextAct && nextAct.action_type === 'REASSESS') {
-                    const nextQBtn = document.getElementById('btnNextQuestion');
-                    nextQBtn.style.display = 'inline-flex';
-                    nextQBtn.disabled = false;
-                    nextQBtn.innerHTML = '<span>Next Question</span>';
-                }
             } catch (err) {
-                alert(`Submission error: ${err.message}`);
+                showInlineError('adaptiveFeedbackBox', `Submission error: ${err.message}`);
                 submitBtn.disabled = false;
                 submitBtn.innerHTML = '<span>Submit Answer</span>';
             } finally {
@@ -3139,7 +3229,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             } catch (err) {
                 btn.disabled = false;
                 btn.innerHTML = '<span>Continue to Next Concept</span>';
-                alert(`Next assessment error: ${err.message}`);
+                showInlineError('adaptiveFeedbackBox', `Next assessment error: ${err.message}`);
             }
         }
 
@@ -3147,6 +3237,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             loadSources();
             initCounters();
             loadModelOptions();
+
+            // Refresh state rehydration from safe client-side navigation context
+            const activeUser = getActiveUserId();
+            const savedSource = sessionStorage.getItem('visualai.active_source.' + activeUser);
+            if (savedSource) {
+                adaptiveState.sourceId = savedSource;
+                syncAdaptiveLearning(savedSource);
+            }
 
             const srcSelect = document.getElementById('sourceSelect');
             if (srcSelect) {
@@ -3157,6 +3255,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     }
                 });
             }
+
+            window.addEventListener('beforeunload', cancelAllPolling);
         });
     
         function openModal(id) {

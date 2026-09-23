@@ -1,7 +1,7 @@
 """Multimodal Vision Engine — extracts structured evidence from diagrams and images.
 
-Uses OpenRouter multimodal API with free vision models and strict schema validation:
-- Primary: google/gemma-4-31b-it:free
+Uses OpenRouter multimodal API with free vision router and strict schema validation:
+- Primary: openrouter/free (OpenRouter free-model router)
 - Fallback: inclusionai/ling-3.0-flash-vl:free
 
 Zero outside teaching, zero quiz generation, zero hallucinated facts.
@@ -11,6 +11,8 @@ Performs SOURCE EXTRACTION ONLY.
 from __future__ import annotations
 
 import base64
+import copy
+import hashlib
 import json
 import logging
 import mimetypes
@@ -25,6 +27,9 @@ from ..core.config import settings
 from .schemas import VisionExtractionData
 
 logger = logging.getLogger(__name__)
+
+# In-memory deterministic vision cache: image_sha256:model:v1 -> VisionExtractionData
+_VISION_EXTRACTION_CACHE: dict[str, VisionExtractionData] = {}
 
 
 class VisionExtractionError(Exception):
@@ -298,11 +303,18 @@ def extract_vision_openrouter(image_bytes: bytes, source: str = "image") -> Visi
     if not api_key:
         raise VisionExtractionFailed("OPENROUTER_API_KEY is not configured. Vision extraction cannot proceed.")
 
+    primary_model = getattr(settings, "vision_model", "openrouter/free").strip()
+    image_sha = hashlib.sha256(image_bytes).hexdigest()
+    cache_key = f"{image_sha}:{primary_model}:v1"
+
+    if cache_key in _VISION_EXTRACTION_CACHE:
+        logger.info("[vision] Vision cache hit for image sha256=%s model=%s (0 network calls)", image_sha[:10], primary_model)
+        return copy.deepcopy(_VISION_EXTRACTION_CACHE[cache_key])
+
     mime_type = _detect_image_mime(image_bytes, filename=source)
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
     data_url = f"data:{mime_type};base64,{b64_data}"
 
-    primary_model = getattr(settings, "vision_model", "google/gemma-4-31b-it:free").strip()
     fallback_model = getattr(settings, "vision_fallback_model", "inclusionai/ling-3.0-flash-vl:free").strip()
     timeout_sec = float(getattr(settings, "vision_timeout_seconds", 60.0))
     endpoint = "https://openrouter.ai/api/v1/chat/completions"
@@ -358,13 +370,27 @@ def extract_vision_openrouter(image_bytes: bytes, source: str = "image") -> Visi
                 if not choices:
                     raise RuntimeError("OpenRouter returned empty choices list.")
 
+                # Capture actual routed model returned by OpenRouter without exposing keys
+                resolved_model = raw_json.get("model") or model_name
+                logger.info(
+                    "[vision] OpenRouter routing metadata: requested_model=%s, resolved_model=%s",
+                    model_name,
+                    resolved_model,
+                )
+
                 content_str = choices[0].get("message", {}).get("content", "").strip()
                 if not content_str:
                     raise RuntimeError("Vision model returned empty message content.")
 
                 parsed_data = _clean_json_response(content_str)
                 validated = _validate_vision_extraction(parsed_data, source=source)
-                logger.info("[vision] Successfully extracted vision data via model=%s (confidence=%.2f)", model_name, validated.confidence)
+                _VISION_EXTRACTION_CACHE[cache_key] = validated
+                logger.info(
+                    "[vision] Successfully extracted vision data via model=%s (resolved=%s, confidence=%.2f)",
+                    model_name,
+                    resolved_model,
+                    validated.confidence,
+                )
                 return validated
 
         except urllib.error.HTTPError as http_err:

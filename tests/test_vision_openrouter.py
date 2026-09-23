@@ -26,7 +26,7 @@ class TestVisionOpenRouter(unittest.TestCase):
     def setUp(self):
         self.orig_provider = getattr(settings, "vision_provider", "openrouter")
         self.orig_api_key = getattr(settings, "openrouter_api_key", "")
-        self.orig_model = getattr(settings, "vision_model", "google/gemma-4-31b-it:free")
+        self.orig_model = getattr(settings, "vision_model", "openrouter/free")
         self.orig_fallback = getattr(settings, "vision_fallback_model", "inclusionai/ling-3.0-flash-vl:free")
 
     def tearDown(self):
@@ -182,7 +182,7 @@ class TestVisionOpenRouter(unittest.TestCase):
         self.assertEqual(req.headers.get("Authorization"), "Bearer test_key_12345")
 
         sent_body = json.loads(req.data.decode("utf-8"))
-        self.assertEqual(sent_body["model"], "google/gemma-4-31b-it:free")
+        self.assertEqual(sent_body["model"], "openrouter/free")
         messages = sent_body["messages"]
         self.assertEqual(len(messages), 1)
         content_items = messages[0]["content"]
@@ -196,7 +196,7 @@ class TestVisionOpenRouter(unittest.TestCase):
         """Verify fallback model is called when primary model endpoint returns an error."""
         settings.vision_provider = "openrouter"
         settings.openrouter_api_key = "test_key_12345"
-        settings.vision_model = "google/gemma-4-31b-it:free"
+        settings.vision_model = "openrouter/free"
         settings.vision_fallback_model = "inclusionai/ling-3.0-flash-vl:free"
 
         # Primary model fails (503 Service Unavailable), secondary succeeds
@@ -331,7 +331,77 @@ class TestVisionOpenRouter(unittest.TestCase):
         finally:
             tmp_path.unlink(missing_ok=True)
 
+    def test_vision_model_default_and_env_override(self):
+        """Verify openrouter/free is default and OPENROUTER_VISION_MODEL override works."""
+        from app.core.config import Settings
+        import os
+
+        # Test canonical default
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("OPENROUTER_VISION_MODEL", None)
+            os.environ.pop("VISION_MODEL", None)
+            s = Settings()
+            self.assertEqual(s.vision_model, "openrouter/free")
+            self.assertEqual(s.reasoning_model, "llama3.2:3b")
+            self.assertEqual(s.embedding_model, "embeddinggemma")
+
+        # Test OPENROUTER_VISION_MODEL environment override
+        with patch.dict(os.environ, {"OPENROUTER_VISION_MODEL": "custom/vision-model:free"}):
+            s = Settings()
+            self.assertEqual(s.vision_model, "custom/vision-model:free")
+            # Ensure local reasoning remains untouched
+            self.assertEqual(s.reasoning_model, "llama3.2:3b")
+
+    @patch("urllib.request.urlopen")
+    def test_resolved_model_recorded_safely_in_logs(self, mock_urlopen):
+        """Verify the actual routed model from OpenRouter is captured and logged safely without leaking keys."""
+        settings.vision_provider = "openrouter"
+        settings.openrouter_api_key = "secret_api_key_xyz999"
+        settings.vision_model = "openrouter/free"
+
+        mock_resp_data = {
+            "id": "gen-12345",
+            "model": "qwen/qwen-2.5-vl-72b-instruct:free",
+            "choices": [
+                {
+                    "message": {
+                        "content": json.dumps({
+                            "visible_text": ["Diagram title: Photosynthesis"],
+                            "headings": ["Photosynthesis"],
+                            "paragraphs": ["Light energy is converted into chemical energy."],
+                            "bullet_points": [],
+                            "diagram_entities": ["Chloroplast", "Sunlight", "Water"],
+                            "labels": ["Light Reaction"],
+                            "arrows": ["Sunlight -> Chloroplast"],
+                            "relationships": ["Water + CO2 -> Glucose + O2"],
+                            "tables": [],
+                            "formulas": ["6CO2 + 6H2O -> C6H12O6 + 6O2"],
+                            "units": [],
+                            "visual_structure": "Biochemical process flow",
+                            "uncertain_elements": [],
+                            "confidence": 0.95,
+                        })
+                    }
+                }
+            ]
+        }
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = json.dumps(mock_resp_data).encode("utf-8")
+        mock_resp.__enter__.return_value = mock_resp
+        mock_urlopen.return_value = mock_resp
+
+        with self.assertLogs("app.services.vision", level="INFO") as log_capture:
+            fake_png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
+            res = extract_vision_openrouter(fake_png_bytes, source="bio_flow.png")
+            self.assertIn("Photosynthesis", res.headings)
+
+            log_output = " ".join(log_capture.output)
+            self.assertIn("requested_model=openrouter/free", log_output)
+            self.assertIn("resolved_model=qwen/qwen-2.5-vl-72b-instruct:free", log_output)
+            self.assertNotIn("secret_api_key_xyz999", log_output)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

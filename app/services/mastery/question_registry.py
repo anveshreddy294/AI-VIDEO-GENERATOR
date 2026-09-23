@@ -24,6 +24,7 @@ class AuthoritativeQuestion(BaseModel):
     correct_index: int = Field(ge=0, le=10)
     difficulty: str = "intermediate"
     explanation: str = ""
+    status: str = "PENDING"  # PENDING or ANSWERED
 
 
 @runtime_checkable
@@ -36,6 +37,16 @@ class QuestionRegistry(Protocol):
 
     def register(self, question: AuthoritativeQuestion) -> AuthoritativeQuestion:
         """Register a newly generated question."""
+        ...
+
+    def mark_answered(self, question_id: str) -> None:
+        """Mark a question as answered so it cannot be reused as pending."""
+        ...
+
+    def get_pending_for_concept(
+        self, user_id: str, source_id: str, concept_id: str
+    ) -> AuthoritativeQuestion | None:
+        """Retrieve any pending unanswered question for user, source, and concept."""
         ...
 
 
@@ -53,6 +64,27 @@ class InMemoryQuestionRegistry:
         key = question.question_id.strip()
         self._questions[key] = copy.deepcopy(question)
         return copy.deepcopy(question)
+
+    def mark_answered(self, question_id: str) -> None:
+        key = question_id.strip()
+        if key in self._questions:
+            self._questions[key].status = "ANSWERED"
+
+    def get_pending_for_concept(
+        self, user_id: str, source_id: str, concept_id: str
+    ) -> AuthoritativeQuestion | None:
+        clean_user = user_id.strip() if user_id else ""
+        clean_source = source_id.strip() if source_id else ""
+        clean_concept = concept_id.strip() if concept_id else ""
+        for q in self._questions.values():
+            if (
+                q.concept_id == clean_concept
+                and q.source_id == clean_source
+                and (not q.user_id or q.user_id == clean_user)
+                and q.status == "PENDING"
+            ):
+                return copy.deepcopy(q)
+        return None
 
     def clear(self) -> None:
         self._questions.clear()

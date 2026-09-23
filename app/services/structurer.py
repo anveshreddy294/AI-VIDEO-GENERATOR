@@ -322,6 +322,35 @@ def _assemble_outputs(
     concepts = data.get("concepts")
     if not isinstance(concepts, list) or not concepts:
         raise KnowledgeExtractionFailed("Knowledge extraction returned no valid grounded concepts.")
+
+    from .concept_id import canonicalize_concept_id, ConceptCollisionError
+
+    # Canonicalize all concept IDs and detect collisions
+    alias_map: dict[str, str] = {}
+    reverse_map: dict[str, str] = {}
+    for i, c in enumerate(concepts):
+        raw_id = c.get("concept_id") or c.get("name") or f"CONCEPT_{i+1:03d}"
+        canonical = canonicalize_concept_id(str(raw_id))
+        if canonical in reverse_map and reverse_map[canonical] != str(raw_id):
+            raise ConceptCollisionError(
+                f"Concept collision in structuring: '{reverse_map[canonical]}' and '{raw_id}' both canonicalize to '{canonical}'"
+            )
+        alias_map[str(raw_id)] = canonical
+        reverse_map[canonical] = str(raw_id)
+        c["concept_id"] = canonical
+
+    for c in concepts:
+        c["prerequisite_concept_ids"] = [
+            alias_map.get(str(p), canonicalize_concept_id(str(p)))
+            for p in c.get("prerequisite_concept_ids", [])
+            if p
+        ]
+        c["related_concept_ids"] = [
+            alias_map.get(str(r), canonicalize_concept_id(str(r)))
+            for r in c.get("related_concept_ids", [])
+            if r
+        ]
+
     ids = [c.get("concept_id") for c in concepts]
     if any(not isinstance(cid, str) or not cid.strip() for cid in ids) or len(set(ids)) != len(ids):
         raise ValueError("Concept IDs must be nonempty and unique")
@@ -364,15 +393,37 @@ def _assemble_outputs(
     # 2. Build KnowledgeGraph
     concepts_dict: dict[str, ConceptNode] = {}
     prereqs_set: set[str] = set()
+    alias_map: dict[str, str] = {}
 
-    for cdata in data.get("concepts", []):
-        cid = cdata.get("concept_id") or f"CONCEPT_{len(concepts_dict)+1:03d}"
+    raw_concepts = data.get("concepts", [])
+    for idx, cdata in enumerate(raw_concepts):
+        raw_name = cdata.get("name") or cdata.get("concept_id") or f"Concept_{idx+1}"
+        cid = canonicalize_concept_id(raw_name)
+        if cdata.get("concept_id"):
+            alias_map[cdata["concept_id"]] = cid
+        if cdata.get("name"):
+            alias_map[cdata["name"]] = cid
+        alias_map[cid] = cid
+
+    for idx, cdata in enumerate(raw_concepts):
+        raw_name = cdata.get("name") or cdata.get("concept_id") or f"Concept_{idx+1}"
+        cid = canonicalize_concept_id(raw_name)
+        canonical_prereqs = [
+            alias_map.get(p, canonicalize_concept_id(p))
+            for p in cdata.get("prerequisite_concept_ids", [])
+            if p
+        ]
+        canonical_related = [
+            alias_map.get(r, canonicalize_concept_id(r))
+            for r in cdata.get("related_concept_ids", [])
+            if r
+        ]
         node = ConceptNode(
             concept_id=cid,
-            name=cdata.get("name", cid),
+            name=cdata.get("name", raw_name),
             definition=cdata.get("definition"),
-            prerequisite_concept_ids=cdata.get("prerequisite_concept_ids", []),
-            related_concept_ids=cdata.get("related_concept_ids", []),
+            prerequisite_concept_ids=canonical_prereqs,
+            related_concept_ids=canonical_related,
             source_content_ids=cdata.get("source_content_ids", []),
         )
         concepts_dict[cid] = node

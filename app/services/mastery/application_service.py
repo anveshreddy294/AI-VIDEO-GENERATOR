@@ -148,7 +148,49 @@ class AdaptiveLearningService:
         return kg
 
     def _to_next_action_dto(self, action: NextLearningAction) -> NextActionResponse:
-        """Convert domain NextLearningAction to API DTO."""
+        """Convert domain NextLearningAction to API DTO with rehydration metadata."""
+        meta = dict(action.metadata or {})
+        if action.concept_id:
+            if hasattr(self.remediation_repo, "find_active_for_concept"):
+                active_job = self.remediation_repo.find_active_for_concept(
+                    action.user_id, action.source_id, action.concept_id
+                )
+                if active_job:
+                    meta["active_remediation_job_id"] = active_job.remediation_job_id
+                    meta["active_remediation_status"] = active_job.status.value
+
+            if hasattr(self.remediation_repo, "list_for_concept"):
+                jobs = self.remediation_repo.list_for_concept(action.user_id, action.source_id, action.concept_id)
+                ready_jobs = [j for j in jobs if j.status == RemediationJobStatus.READY]
+                if ready_jobs:
+                    latest_ready = ready_jobs[-1]
+                    vid_id = latest_ready.video_job_id or latest_ready.remediation_job_id
+                    meta["stream_url"] = self._build_safe_stream_url(vid_id)
+                    meta["video_ready"] = True
+                    meta["video_job_id"] = latest_ready.remediation_job_id
+
+            if action.action_type == LearningActionType.REASSESS:
+                user_attempts = self.attempt_repo.list_for_concept(action.user_id, action.source_id, action.concept_id)
+                reassess_attempts = [
+                    att for att in user_attempts
+                    if getattr(att, "assessment_type", None) in (AssessmentType.REASSESSMENT, "REASSESSMENT")
+                ]
+                meta["reassessment_attempts_count"] = len(reassess_attempts)
+
+                pending_q = None
+                if hasattr(self.question_registry, "get_pending_for_concept"):
+                    pending_q = self.question_registry.get_pending_for_concept(action.user_id, action.source_id, action.concept_id)
+                if pending_q:
+                    attempted_qids = {att.question_id for att in user_attempts}
+                    if pending_q.question_id not in attempted_qids:
+                        meta["pending_question"] = {
+                            "question_id": pending_q.question_id,
+                            "concept_id": pending_q.concept_id,
+                            "stem": pending_q.stem,
+                            "options": pending_q.options,
+                            "difficulty": pending_q.difficulty,
+                        }
+
         return NextActionResponse(
             user_id=action.user_id,
             source_id=action.source_id,
@@ -161,7 +203,7 @@ class AdaptiveLearningService:
             mastery_score=action.mastery_score,
             lifetime_accuracy=action.lifetime_accuracy,
             dependency_status=action.dependency_status,
-            metadata=action.metadata,
+            metadata=meta,
         )
 
     # -------------------------------------------------------------------------
@@ -400,33 +442,48 @@ class AdaptiveLearningService:
                 "Concept must be in REASSESSING state (remediation video must be completed and confirmed)."
             )
 
+        # Auto-resolve previous_question_id from user's latest attempt for this concept if not explicitly provided
+        resolved_prev_qid = previous_question_id.strip() if previous_question_id else None
+        user_attempts = self.attempt_repo.list_for_concept(clean_user, clean_source, target_concept)
+        attempted_qids = {att.question_id for att in user_attempts}
+
+        if not resolved_prev_qid and user_attempts:
+            resolved_prev_qid = user_attempts[-1].question_id
+
         # Idempotency check: see if QuestionRegistry already has a question for this concept
-        # that has NOT yet been submitted by this user
-        if hasattr(self.question_registry, "_questions"):
+        # that has NOT yet been submitted by this user and is PENDING
+        pending_q: AuthoritativeQuestion | None = None
+        if hasattr(self.question_registry, "get_pending_for_concept"):
+            candidate = self.question_registry.get_pending_for_concept(clean_user, clean_source, target_concept)
+            if candidate and candidate.question_id not in attempted_qids:
+                pending_q = candidate
+        elif hasattr(self.question_registry, "_questions"):
             for q in self.question_registry._questions.values():
                 if (
                     q.concept_id == target_concept
                     and q.source_id == clean_source
                     and (not q.user_id or q.user_id == clean_user)
+                    and getattr(q, "status", "PENDING") == "PENDING"
+                    and q.question_id not in attempted_qids
                 ):
-                    # Check if this question was already attempted
-                    user_attempts = self.attempt_repo.list_for_concept(clean_user, clean_source, target_concept)
-                    attempted_qids = {att.question_id for att in user_attempts}
-                    if q.question_id not in attempted_qids:
-                        logger.info(
-                            "[application_service] Reusing active pending reassessment question %s for concept %s",
-                            q.question_id,
-                            target_concept,
-                        )
-                        return SafeReassessmentQuestionResponse(
-                            question_id=q.question_id,
-                            concept_id=q.concept_id,
-                            source_id=q.source_id,
-                            stem=q.stem,
-                            options=q.options,
-                            difficulty=q.difficulty,
-                            variant_type=getattr(q, "variant_type", "application"),
-                        )
+                    pending_q = q
+                    break
+
+        if pending_q is not None:
+            logger.info(
+                "[application_service] Reusing active pending reassessment question %s for concept %s",
+                pending_q.question_id,
+                target_concept,
+            )
+            return SafeReassessmentQuestionResponse(
+                question_id=pending_q.question_id,
+                concept_id=pending_q.concept_id,
+                source_id=pending_q.source_id,
+                stem=pending_q.stem,
+                options=pending_q.options,
+                difficulty=pending_q.difficulty,
+                variant_type=getattr(pending_q, "variant_type", "application"),
+            )
 
         # Generate new question via ReassessmentService
         new_q = self.reassessment_service.generate_reassessment_question(
@@ -434,7 +491,7 @@ class AdaptiveLearningService:
             source_id=clean_source,
             concept_id=target_concept,
             session_id=clean_session,
-            previous_question_id=previous_question_id,
+            previous_question_id=resolved_prev_qid,
             provided_concept=kg.concepts[target_concept],
         )
 
@@ -443,7 +500,7 @@ class AdaptiveLearningService:
             concept_id=new_q.concept_id,
             source_id=new_q.source_id,
             stem=new_q.stem,
-            options=[opt.text for opt in new_q.options],
+            options=[opt.text if hasattr(opt, "text") else str(opt) for opt in new_q.options],
             difficulty=new_q.difficulty or "intermediate",
             variant_type="application",
         )
@@ -555,6 +612,7 @@ class AdaptiveLearningService:
             session_id=clean_session,
             force=force,
             wait_for_completion=False,
+            run_in_background=True,
         )
 
         stream_url = (

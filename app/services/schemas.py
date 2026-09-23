@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Literal, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
 
 
 class SourceRecord(BaseModel):
@@ -122,11 +122,65 @@ class ConceptNode(BaseModel):
         default_factory=list, description="ContentUnit IDs where this concept is defined"
     )
 
+    @field_validator("concept_id")
+    @classmethod
+    def _validate_and_canonicalize_id(cls, v: str) -> str:
+        import re
+        from .concept_id import canonicalize_concept_id, validate_concept_id
+        if v and re.match(r"^[A-Za-z0-9_.-]+$", str(v).strip()):
+            return validate_concept_id(str(v).strip())
+        return canonicalize_concept_id(v)
+
+    @field_validator("prerequisite_concept_ids", "related_concept_ids")
+    @classmethod
+    def _validate_and_canonicalize_list(cls, v: list[str]) -> list[str]:
+        import re
+        from .concept_id import canonicalize_concept_id, validate_concept_id
+        if not v:
+            return []
+        res = []
+        for item in v:
+            if not item or not str(item).strip():
+                continue
+            clean = str(item).strip()
+            if re.match(r"^[A-Za-z0-9_.-]+$", clean):
+                res.append(validate_concept_id(clean))
+            else:
+                res.append(canonicalize_concept_id(clean))
+        return res
+
 
 class KnowledgeGraph(BaseModel):
     """Network of extracted concepts and their prerequisite dependencies."""
 
     concepts: dict[str, ConceptNode] = Field(default_factory=dict)
+
+    def __init__(self, **data: Any) -> None:
+        try:
+            super().__init__(**data)
+        except Exception as err:
+            from pydantic import ValidationError
+            from .concept_id import ConceptCollisionError
+            if isinstance(err, ValidationError):
+                for e in err.errors():
+                    if "Concept collision" in e.get("msg", ""):
+                        raise ConceptCollisionError(e["msg"]) from err
+            raise
+
+    @model_validator(mode="after")
+    def _canonicalize_concepts_keys(self) -> "KnowledgeGraph":
+        from .concept_id import canonicalize_concept_id, ConceptCollisionError
+        seen_canonical: dict[str, str] = {}
+        for k, node in self.concepts.items():
+            cid = node.concept_id or k
+            c_slug = canonicalize_concept_id(cid)
+            if c_slug in seen_canonical and seen_canonical[c_slug] != k:
+                raise ConceptCollisionError(
+                    f"Concept collision detected: '{k}' and '{seen_canonical[c_slug]}' both normalize to '{c_slug}'"
+                )
+            seen_canonical[c_slug] = k
+        return self
+
 
 
 class RichChunk(BaseModel):

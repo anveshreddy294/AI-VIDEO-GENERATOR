@@ -277,9 +277,13 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
     return vectors
 
 
+_INDEXES_ENSURED: set[str] = set()
+
+
 def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> None:
     """Validate an existing collection without ever deleting user data, ensuring payload indexes."""
     expected_dim = expected_dim or _active_embedding_dim
+    coll_key = f"{settings.collection_name}:{expected_dim}"
     existing = [c.name for c in client.get_collections().collections]
     if settings.collection_name in existing:
         params = client.get_collection(collection_name=settings.collection_name).config.params.vectors
@@ -291,6 +295,9 @@ def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> 
             collection_name=settings.collection_name,
             vectors_config=qmodels.VectorParams(size=expected_dim, distance=qmodels.Distance.COSINE),
         )
+
+    if coll_key in _INDEXES_ENSURED:
+        return
 
     # SEC / PERF: Ensure payload indexes for high-speed tenant-isolated retrieval
     index_fields = [
@@ -316,6 +323,8 @@ def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> 
             )
         except Exception:
             pass
+
+    _INDEXES_ENSURED.add(coll_key)
 
 
 def _point_id(chunk: LayerChunk) -> str:
@@ -401,8 +410,8 @@ def search_layer_a(
     source_id: str | None = None,
     score_threshold: float | None = None,
 ) -> list[dict[str, Any]]:
-    client = get_client()
     try:
+        client = get_client()
         vector = _embed([query], task_type="retrieval_query")[0]
         must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
         if source_id:

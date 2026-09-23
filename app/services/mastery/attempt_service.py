@@ -166,6 +166,8 @@ class AssessmentAttemptService:
             saved_attempt = self.attempt_repo.save(attempt)
             try:
                 saved_mastery = self.mastery_repo.save(updated_mastery)
+                if hasattr(self.question_registry, "mark_answered"):
+                    self.question_registry.mark_answered(request.question_id.strip())
             except Exception as mastery_err:
                 # Rollback attempt to maintain transactional consistency
                 if hasattr(self.attempt_repo, "_attempts") and clean_attempt_id in self.attempt_repo._attempts:
