@@ -1,8 +1,8 @@
 """Multimodal Vision Engine — extracts structured evidence from diagrams and images.
 
-Uses OpenRouter multimodal API with free vision router and strict schema validation:
-- Primary: openrouter/free (OpenRouter free-model router)
-- Fallback: inclusionai/ling-3.0-flash-vl:free
+Uses OpenRouter multimodal API with capability-aware candidate chain:
+- Primary: inclusionai/ling-3.0-flash-vl:free (prompt_json mode)
+- Fallback: google/gemma-4-31b-it:free (json_object mode)
 
 Zero outside teaching, zero quiz generation, zero hallucinated facts.
 Performs SOURCE EXTRACTION ONLY.
@@ -412,6 +412,86 @@ def format_vision_markdown(extracted: VisionExtractionData) -> str:
     return "\n".join(sections).strip()
 
 
+_PROMPT_INSTRUCTION_PROMPT_JSON = (
+    "\n\nReturn exactly one valid JSON object matching the required extraction structure. "
+    "Do not output markdown or commentary."
+)
+
+
+class VisionModelCandidate:
+    """Explicit representation of a vision model candidate and its capabilities."""
+
+    def __init__(self, model: str, response_mode: str, timeout_seconds: float = 35.0):
+        self.model = model.strip()
+        self.response_mode = response_mode.strip()  # "prompt_json" | "json_object"
+        self.timeout_seconds = timeout_seconds
+
+    @property
+    def mode(self) -> str:
+        return self.response_mode
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "mode": self.response_mode,
+            "timeout_seconds": self.timeout_seconds,
+        }
+
+    def __repr__(self) -> str:
+        return f"VisionModelCandidate(model={self.model!r}, mode={self.response_mode!r}, timeout_seconds={self.timeout_seconds})"
+
+
+def _get_vision_candidate_plan() -> list[VisionModelCandidate]:
+    """Return explicit capability-aware candidate plan for vision extraction.
+
+    Expected default plan:
+    [
+        {"model": "inclusionai/ling-3.0-flash-vl:free", "mode": "prompt_json"},
+        {"model": "google/gemma-4-31b-it:free", "mode": "json_object"}
+    ]
+    """
+    default_timeout = float(getattr(settings, "vision_timeout_seconds", 35.0))
+    raw_primary = getattr(settings, "vision_model", "inclusionai/ling-3.0-flash-vl:free").strip()
+    raw_fallback = getattr(settings, "vision_fallback_model", "google/gemma-4-31b-it:free").strip()
+
+    # Never allow openrouter/free in production candidate plan
+    if raw_primary == "openrouter/free" or not raw_primary:
+        primary_model = "inclusionai/ling-3.0-flash-vl:free"
+    else:
+        primary_model = raw_primary
+
+    if raw_fallback == "openrouter/free" or not raw_fallback:
+        fallback_model = "google/gemma-4-31b-it:free"
+    else:
+        fallback_model = raw_fallback
+
+    def _determine_mode(model_name: str) -> str:
+        # Ling free does not support response_format; use prompt_json
+        if "ling" in model_name.lower():
+            return "prompt_json"
+        # Gemma free supports {"type": "json_object"}
+        return "json_object"
+
+    plan = [
+        VisionModelCandidate(
+            model=primary_model,
+            response_mode=_determine_mode(primary_model),
+            timeout_seconds=default_timeout,
+        )
+    ]
+
+    if fallback_model and fallback_model != primary_model:
+        plan.append(
+            VisionModelCandidate(
+                model=fallback_model,
+                response_mode=_determine_mode(fallback_model),
+                timeout_seconds=default_timeout,
+            )
+        )
+
+    return plan
+
+
 async def extract_vision_openrouter_async(
     image_bytes: bytes,
     source: str = "image",
@@ -425,7 +505,8 @@ async def extract_vision_openrouter_async(
             error_code=VISION_AUTH_FAILED,
         )
 
-    primary_model = getattr(settings, "vision_model", "openrouter/free").strip()
+    attempt_plan = _get_vision_candidate_plan()
+    primary_model = attempt_plan[0].model if attempt_plan else "inclusionai/ling-3.0-flash-vl:free"
     image_sha = hashlib.sha256(image_bytes).hexdigest()
     cache_key = f"{image_sha}:{primary_model}:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
 
@@ -447,9 +528,9 @@ async def extract_vision_openrouter_async(
             )
 
     start_mono = time.monotonic()
-    stage_timeout = float(getattr(settings, "vision_stage_timeout_seconds", 90.0))
+    stage_timeout = float(getattr(settings, "vision_stage_timeout_seconds", 75.0))
     deadline = start_mono + stage_timeout
-    logger.info("[vision] extraction_start source=%s stage_budget=%.1fs", source, stage_timeout)
+    logger.info("[vision] extraction_start source=%s stage_budget=%.1fs candidates=%d", source, stage_timeout, len(attempt_plan))
 
     if on_progress:
         try:
@@ -461,69 +542,31 @@ async def extract_vision_openrouter_async(
     b64_data = base64.b64encode(image_bytes).decode("utf-8")
     data_url = f"data:{mime_type};base64,{b64_data}"
 
-    fallback_model = getattr(settings, "vision_fallback_model", "").strip()
-    per_request_timeout = float(getattr(settings, "vision_timeout_seconds", 45.0))
     endpoint = "https://openrouter.ai/api/v1/chat/completions"
-
-    # Strictly bounded 2-request sequence:
-    # Attempt 1: primary_model with strict json_schema
-    # Attempt 2: fallback_model (if configured) or primary_model with json_object
-    schema = get_vision_extraction_json_schema()
-    attempt_plan: list[dict[str, Any]] = [
-        {
-            "model": primary_model,
-            "mode": "json_schema",
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "vision_extraction",
-                    "strict": True,
-                    "schema": schema,
-                },
-            },
-            "is_fallback": False,
-        }
-    ]
-
-    if fallback_model and fallback_model != primary_model:
-        attempt_plan.append({
-            "model": fallback_model,
-            "mode": "json_object",
-            "response_format": {"type": "json_object"},
-            "is_fallback": True,
-        })
-    else:
-        attempt_plan.append({
-            "model": primary_model,
-            "mode": "json_object",
-            "response_format": {"type": "json_object"},
-            "is_fallback": False,
-        })
-
     last_error: Exception | None = None
     last_error_code: str = VISION_PROVIDER_FAILED
 
     async with httpx.AsyncClient() as client:
-        for attempt_idx, attempt in enumerate(attempt_plan, 1):
-            model_name = attempt["model"]
-            mode = attempt["mode"]
-            resp_format = attempt["response_format"]
-            is_fallback = attempt["is_fallback"]
+        for attempt_idx, candidate in enumerate(attempt_plan, 1):
+            model_name = candidate.model
+            mode = candidate.response_mode
+            is_fallback = (attempt_idx > 1)
 
             remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            if remaining < 5.0:
                 total_ms = int((time.monotonic() - start_mono) * 1000)
                 logger.error(
-                    "[vision] extraction_failed failure_code=%s total_ms=%d reason=stage_deadline_exceeded",
+                    "[vision] extraction_failed failure_code=%s total_ms=%d reason=stage_deadline_insufficient (remaining=%.1fs)",
                     VISION_TIMEOUT,
                     total_ms,
+                    remaining,
                 )
                 raise VisionExtractionFailed(
-                    f"Image understanding exceeded configured time limit ({stage_timeout:.1f}s) before attempt {attempt_idx}.",
+                    f"Image understanding exceeded configured time limit ({stage_timeout:.1f}s) before attempt {attempt_idx} (remaining: {remaining:.1f}s).",
                     error_code=VISION_TIMEOUT,
                 )
 
-            req_read_timeout = max(0.5, min(per_request_timeout, remaining))
+            req_read_timeout = max(0.5, min(candidate.timeout_seconds, remaining))
             timeout = httpx.Timeout(connect=10.0, read=req_read_timeout, write=20.0, pool=10.0)
 
             if on_progress:
@@ -532,9 +575,11 @@ async def extract_vision_openrouter_async(
                 except Exception:
                     pass
 
+            # Instrument: vision_request_start
             logger.info(
-                "[vision] request_start attempt=%d/2 model=%s mode=%s req_timeout=%.1fs remaining_stage=%.1fs",
+                "[vision] vision_request_start attempt=%d/%d model=%s mode=%s req_timeout=%.1fs remaining_stage=%.1fs",
                 attempt_idx,
+                len(attempt_plan),
                 model_name,
                 mode,
                 req_read_timeout,
@@ -542,13 +587,17 @@ async def extract_vision_openrouter_async(
             )
 
             req_start_mono = time.monotonic()
-            payload = {
+            prompt_text = _OPENROUTER_VISION_PROMPT
+            if mode == "prompt_json":
+                prompt_text = _OPENROUTER_VISION_PROMPT + _PROMPT_INSTRUCTION_PROMPT_JSON
+
+            payload: dict[str, Any] = {
                 "model": model_name,
                 "messages": [
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": _OPENROUTER_VISION_PROMPT},
+                            {"type": "text", "text": prompt_text},
                             {
                                 "type": "image_url",
                                 "image_url": {"url": data_url},
@@ -556,9 +605,11 @@ async def extract_vision_openrouter_async(
                         ],
                     }
                 ],
-                "response_format": resp_format,
                 "temperature": 0,
+                "max_tokens": 1500,
             }
+            if mode == "json_object":
+                payload["response_format"] = {"type": "json_object"}
 
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -630,6 +681,15 @@ async def extract_vision_openrouter_async(
 
                 req_elapsed_ms = int((time.monotonic() - req_start_mono) * 1000)
                 status_code = response.status_code
+
+                # Instrument: vision_headers_received
+                logger.info(
+                    "[vision] vision_headers_received attempt=%d model=%s status_code=%d elapsed_ms=%d",
+                    attempt_idx,
+                    model_name,
+                    status_code,
+                    req_elapsed_ms,
+                )
 
                 if status_code in (401, 403):
                     last_error_code = VISION_AUTH_FAILED
@@ -721,12 +781,14 @@ async def extract_vision_openrouter_async(
 
                 vision_circuit_breaker.record_success()
 
+                # Instrument: vision_content_received
+                content_bytes = response.content
                 logger.info(
-                    "[vision] request_complete attempt=%d model=%s mode=%s status=200 bytes=%d elapsed_ms=%d",
+                    "[vision] vision_content_received attempt=%d model=%s mode=%s status=200 bytes=%d elapsed_ms=%d",
                     attempt_idx,
                     model_name,
                     mode,
-                    len(response.content),
+                    len(content_bytes),
                     req_elapsed_ms,
                 )
 
@@ -742,7 +804,7 @@ async def extract_vision_openrouter_async(
 
                 resolved_model = raw_json.get("model") or model_name
                 content_str = choices[0].get("message", {}).get("content", "").strip()
-                logger.warning(
+                logger.info(
                     "[vision] OpenRouter routing metadata: requested_model=%s, resolved_model=%s, content_len=%d, preview=%r",
                     model_name,
                     resolved_model,
@@ -758,15 +820,22 @@ async def extract_vision_openrouter_async(
                     except Exception:
                         pass
 
+                # Instrument: vision_parse_complete
+                t_parse0 = time.monotonic()
                 parsed_data = _clean_json_response(content_str)
-                logger.info("[vision] parsing_complete model=%s mode=%s", model_name, mode)
+                parse_ms = int((time.monotonic() - t_parse0) * 1000)
+                logger.info("[vision] vision_parse_complete attempt=%d model=%s parse_elapsed_ms=%d", attempt_idx, model_name, parse_ms)
 
+                # Instrument: vision_validation_complete
+                t_val0 = time.monotonic()
                 validated = _validate_vision_extraction(parsed_data, source=source)
+                val_ms = int((time.monotonic() - t_val0) * 1000)
                 logger.info(
-                    "[vision] validation_complete attempt=%d model=%s confidence=%.2f",
+                    "[vision] vision_validation_complete attempt=%d model=%s confidence=%.2f val_elapsed_ms=%d",
                     attempt_idx,
                     model_name,
                     validated.confidence,
+                    val_ms,
                 )
 
                 _VISION_EXTRACTION_CACHE[cache_key] = validated
