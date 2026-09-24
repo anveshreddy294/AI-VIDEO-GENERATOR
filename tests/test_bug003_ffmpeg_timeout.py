@@ -64,9 +64,9 @@ def test_composite_remedial_video_respects_timeout(tmp_path, monkeypatch):
         video.write_bytes(b"dummy video")
         audio.write_bytes(b"dummy audio")
 
-        # Mock ffmpeg binary to python executable
+        # Mock ffmpeg and ffprobe binaries to python executable
         import shutil
-        monkeypatch.setattr(shutil, "which", lambda name: sys.executable if name == "ffmpeg" else None)
+        monkeypatch.setattr(shutil, "which", lambda name: sys.executable if name in ("ffmpeg", "ffprobe") else None)
 
         # Monkeypatch run_subprocess_bounded to simulate timeout
         async def mock_run_timeout(*args, **kwargs):

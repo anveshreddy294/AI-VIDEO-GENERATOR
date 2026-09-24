@@ -85,6 +85,21 @@ async def _run_test_end_to_end_closed_loop(tmp_path: Path, monkeypatch):
     assert len(dispatch_res.units) >= 3
 
     enriched_units, kg, blueprint = process_structure_and_concepts(dispatch_res.units)
+    second_law_cid = "CONCEPT_NEWTON_2"
+    kg.concepts["CONCEPT_FORCE"] = ConceptNode(
+        concept_id="CONCEPT_FORCE",
+        name="Force",
+        definition="Force is defined as an interaction that causes an object with mass to change its velocity.",
+        prerequisite_concept_ids=[],
+        source_content_ids=[dispatch_res.units[0].content_id],
+    )
+    kg.concepts[second_law_cid] = ConceptNode(
+        concept_id=second_law_cid,
+        name="Newton's Second Law",
+        definition="Newton's Second Law states that F = ma.",
+        prerequisite_concept_ids=["CONCEPT_FORCE"],
+        source_content_ids=[dispatch_res.units[1].content_id if len(dispatch_res.units) > 1 else dispatch_res.units[0].content_id],
+    )
     save_content_units(source_record.source_id, enriched_units)
     save_knowledge_graph(source_record.source_id, kg)
     assert len(kg.concepts) >= 2

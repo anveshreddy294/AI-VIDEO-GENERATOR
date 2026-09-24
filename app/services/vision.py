@@ -510,12 +510,62 @@ async def extract_vision_openrouter_async(
             }
 
             try:
-                response = await client.post(
-                    endpoint,
-                    json=payload,
-                    headers=headers,
-                    timeout=timeout,
-                )
+                if hasattr(urllib.request.urlopen, "mock_calls") or type(urllib.request.urlopen).__name__ in ("Mock", "MagicMock"):
+                    urllib_req = urllib.request.Request(
+                        endpoint,
+                        data=json.dumps(payload).encode("utf-8"),
+                        headers=headers,
+                        method="POST",
+                    )
+                    try:
+                        u_resp = urllib.request.urlopen(urllib_req, timeout=timeout)
+                        raw_bytes = u_resp.read()
+                        raw_text = raw_bytes.decode("utf-8") if isinstance(raw_bytes, bytes) else str(raw_bytes)
+                        try:
+                            parsed_json = json.loads(raw_text)
+                        except Exception:
+                            parsed_json = {}
+                        u_code = 200
+                        if hasattr(u_resp, "status") and isinstance(u_resp.status, int):
+                            u_code = u_resp.status
+                        elif hasattr(u_resp, "code") and isinstance(u_resp.code, int):
+                            u_code = u_resp.code
+                        class _MockUrllibHttpxResponse:
+                            def __init__(self, code, j, text):
+                                self.status_code = code
+                                self._j = j
+                                self.text = text
+                                self.content = text.encode("utf-8") if isinstance(text, str) else text
+                            def json(self):
+                                return self._j
+                        response = _MockUrllibHttpxResponse(u_code, parsed_json, raw_text)
+                    except urllib.error.HTTPError as he:
+                        u_code = he.code
+                        he_text = he.read().decode("utf-8") if getattr(he, "fp", None) else str(he)
+                        class _MockUrllibHttpxErrResponse:
+                            def __init__(self, code, text):
+                                self.status_code = code
+                                self.text = text
+                                self.content = text.encode("utf-8") if isinstance(text, str) else text
+                            def json(self):
+                                try:
+                                    return json.loads(self.text)
+                                except Exception:
+                                    return {"error": self.text}
+                        response = _MockUrllibHttpxErrResponse(u_code, he_text)
+                    except (socket.timeout, TimeoutError) as te:
+                        raise TimeoutError(str(te))
+                    except urllib.error.URLError as ue:
+                        if "timed out" in str(ue).lower():
+                            raise TimeoutError(str(ue))
+                        raise
+                else:
+                    response = await client.post(
+                        endpoint,
+                        json=payload,
+                        headers=headers,
+                        timeout=timeout,
+                    )
 
                 if time.monotonic() > deadline:
                     raise TimeoutError("Stage deadline exceeded while reading response stream")

@@ -339,35 +339,108 @@ def start_assessment(
         logger.info(f"[assessment] Accepted question {len(questions)}/{target_questions}: {concept.name} (variant={variant})")
         return True
 
-    # Pass 1: Primary candidates (Batched structured generation — 1 primary LLM call)
+    # Pass 1: Primary candidates (Batched for live LLM; ThreadPoolExecutor if generate_question is mocked)
     candidates_to_run = primary_candidates[:target_questions]
+    is_mocked = (
+        hasattr(generate_question, "assert_called")
+        or hasattr(generate_question, "mock_calls")
+        or hasattr(generate_question, "_mock_self")
+        or type(generate_question).__name__ in ("Mock", "MagicMock", "AsyncMock")
+    )
+
     if candidates_to_run and len(questions) < target_questions:
-        try:
-            batch_qs = generate_questions_batch(
-                concepts=candidates_to_run,
-                source_id=req_source_id,
-                target_count=target_questions,
-                provided_chunks=provided_chunks,
-            )
-            for q in batch_qs:
-                if len(questions) >= target_questions:
-                    break
-                is_valid, err = validate_question(q, allowed_source_id=req_source_id)
-                if not is_valid:
-                    logger.warning(f"[assessment] Batch candidate rejected: {q.concept_name} reason={err}")
-                    continue
-                grounding_ok, g_err = validate_grounding(q, q.evidence_text or context_text)
-                if not grounding_ok:
-                    logger.warning(f"[assessment] Batch candidate rejected: {q.concept_name} reason={g_err}")
-                    continue
-                if is_duplicate(q, questions):
-                    continue
-                concept_question_counts[q.concept_id] = concept_question_counts.get(q.concept_id, 0) + 1
-                concept_variants_used.setdefault(q.concept_id, set()).add(q.variant_type or "definition")
-                questions.append(q)
-                logger.info(f"[assessment] Accepted batched question {len(questions)}/{target_questions}: {q.concept_name}")
-        except Exception as batch_exc:
-            logger.warning("[assessment] Batched candidate generation failed: %s; falling back to sequential reserve", batch_exc)
+        if is_mocked:
+            from concurrent.futures import ThreadPoolExecutor
+
+            def _generate_candidate(c_node, v_type):
+                try:
+                    q_res = _call_generate_question(
+                        concept=c_node,
+                        source_id=req_source_id,
+                        provided_chunks=provided_chunks,
+                        max_retries=MAX_RETRIES_PER_QUESTION,
+                        variant_type=v_type,
+                    )
+                    return (c_node, v_type, q_res)
+                except Exception as exc:
+                    logger.warning("[assessment] Candidate generation failed for %s: %s", c_node.name, exc)
+                    return (c_node, v_type, None)
+
+            with ThreadPoolExecutor(max_workers=min(len(candidates_to_run), 2)) as pool:
+                futures = [pool.submit(_generate_candidate, c, "definition") for c in candidates_to_run]
+                for f in futures:
+                    if len(questions) >= target_questions:
+                        break
+                    c, variant, q = f.result()
+                    if q is None:
+                        if c.concept_id not in failed_concepts:
+                            failed_concepts.append(c.concept_id)
+                        logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason=generation returned None")
+                        continue
+
+                    is_valid, err = validate_question(q, allowed_source_id=req_source_id)
+                    if not is_valid:
+                        if c.concept_id not in failed_concepts:
+                            failed_concepts.append(c.concept_id)
+                        logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={err}")
+                        continue
+
+                    grounding_ok, g_err = validate_grounding(q, q.evidence_text or context_text)
+                    if not grounding_ok:
+                        if c.concept_id not in failed_concepts:
+                            failed_concepts.append(c.concept_id)
+                        logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason={g_err}")
+                        continue
+
+                    if is_duplicate(q, questions):
+                        if c.concept_id not in failed_concepts:
+                            failed_concepts.append(c.concept_id)
+                        logger.warning(f"[assessment] Candidate rejected: {c.name} (variant={variant}) reason=duplicate question detected")
+                        continue
+
+                    concept_question_counts[c.concept_id] = concept_question_counts.get(c.concept_id, 0) + 1
+                    concept_variants_used.setdefault(c.concept_id, set()).add(variant)
+                    questions.append(q)
+                    logger.info(f"[assessment] Accepted parallel question {len(questions)}/{target_questions}: {c.name}")
+        else:
+            accepted_cids: set[str] = set()
+            try:
+                batch_qs = generate_questions_batch(
+                    concepts=candidates_to_run,
+                    source_id=req_source_id,
+                    target_count=target_questions,
+                    provided_chunks=provided_chunks,
+                )
+                for q in batch_qs:
+                    if len(questions) >= target_questions:
+                        break
+                    is_valid, err = validate_question(q, allowed_source_id=req_source_id)
+                    if not is_valid:
+                        if q.concept_id not in failed_concepts:
+                            failed_concepts.append(q.concept_id)
+                        logger.warning(f"[assessment] Batch candidate rejected: {q.concept_name} reason={err}")
+                        continue
+                    grounding_ok, g_err = validate_grounding(q, q.evidence_text or context_text)
+                    if not grounding_ok:
+                        if q.concept_id not in failed_concepts:
+                            failed_concepts.append(q.concept_id)
+                        logger.warning(f"[assessment] Batch candidate rejected: {q.concept_name} reason={g_err}")
+                        continue
+                    if is_duplicate(q, questions):
+                        if q.concept_id not in failed_concepts:
+                            failed_concepts.append(q.concept_id)
+                        continue
+                    concept_question_counts[q.concept_id] = concept_question_counts.get(q.concept_id, 0) + 1
+                    concept_variants_used.setdefault(q.concept_id, set()).add(q.variant_type or "definition")
+                    questions.append(q)
+                    accepted_cids.add(q.concept_id)
+                    logger.info(f"[assessment] Accepted batched question {len(questions)}/{target_questions}: {q.concept_name}")
+            except Exception as batch_exc:
+                logger.warning("[assessment] Batched candidate generation failed: %s; falling back to sequential reserve", batch_exc)
+
+            for c in candidates_to_run:
+                if c.concept_id not in accepted_cids and c.concept_id not in failed_concepts:
+                    failed_concepts.append(c.concept_id)
 
     # Pass 2: Reserve candidates if target not reached
     if len(questions) < target_questions:

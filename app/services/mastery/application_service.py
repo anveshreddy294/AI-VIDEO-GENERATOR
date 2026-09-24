@@ -185,6 +185,15 @@ class AdaptiveLearningService:
                     meta["stream_url"] = self._build_safe_stream_url(vid_id)
                     meta["video_ready"] = True
                     meta["video_job_id"] = latest_ready.remediation_job_id
+                    if action.action_type == LearningActionType.REMEDIATE:
+                        action.action_type = LearningActionType.REASSESS
+                        action.reason_code = ReasonCode.REASSESSMENT_PENDING
+                        if hasattr(self, "mastery_repo"):
+                            rec = self.mastery_repo.get(action.user_id, action.source_id, action.concept_id)
+                            if rec and rec.mastery_state in (MasteryState.REMEDIATING, MasteryState.WEAK):
+                                rec.mastery_state = MasteryState.REASSESSING
+                                rec.touch()
+                                self.mastery_repo.save(rec)
 
             if action.action_type == LearningActionType.REASSESS:
                 user_attempts = self.attempt_repo.list_for_concept(action.user_id, action.source_id, action.concept_id)
