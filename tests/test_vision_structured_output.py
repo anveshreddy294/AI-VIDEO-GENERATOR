@@ -98,11 +98,11 @@ def test_clean_json_response_fences():
     assert cleaned_chatter["confidence"] == 0.95
 
 
-def test_extract_vision_openrouter_schema_fallback_to_json_object(monkeypatch):
-    """Test Attempt 1 (json_schema) returning 404 transitions to Attempt 2 (json_object) and succeeds."""
+def test_extract_vision_openrouter_prompt_json_fallback_to_json_object(monkeypatch):
+    """Test Attempt 1 (Ling prompt_json) failing transitions to Attempt 2 (Gemma json_object) and succeeds."""
     monkeypatch.setattr(settings, "openrouter_api_key", "test-key-12345")
-    monkeypatch.setattr(settings, "vision_model", "openrouter/free")
-    monkeypatch.setattr(settings, "vision_fallback_model", "")
+    monkeypatch.setattr(settings, "vision_model", "inclusionai/ling-3.0-flash-vl:free")
+    monkeypatch.setattr(settings, "vision_fallback_model", "google/gemma-4-31b-it:free")
     monkeypatch.setattr(settings, "vision_timeout_seconds", 5.0)
 
     requests_made = []
@@ -111,17 +111,17 @@ def test_extract_vision_openrouter_schema_fallback_to_json_object(monkeypatch):
         payload = kwargs.get("json", {})
         requests_made.append(payload)
 
-        # Attempt 1: json_schema -> simulate 404
-        if payload.get("response_format", {}).get("type") == "json_schema":
+        # Attempt 1: Ling prompt_json (no response_format) -> simulate 503
+        if "response_format" not in payload:
             return httpx.Response(
-                status_code=404,
-                text='{"error": {"message": "No endpoint found supporting json_schema"}}',
+                status_code=503,
+                text='{"error": {"message": "Service unavailable"}}',
                 request=httpx.Request("POST", url),
             )
 
-        # Attempt 2: json_object -> succeed
+        # Attempt 2: Gemma json_object -> succeed
         resp_obj = {
-            "model": "dots-studio/dots-3-note-preview:free",
+            "model": "google/gemma-4-31b-it:free",
             "choices": [
                 {
                     "message": {
@@ -142,15 +142,15 @@ def test_extract_vision_openrouter_schema_fallback_to_json_object(monkeypatch):
     assert isinstance(result, VisionExtractionData)
     assert result.confidence == 0.95
     assert len(requests_made) == 2
-    assert requests_made[0]["response_format"]["type"] == "json_schema"
+    assert "response_format" not in requests_made[0]
     assert requests_made[1]["response_format"]["type"] == "json_object"
 
 
 def test_extract_vision_openrouter_bounded_at_most_two_requests(monkeypatch):
     """Ensure hard cap of at most 2 requests when both attempts fail."""
     monkeypatch.setattr(settings, "openrouter_api_key", "test-key-12345")
-    monkeypatch.setattr(settings, "vision_model", "openrouter/free")
-    monkeypatch.setattr(settings, "vision_fallback_model", "")
+    monkeypatch.setattr(settings, "vision_model", "inclusionai/ling-3.0-flash-vl:free")
+    monkeypatch.setattr(settings, "vision_fallback_model", "google/gemma-4-31b-it:free")
     monkeypatch.setattr(settings, "vision_timeout_seconds", 5.0)
 
     requests_made = []
@@ -176,8 +176,8 @@ def test_extract_vision_openrouter_bounded_at_most_two_requests(monkeypatch):
 def test_extract_vision_fallback_unavailable_code(monkeypatch):
     """When fallback model is configured and Attempt 2 fails with 404, error_code is VISION_FALLBACK_UNAVAILABLE."""
     monkeypatch.setattr(settings, "openrouter_api_key", "test-key-12345")
-    monkeypatch.setattr(settings, "vision_model", "openrouter/free")
-    monkeypatch.setattr(settings, "vision_fallback_model", "inclusionai/ling-3.0-flash-vl:free")
+    monkeypatch.setattr(settings, "vision_model", "inclusionai/ling-3.0-flash-vl:free")
+    monkeypatch.setattr(settings, "vision_fallback_model", "google/gemma-4-31b-it:free")
     monkeypatch.setattr(settings, "vision_timeout_seconds", 5.0)
 
     async def mock_post(url, *args, **kwargs):

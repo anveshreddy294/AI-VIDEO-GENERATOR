@@ -2,8 +2,8 @@
 
 Exercises the complete real pipeline against the running FastAPI application:
 1. Upload image with title 'Polar Research Station'
-2. Vision extraction via OpenRouter (openrouter/free)
-3. Local reasoning via Ollama llama3.2:3b
+2. Vision extraction via OpenRouter (inclusionai/ling-3.0-flash-vl:free)
+3. Local reasoning via Ollama qwen3:1.7b
 4. Grounded concept canonicalization to CONCEPT_POLAR_RESEARCH_STATION
 5. Diagnostic question generation & registration
 6. Submit intentional wrong answer -> WEAK state

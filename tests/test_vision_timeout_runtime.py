@@ -70,16 +70,16 @@ class TestVisionTimeoutRuntime(unittest.TestCase):
     def setUp(self):
         self.orig_provider = getattr(settings, "vision_provider", "openrouter")
         self.orig_api_key = getattr(settings, "openrouter_api_key", "")
-        self.orig_model = getattr(settings, "vision_model", "openrouter/free")
-        self.orig_fallback = getattr(settings, "vision_fallback_model", "inclusionai/ling-3.0-flash-vl:free")
-        self.orig_timeout = getattr(settings, "vision_timeout_seconds", 60.0)
-        self.orig_stage_timeout = getattr(settings, "vision_stage_timeout_seconds", 90.0)
-        self.orig_extraction_timeout = getattr(settings, "extraction_stage_timeout_seconds", 100.0)
+        self.orig_model = getattr(settings, "vision_model", "inclusionai/ling-3.0-flash-vl:free")
+        self.orig_fallback = getattr(settings, "vision_fallback_model", "google/gemma-4-31b-it:free")
+        self.orig_timeout = getattr(settings, "vision_timeout_seconds", 35.0)
+        self.orig_stage_timeout = getattr(settings, "vision_stage_timeout_seconds", 75.0)
+        self.orig_extraction_timeout = getattr(settings, "extraction_stage_timeout_seconds", 85.0)
 
         settings.vision_provider = "openrouter"
         settings.openrouter_api_key = "test_openrouter_api_key_valid"
-        settings.vision_model = "openrouter/free"
-        settings.vision_fallback_model = "inclusionai/ling-3.0-flash-vl:free"
+        settings.vision_model = "inclusionai/ling-3.0-flash-vl:free"
+        settings.vision_fallback_model = "google/gemma-4-31b-it:free"
 
         # Clear in-memory vision cache before each test
         _VISION_EXTRACTION_CACHE.clear()
@@ -253,7 +253,7 @@ class TestVisionTimeoutRuntime(unittest.TestCase):
 
         # Verify cache key structure
         image_sha = hashlib.sha256(sample_img).hexdigest()
-        expected_key = f"{image_sha}:openrouter/free:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
+        expected_key = f"{image_sha}:inclusionai/ling-3.0-flash-vl:free:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
         self.assertIn(expected_key, _VISION_EXTRACTION_CACHE)
 
     @patch("app.services.vision._mock_vision_extraction")

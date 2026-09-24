@@ -65,7 +65,7 @@ def setup_teardown():
 
 
 # =========================================================================
-# Scenario A: Async vision extraction succeeds with openrouter/free (Attempt 1)
+# Scenario A: Async vision extraction succeeds with primary candidate (Attempt 1)
 # =========================================================================
 def test_scenario_a_async_vision_attempt1_success(monkeypatch):
     async def _run():
@@ -90,9 +90,9 @@ def test_scenario_a_async_vision_attempt1_success(monkeypatch):
             assert result.headings == ["Newton's Second Law of Motion"]
             assert result.formulas == ["F = m * a"]
             assert mock_post.call_count == 1
-            # Check payload format
+            # Check payload format: primary candidate (Ling) receives NO response_format
             kwargs = mock_post.call_args.kwargs
-            assert kwargs["json"]["response_format"]["type"] == "json_schema"
+            assert "response_format" not in kwargs["json"]
 
     asyncio.run(_run())
 
