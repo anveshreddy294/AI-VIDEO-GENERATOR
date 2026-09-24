@@ -44,6 +44,9 @@ SAFE_METADATA_KEYS = {
     "provider_used",
     "grounding_verified",
     "dimension_validated",
+    "status",
+    "failure_code",
+    "warning",
 }
 
 
@@ -107,6 +110,7 @@ class PipelineJob(BaseModel):
     progress_percent: int = 0
     events: list[ProgressEvent] = Field(default_factory=list)
     result: dict[str, Any] | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     error: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -290,6 +294,8 @@ class JobManager:
             job.progress_percent = event.progress_percent
             job.updated_at = event.timestamp
             job.events.append(event)
+            if safe_meta:
+                job.metadata.update(safe_meta)
             if terminal:
                 job.is_finished = True
 
