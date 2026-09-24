@@ -50,6 +50,7 @@ _embed_diagnostics_var: contextvars.ContextVar[StageDiagnostics | None] = contex
 
 
 _active_embedding_dim: int = 768
+_resolved_ollama_model: str | None = None
 
 
 def get_last_embed_diagnostics() -> StageDiagnostics | None:
@@ -132,39 +133,74 @@ def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
     if not texts:
         return []
 
+    global _resolved_ollama_model
+
     base_url = (getattr(settings, "ollama_base_url", None) or getattr(settings, "ollama_url", "http://localhost:11434")).rstrip("/")
-    embed_model = getattr(settings, "embedding_model", "embeddinggemma")
+    primary_model = (
+        getattr(settings, "ollama_embed_model", None)
+        or getattr(settings, "embedding_model", "embeddinggemma")
+    )
     timeout = float(getattr(settings, "ollama_timeout", 30.0))
 
-    url = f"{base_url}/api/embed"
-    payload = json.dumps({"model": embed_model, "input": texts}).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    candidates: list[str] = []
+    if _resolved_ollama_model and _resolved_ollama_model not in candidates:
+        candidates.append(_resolved_ollama_model)
+    if primary_model and primary_model not in candidates:
+        candidates.append(primary_model)
+    # Common 768-dim Ollama embedding models for automatic fallback when configured model is not pulled
+    for fallback in ("nomic-embed-text", "nomic-embed-text:latest"):
+        if fallback not in candidates:
+            candidates.append(fallback)
 
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            resp_bytes = resp.read()
-    except urllib.error.HTTPError as http_err:
-        logger.warning(
-            "[vector_store] Ollama HTTP error during batch embedding (%s): %s",
-            url, http_err
+    url = f"{base_url}/api/embed"
+    resp_bytes: bytes | None = None
+    successful_model: str | None = None
+
+    for idx, model_name in enumerate(candidates):
+        payload = json.dumps({"model": model_name, "input": texts}).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
         )
-        return None
-    except urllib.error.URLError as url_err:
-        logger.warning(
-            "[vector_store] Ollama connection failure/timeout during batch embedding (%s): %s",
-            url, url_err
-        )
-        return None
-    except TimeoutError as to_err:
-        logger.warning(
-            "[vector_store] Ollama request timed out after %.1fs during batch embedding: %s",
-            timeout, to_err
-        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                resp_bytes = resp.read()
+                successful_model = model_name
+                break
+        except urllib.error.HTTPError as http_err:
+            if http_err.code == 404 and idx < len(candidates) - 1:
+                logger.info(
+                    "[vector_store] Ollama model '%s' not found (HTTP 404); attempting fallback '%s'",
+                    model_name,
+                    candidates[idx + 1],
+                )
+                continue
+            logger.warning(
+                "[vector_store] Ollama HTTP error during batch embedding (%s, model=%s): %s",
+                url,
+                model_name,
+                http_err,
+            )
+            return None
+        except urllib.error.URLError as url_err:
+            logger.warning(
+                "[vector_store] Ollama connection failure/timeout during batch embedding (%s): %s",
+                url,
+                url_err,
+            )
+            return None
+        except TimeoutError as to_err:
+            logger.warning(
+                "[vector_store] Ollama request timed out after %.1fs during batch embedding: %s",
+                timeout,
+                to_err,
+            )
+            return None
+
+    if resp_bytes is None:
         return None
 
     # 1. Parse JSON
@@ -245,6 +281,8 @@ def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
 
         clean_vectors.append(clean_vector)
 
+    if successful_model:
+        _resolved_ollama_model = successful_model
     return clean_vectors
 
 
@@ -299,30 +337,33 @@ def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> 
     if coll_key in _INDEXES_ENSURED:
         return
 
-    # SEC / PERF: Ensure payload indexes for high-speed tenant-isolated retrieval
-    index_fields = [
-        ("layer", qmodels.PayloadSchemaType.KEYWORD),
-        ("source_id", qmodels.PayloadSchemaType.KEYWORD),
-        ("user_id", qmodels.PayloadSchemaType.KEYWORD),
-        ("session_id", qmodels.PayloadSchemaType.KEYWORD),
-        ("source_version", qmodels.PayloadSchemaType.KEYWORD),
-        ("type", qmodels.PayloadSchemaType.KEYWORD),
-        ("retrieval_allowed", qmodels.PayloadSchemaType.BOOL),
-        ("injection_status", qmodels.PayloadSchemaType.KEYWORD),
-        ("concept_ids", qmodels.PayloadSchemaType.KEYWORD),
-        ("chunk_id", qmodels.PayloadSchemaType.KEYWORD),
-        ("video_id", qmodels.PayloadSchemaType.KEYWORD),
-        ("scene_id", qmodels.PayloadSchemaType.KEYWORD),
-    ]
-    for field_name, field_schema in index_fields:
-        try:
-            client.create_payload_index(
-                collection_name=settings.collection_name,
-                field_name=field_name,
-                field_schema=field_schema,
-            )
-        except Exception:
-            pass
+    # Payload indexes only apply to server Qdrant; skip on local/in-memory Qdrant
+    is_local = type(getattr(client, "_client", None)).__name__ in ("QdrantLocal", "LocalQdrant")
+    if not is_local:
+        # SEC / PERF: Ensure payload indexes for high-speed tenant-isolated retrieval
+        index_fields = [
+            ("layer", qmodels.PayloadSchemaType.KEYWORD),
+            ("source_id", qmodels.PayloadSchemaType.KEYWORD),
+            ("user_id", qmodels.PayloadSchemaType.KEYWORD),
+            ("session_id", qmodels.PayloadSchemaType.KEYWORD),
+            ("source_version", qmodels.PayloadSchemaType.KEYWORD),
+            ("type", qmodels.PayloadSchemaType.KEYWORD),
+            ("retrieval_allowed", qmodels.PayloadSchemaType.BOOL),
+            ("injection_status", qmodels.PayloadSchemaType.KEYWORD),
+            ("concept_ids", qmodels.PayloadSchemaType.KEYWORD),
+            ("chunk_id", qmodels.PayloadSchemaType.KEYWORD),
+            ("video_id", qmodels.PayloadSchemaType.KEYWORD),
+            ("scene_id", qmodels.PayloadSchemaType.KEYWORD),
+        ]
+        for field_name, field_schema in index_fields:
+            try:
+                client.create_payload_index(
+                    collection_name=settings.collection_name,
+                    field_name=field_name,
+                    field_schema=field_schema,
+                )
+            except Exception:
+                pass
 
     _INDEXES_ENSURED.add(coll_key)
 

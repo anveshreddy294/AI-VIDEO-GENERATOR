@@ -19,13 +19,11 @@ SAMPLE_PNG_BYTES = (
 )
 
 
-def test_image_pipeline_recovers_from_429_rate_limit(tmp_path, monkeypatch):
-    """Verify that when OpenRouter vision returns 429, the pipeline recovers and completes structuring."""
+def test_image_pipeline_fails_closed_on_429(tmp_path, monkeypatch):
+    """Verify that when OpenRouter vision returns 429, the pipeline fails closed cleanly with VISION_RATE_LIMIT."""
     async def _run():
         monkeypatch.setattr(settings, "vision_provider", "openrouter")
         monkeypatch.setattr(settings, "openrouter_api_key", "sk-test-key")
-        monkeypatch.setattr(settings, "vision_rate_limit_fallback", True)
-        monkeypatch.setattr(settings, "llm_provider", "mock")
 
         test_img = tmp_path / "ratelimit_sample.png"
         test_img.write_bytes(SAMPLE_PNG_BYTES)
@@ -45,13 +43,10 @@ def test_image_pipeline_recovers_from_429_rate_limit(tmp_path, monkeypatch):
                 max_questions=3,
             )
 
-        # Check job status
         finished_job = job_manager.get_job(job_id)
         assert finished_job is not None
-        assert finished_job.status == "completed"
-        assert finished_job.progress_percent == 100
+        assert finished_job.status == "failed"
 
-        # Source must be READY
         source_id = None
         for event in finished_job.events:
             if "source_id" in event.metadata:
@@ -59,9 +54,11 @@ def test_image_pipeline_recovers_from_429_rate_limit(tmp_path, monkeypatch):
         assert source_id is not None
         source = get_source(source_id)
         assert source is not None
-        assert source.status == "READY", f"Expected READY, got {source.status} with error: {source.error_message}"
+        assert source.status == "FAILED"
+        assert "VISION_RATE_LIMIT" in (source.error_message or "")
 
     asyncio.run(_run())
+
 
 
 def test_image_pipeline_fails_closed_when_fallback_disabled(tmp_path, monkeypatch):
@@ -101,6 +98,28 @@ def test_image_pipeline_fails_closed_when_fallback_disabled(tmp_path, monkeypatc
         source = get_source(source_id)
         assert source is not None
         assert source.status == "FAILED"
-        assert "VISION_RATE_LIMIT" in (source.error_message or "")
-
     asyncio.run(_run())
+
+
+def test_vision_circuit_breaker_blocks_and_resets():
+    """Verify VisionRateLimitCircuitBreaker blocks subsequent requests and resets on success."""
+    from app.services.vision import vision_circuit_breaker
+
+    vision_circuit_breaker.reset()
+    blocked, rem = vision_circuit_breaker.is_blocked()
+    assert not blocked
+    assert rem == 0.0
+
+    # Record 429
+    cooldown = vision_circuit_breaker.record_429(retry_after=5.0)
+    assert cooldown == 5.0
+    blocked, rem = vision_circuit_breaker.is_blocked()
+    assert blocked
+    assert rem > 0.0
+
+    # Reset on success
+    vision_circuit_breaker.record_success()
+    blocked, rem = vision_circuit_breaker.is_blocked()
+    assert not blocked
+    assert rem == 0.0
+

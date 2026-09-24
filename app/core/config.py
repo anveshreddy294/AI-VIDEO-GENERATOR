@@ -126,9 +126,7 @@ class Settings:
             os.getenv("EXTRACTION_STAGE_TIMEOUT_SECONDS", str(self.vision_stage_timeout_seconds + 10.0))
         )
         self.vision_max_retries: int = int(os.getenv("VISION_MAX_RETRIES", "1"))
-        self.vision_rate_limit_fallback: bool = (
-            os.getenv("VISION_RATE_LIMIT_FALLBACK", "true").lower() in ("true", "1", "yes")
-        )
+        self.vision_rate_limit_fallback: bool = False
         self.pipeline_config_version: str = os.getenv("PIPELINE_CONFIG_VERSION", "v1").strip()
 
 

@@ -13,7 +13,7 @@ if sys.platform == "win32":
 from contextlib import asynccontextmanager
 from .core.config import settings
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -78,6 +78,13 @@ app.include_router(video_router)
 app.include_router(qa_router)
 app.include_router(models_router)
 app.include_router(learning_router)
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/apple-touch-icon.png", include_in_schema=False)
+@app.get("/apple-touch-icon-precomposed.png", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/health")

@@ -217,57 +217,20 @@ async def _execute_upload_and_assess(
         except VisionExtractionFailed as exc:
             err_code = getattr(exc, "error_code", "VISION_PROVIDER_FAILED")
             logger.warning("[pipeline] Vision extraction failed for source %s (code=%s): %s", source_id, err_code, exc)
-            if err_code == "VISION_RATE_LIMIT" and getattr(settings, "vision_rate_limit_fallback", True):
-                logger.warning(
-                    "[pipeline] OpenRouter vision rate limit reached (HTTP 429). Recovering with structured fallback evidence for source %s",
-                    source_id,
-                )
-                await job_manager.emit_event(
-                    job_id=job_id,
-                    stage="extracting_content",
-                    status="running",
-                    message="OpenRouter rate-limited (HTTP 429). Recovering with structured evidence fallback...",
-                    progress_percent=25,
-                    metadata={"source_id": source_id, "warning": "VISION_RATE_LIMIT_FALLBACK"},
-                )
-                from app.services.schemas import ContentUnit
-                from app.services.dispatcher import ExtractionResult
-                from app.services.vision import _mock_vision_extraction, format_vision_markdown
-
-                fallback_data = _mock_vision_extraction(source=persistent_file.name)
-                vis_md = format_vision_markdown(fallback_data)
-                unit = ContentUnit(
-                    source_id=source_id,
-                    asset_id=asset_id,
-                    modality="image",
-                    text=f"[IMAGE: {persistent_file.name}]\n{vis_md}",
-                    visual_description=vis_md,
-                    sequence_index=0,
-                    image_id=f"IMG_{persistent_file.stem}",
-                    image_path=str(persistent_file),
-                    extraction_method="vision_fallback",
-                    confidence_score=0.90,
-                )
-                raw_units = [unit]
-                extraction_result = ExtractionResult(
-                    source_id=source_id,
-                    asset_id=asset_id,
-                    modality="image",
-                    units=raw_units,
-                )
+            if err_code == "VISION_TIMEOUT":
+                safe_msg = "VISION_TIMEOUT: Image understanding exceeded the configured time limit. Please retry."
+            elif err_code == "VISION_RATE_LIMIT":
+                safe_msg = f"VISION_RATE_LIMIT: OpenRouter rate limit reached (HTTP 429). {exc}"
             else:
-                if err_code == "VISION_TIMEOUT":
-                    safe_msg = "VISION_TIMEOUT: Image understanding exceeded the configured time limit. Please retry."
-                else:
-                    safe_msg = f"{err_code}: {exc}"
-                update_source_status(source_id, "FAILED", error_message=safe_msg)
-                await job_manager.fail_job(
-                    job_id=job_id,
-                    stage="extracting_content",
-                    error_message=safe_msg,
-                    metadata={"source_id": source_id, "status": "FAILED", "failure_code": err_code},
-                )
-                return
+                safe_msg = f"{err_code}: {exc}"
+            update_source_status(source_id, "FAILED", error_message=safe_msg)
+            await job_manager.fail_job(
+                job_id=job_id,
+                stage="extracting_content",
+                error_message=safe_msg,
+                metadata={"source_id": source_id, "status": "FAILED", "failure_code": err_code},
+            )
+            return
         except asyncio.CancelledError:
             logger.info("[pipeline] extraction_stage_cancelled source_id=%s", source_id)
             update_source_status(source_id, "FAILED", error_message="Job was cancelled")

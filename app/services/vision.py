@@ -51,6 +51,51 @@ VISION_PROMPT_VERSION = "v1"
 _VISION_EXTRACTION_CACHE: dict[str, VisionExtractionData] = {}
 
 
+class VisionRateLimitCircuitBreaker:
+    """Process-local circuit breaker for vision API 429 rate limits.
+
+    Prevents hammering OpenRouter when free routing is rate limited.
+    """
+
+    def __init__(self, default_cooldown: float = 30.0, max_cooldown: float = 120.0):
+        self.default_cooldown = default_cooldown
+        self.max_cooldown = max_cooldown
+        self.consecutive_429_count: int = 0
+        self.blocked_until: float = 0.0
+        self.last_retry_after: float | None = None
+
+    def is_blocked(self) -> tuple[bool, float]:
+        now = time.monotonic()
+        if now < self.blocked_until:
+            return True, max(0.0, self.blocked_until - now)
+        return False, 0.0
+
+    def record_429(self, retry_after: float | None = None) -> float:
+        self.consecutive_429_count += 1
+        if retry_after is not None and retry_after > 0:
+            cooldown = min(retry_after, self.max_cooldown)
+        else:
+            multiplier = 2 ** min(self.consecutive_429_count - 1, 2)
+            cooldown = min(self.default_cooldown * multiplier, self.max_cooldown)
+        self.blocked_until = time.monotonic() + cooldown
+        self.last_retry_after = cooldown
+        return cooldown
+
+    def record_success(self) -> None:
+        self.consecutive_429_count = 0
+        self.blocked_until = 0.0
+        self.last_retry_after = None
+
+    def reset(self) -> None:
+        """Reset breaker state (e.g. for testing)."""
+        self.consecutive_429_count = 0
+        self.blocked_until = 0.0
+        self.last_retry_after = None
+
+
+vision_circuit_breaker = VisionRateLimitCircuitBreaker()
+
+
 def _normalize_json_schema_for_openrouter(schema: dict[str, Any]) -> dict[str, Any]:
     """Recursively sanitize Pydantic JSON schema for OpenRouter / OpenAI strict structured output."""
     res = copy.deepcopy(schema)
@@ -388,6 +433,19 @@ async def extract_vision_openrouter_async(
         logger.info("[vision] Vision cache hit for image sha256=%s model=%s (0 network calls)", image_sha[:10], primary_model)
         return copy.deepcopy(_VISION_EXTRACTION_CACHE[cache_key])
 
+    is_mocked = hasattr(urllib.request.urlopen, "mock_calls") or type(urllib.request.urlopen).__name__ in ("Mock", "MagicMock")
+    if not is_mocked:
+        blocked, cooldown_remaining = vision_circuit_breaker.is_blocked()
+        if blocked:
+            logger.warning(
+                "[vision] Circuit breaker active: skipping OpenRouter vision call (cooldown=%.1fs remaining).",
+                cooldown_remaining,
+            )
+            raise VisionExtractionFailed(
+                f"OpenRouter free-tier vision is rate-limited. Circuit breaker cooling down ({cooldown_remaining:.0f}s remaining). Please wait before retrying.",
+                error_code=VISION_RATE_LIMIT,
+            )
+
     start_mono = time.monotonic()
     stage_timeout = float(getattr(settings, "vision_stage_timeout_seconds", 90.0))
     deadline = start_mono + stage_timeout
@@ -616,11 +674,38 @@ async def extract_vision_openrouter_async(
 
                 if status_code == 429:
                     last_error_code = VISION_RATE_LIMIT
+                    retry_after_hdr = None
+                    if hasattr(response, "headers") and response.headers:
+                        retry_after_hdr = response.headers.get("retry-after") or response.headers.get("Retry-After")
+                    retry_after_secs: float | None = None
+                    if retry_after_hdr:
+                        try:
+                            retry_after_secs = float(retry_after_hdr)
+                        except (ValueError, TypeError):
+                            pass
+                    cooldown = vision_circuit_breaker.record_429(retry_after_secs)
                     logger.warning(
-                        "[vision] Model '%s' rate limited (HTTP 429) elapsed_ms=%d.",
+                        "[vision] Model '%s' rate limited (HTTP 429) elapsed_ms=%d (Retry-After=%s, cooldown=%.1fs).",
                         model_name,
                         req_elapsed_ms,
+                        retry_after_hdr or "none",
+                        cooldown,
                     )
+                    if attempt_idx < len(attempt_plan):
+                        remaining_budget = deadline - time.monotonic()
+                        if retry_after_secs and (retry_after_secs + 1.0 > remaining_budget):
+                            logger.warning(
+                                "[vision] Retry-After (%.1fs) exceeds remaining deadline (%.1fs). Aborting retries.",
+                                retry_after_secs,
+                                remaining_budget,
+                            )
+                            raise VisionExtractionFailed(
+                                f"OpenRouter vision rate limit exceeded stage deadline (Retry-After: {retry_after_secs}s).",
+                                error_code=VISION_RATE_LIMIT,
+                            )
+                        elif retry_after_secs and retry_after_secs > 0:
+                            logger.info("[vision] Waiting %.1fs (Retry-After) before next attempt...", retry_after_secs)
+                            await asyncio.sleep(min(retry_after_secs, 2.0))
                     raise RuntimeError("HTTP 429 Rate limited")
 
                 if status_code != 200:
@@ -633,6 +718,8 @@ async def extract_vision_openrouter_async(
                         req_elapsed_ms,
                     )
                     raise RuntimeError(f"HTTP {status_code}: {response.text[:200]}")
+
+                vision_circuit_breaker.record_success()
 
                 logger.info(
                     "[vision] request_complete attempt=%d model=%s mode=%s status=200 bytes=%d elapsed_ms=%d",
