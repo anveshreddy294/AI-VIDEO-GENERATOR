@@ -12,8 +12,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
+from ..assessment.schemas import SafeOption
 from .attempt_models import AssessmentType
 from .models import MasteryState
 from .remediation_models import RemediationJobStatus
@@ -131,6 +132,7 @@ class AssessmentSubmissionResponseDTO(BaseModel):
     reassessment_attempt_count: int
     remediation_attempt_count: int
     next_action: NextActionResponse
+    explanation: str | None = None
 
 
 class SafeReassessmentQuestionResponse(BaseModel):
@@ -144,9 +146,65 @@ class SafeReassessmentQuestionResponse(BaseModel):
     concept_id: str
     source_id: str
     stem: str
-    options: list[str]
+    options: list[SafeOption]
     difficulty: str = "intermediate"
     variant_type: str = "application"
+    question_number: int = 1
+    total_questions: int = 2
+
+    @field_validator("options", mode="before")
+    @classmethod
+    def _validate_and_coerce_options(cls, v: Any) -> list[SafeOption]:
+        if not isinstance(v, (list, tuple)):
+            raise ValueError("options must be a list")
+        if len(v) != 4:
+            raise ValueError(f"options must contain exactly 4 items, got {len(v)}")
+
+        coerced: list[SafeOption] = []
+        texts: list[str] = []
+        for idx, item in enumerate(v):
+            if isinstance(item, SafeOption):
+                opt = item
+            elif isinstance(item, dict):
+                opt = SafeOption(
+                    index=int(item.get("index", idx)),
+                    text=str(item.get("text", "")).strip(),
+                )
+            elif isinstance(item, str):
+                opt = SafeOption(index=idx, text=item.strip())
+            elif hasattr(item, "text"):
+                opt = SafeOption(
+                    index=int(getattr(item, "index", idx)),
+                    text=str(item.text).strip(),
+                )
+            else:
+                opt = SafeOption(index=idx, text=str(item).strip())
+
+            if not opt.text:
+                raise ValueError(f"Option at index {opt.index} has empty text")
+
+            clean_text = opt.text.lower()
+            if clean_text in texts:
+                # Disambiguate duplicate option text cleanly rather than failing response validation
+                opt = SafeOption(index=opt.index, text=f"{opt.text} ({idx + 1})")
+                clean_text = opt.text.lower()
+
+            texts.append(clean_text)
+            coerced.append(opt)
+
+        indices = [o.index for o in coerced]
+        if sorted(indices) != [0, 1, 2, 3]:
+            for i, o in enumerate(coerced):
+                o.index = i
+
+        return coerced
+
+    @field_validator("variant_type", mode="before")
+    @classmethod
+    def _validate_variant_type(cls, v: Any) -> str:
+        if not v:
+            return "application"
+        return str(v)
 
 
 class RemediationStartRequestDTO(BaseModel):

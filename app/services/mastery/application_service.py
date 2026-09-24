@@ -18,6 +18,7 @@ import logging
 from typing import Any
 from pathlib import Path
 
+from ..assessment.schemas import SafeOption
 from ..registry import get_source_record, load_knowledge_graph
 from ..schemas import KnowledgeGraph
 from .api_schemas import (
@@ -44,6 +45,7 @@ from .dependency_provider import ConceptDependencyProvider
 from .models import DomainInvariantViolation, MasteryRecord, MasteryState
 from .personalization_service import PersonalizationService
 from .question_registry import AuthoritativeQuestion, InMemoryQuestionRegistry, QuestionRegistry
+from .reassessment_queue import ReassessmentQueue, ReassessmentSession
 from .reassessment_service import ReassessmentService
 from .misconception_models import (
     MisconceptionEvidence,
@@ -93,6 +95,7 @@ class AdaptiveLearningService:
         video_engine_fn: Any | None = None,
         misconception_repo: MisconceptionRepository | None = None,
         strategy_selector: TeachingStrategySelector | None = None,
+        reassessment_queue: ReassessmentQueue | None = None,
     ) -> None:
         self.mastery_repo = mastery_repo or InMemoryMasteryRepository()
         self.attempt_repo = attempt_repo or InMemoryAssessmentAttemptRepository()
@@ -101,6 +104,7 @@ class AdaptiveLearningService:
         self.state_machine = state_machine or MasteryStateMachine()
         self.misconception_repo = misconception_repo or InMemoryMisconceptionRepository()
         self.strategy_selector = strategy_selector or TeachingStrategySelector()
+        self.reassessment_queue = reassessment_queue or ReassessmentQueue()
 
         self.attempt_service = AssessmentAttemptService(
             attempt_repo=self.attempt_repo,
@@ -213,7 +217,7 @@ class AdaptiveLearningService:
                             "question_id": pending_q.question_id,
                             "concept_id": pending_q.concept_id,
                             "stem": pending_q.stem,
-                            "options": pending_q.options,
+                            "options": [opt.model_dump() if hasattr(opt, "model_dump") else opt for opt in pending_q.get_safe_options()],
                             "difficulty": pending_q.difficulty,
                         }
 
@@ -509,35 +513,57 @@ class AdaptiveLearningService:
         """Submit assessment attempt for server-side grading and mastery update."""
         kg = self._verify_source_access(user_id=user_id, source_id=source_id)
 
-        # Enforce concept exists in grounded curriculum
+        clean_user = user_id.strip()
+        clean_source = source_id.strip()
         clean_concept = submission.concept_id.strip()
+        clean_qid = submission.question_id.strip()
+
+        # Enforce concept exists in grounded curriculum
         if clean_concept not in kg.concepts:
             raise GroundingIntegrityError(
                 f"Concept '{clean_concept}' does not exist in grounded curriculum for source '{source_id}'."
             )
 
+        # Check if question is stale or invalidated in reassessment queue
+        if self.reassessment_queue.is_stale_or_invalidated(clean_user, clean_source, clean_concept, clean_qid):
+            raise AssessmentServiceError(
+                f"Question '{clean_qid}' is stale or from an invalidated cycle and cannot be submitted."
+            )
+
         req = AssessmentSubmissionRequest(
             attempt_id=submission.attempt_id.strip(),
-            user_id=user_id.strip(),
-            source_id=source_id.strip(),
+            user_id=clean_user,
+            source_id=clean_source,
             session_id=submission.session_id.strip() if submission.session_id else None,
             concept_id=clean_concept,
-            question_id=submission.question_id.strip(),
+            question_id=clean_qid,
             selected_answer=submission.selected_answer,
             assessment_type=submission.assessment_type,
         )
 
         result = self.attempt_service.submit_attempt(req)
 
+        # Retrieve authoritative question for explanation
+        authoritative_q = self.question_registry.get(clean_qid)
+        explanation_text = getattr(authoritative_q, "explanation", None) if authoritative_q else None
+
         # Resolve next action after attempt mutation
         next_action = self.personalization_service.get_next_action(
-            user_id=user_id.strip(),
-            source_id=source_id.strip(),
+            user_id=clean_user,
+            source_id=clean_source,
             session_id=submission.session_id.strip() if submission.session_id else None,
             knowledge_graph=kg,
         )
 
+        # Advance or invalidate reassessment queue based on outcome and state
         m = result.mastery
+        if m.mastery_state != MasteryState.REASSESSING:
+            # Concept has left REASSESSING (e.g. MASTERED or returned to WEAK/NEEDS_SUPPORT)
+            self.reassessment_queue.invalidate_concept(clean_user, clean_source, clean_concept)
+        else:
+            # Still reassessing: advance queue to next question
+            self.reassessment_queue.advance(clean_user, clean_source, clean_concept, clean_qid)
+
         return AssessmentSubmissionResponseDTO(
             attempt_id=result.attempt.attempt_id,
             user_id=result.attempt.user_id,
@@ -554,6 +580,7 @@ class AdaptiveLearningService:
             reassessment_attempt_count=m.reassessment_attempt_count,
             remediation_attempt_count=m.remediation_attempt_count,
             next_action=self._to_next_action_dto(next_action),
+            explanation=explanation_text,
         )
 
     # -------------------------------------------------------------------------
@@ -567,12 +594,12 @@ class AdaptiveLearningService:
         session_id: str | None = None,
         previous_question_id: str | None = None,
     ) -> SafeReassessmentQuestionResponse:
-        """Generate a novel grounded reassessment question for a concept in REASSESSING state.
+        """Generate or serve a novel grounded reassessment question for a concept in REASSESSING state.
 
-        Idempotency / Spam Guard:
-        If there is already a registered unanswered reassessment question for this
-        exact (user, source, concept) in the current session, return it rather than
-        spamming new questions.
+        Idempotency / Queue Flow:
+        If there is an active queued reassessment session for this (user, source, concept),
+        serve the current unanswered question.
+        Otherwise, generate a batch via ReassessmentService, enqueue it, and serve question 1.
         """
         kg = self._verify_source_access(user_id=user_id, source_id=source_id)
         clean_user = user_id.strip()
@@ -607,68 +634,139 @@ class AdaptiveLearningService:
                 "Concept must be in REASSESSING state (remediation video must be completed and confirmed)."
             )
 
-        # Auto-resolve previous_question_id from user's latest attempt for this concept if not explicitly provided
-        resolved_prev_qid = previous_question_id.strip() if previous_question_id else None
         user_attempts = self.attempt_repo.list_for_concept(clean_user, clean_source, target_concept)
         attempted_qids = {att.question_id for att in user_attempts}
-
+        resolved_prev_qid = previous_question_id.strip() if previous_question_id else None
         if not resolved_prev_qid and user_attempts:
             resolved_prev_qid = user_attempts[-1].question_id
 
-        # Idempotency check: see if QuestionRegistry already has a question for this concept
-        # that has NOT yet been submitted by this user and is PENDING
+        # 1. Check server-side ReassessmentQueue session first
+        sess = self.reassessment_queue.get_session(clean_user, clean_source, target_concept)
+        if sess and not sess.is_invalidated:
+            curr_q = sess.get_current_question()
+            if curr_q and curr_q.question_id not in attempted_qids:
+                q_idx = sess.current_index + 1
+                q_tot = max(len(sess.questions), 2)
+                if hasattr(curr_q, "get_safe_options"):
+                    sess_opts = curr_q.get_safe_options()
+                else:
+                    sess_opts = [
+                        SafeOption(index=getattr(opt, "index", idx), text=getattr(opt, "text", str(opt)))
+                        for idx, opt in enumerate(curr_q.options)
+                    ]
+                return SafeReassessmentQuestionResponse(
+                    question_id=curr_q.question_id,
+                    concept_id=curr_q.concept_id,
+                    source_id=curr_q.source_id,
+                    stem=curr_q.stem,
+                    options=sess_opts,
+                    difficulty=curr_q.difficulty or "intermediate",
+                    variant_type=getattr(curr_q, "variant_type", "application"),
+                    question_number=q_idx,
+                    total_questions=q_tot,
+                )
+
+        # 2. Check standalone pending question in question_registry
         pending_q: AuthoritativeQuestion | None = None
         if hasattr(self.question_registry, "get_pending_for_concept"):
             candidate = self.question_registry.get_pending_for_concept(clean_user, clean_source, target_concept)
             if candidate and candidate.question_id not in attempted_qids:
                 pending_q = candidate
-        elif hasattr(self.question_registry, "_questions"):
-            for q in self.question_registry._questions.values():
-                if (
-                    q.concept_id == target_concept
-                    and q.source_id == clean_source
-                    and (not q.user_id or q.user_id == clean_user)
-                    and getattr(q, "status", "PENDING") == "PENDING"
-                    and q.question_id not in attempted_qids
-                ):
-                    pending_q = q
-                    break
 
         if pending_q is not None:
-            logger.info(
-                "[application_service] Reusing active pending reassessment question %s for concept %s",
-                pending_q.question_id,
-                target_concept,
-            )
             return SafeReassessmentQuestionResponse(
                 question_id=pending_q.question_id,
                 concept_id=pending_q.concept_id,
                 source_id=pending_q.source_id,
                 stem=pending_q.stem,
-                options=pending_q.options,
-                difficulty=pending_q.difficulty,
+                options=pending_q.get_safe_options(),
+                difficulty=pending_q.difficulty or "intermediate",
                 variant_type=getattr(pending_q, "variant_type", "application"),
+                question_number=1,
+                total_questions=2,
             )
 
-        # Generate new question via ReassessmentService
-        new_q = self.reassessment_service.generate_reassessment_question(
+        # 3. Generate batch of reassessment questions (default target 2 for 2-attempt mastery rule)
+        cycle_idx = getattr(m, "remediation_attempt_count", 0) + 1
+        batch = self.reassessment_service.generate_reassessment_batch(
             user_id=clean_user,
             source_id=clean_source,
             concept_id=target_concept,
             session_id=clean_session,
             previous_question_id=resolved_prev_qid,
             provided_concept=kg.concepts[target_concept],
+            count=2,
         )
 
-        return SafeReassessmentQuestionResponse(
-            question_id=new_q.question_id,
-            concept_id=new_q.concept_id,
-            source_id=new_q.source_id,
-            stem=new_q.stem,
-            options=[opt.text if hasattr(opt, "text") else str(opt) for opt in new_q.options],
-            difficulty=new_q.difficulty or "intermediate",
-            variant_type="application",
+        # Register batch into session queue
+        new_sess = self.reassessment_queue.register_batch(
+            user_id=clean_user,
+            source_id=clean_source,
+            concept_id=target_concept,
+            cycle=cycle_idx,
+            questions=batch,
         )
+
+        first_q = new_sess.get_current_question() or batch[0]
+        if hasattr(first_q, "get_safe_options"):
+            safe_opts = first_q.get_safe_options()
+        else:
+            safe_opts = [
+                SafeOption(index=getattr(opt, "index", idx), text=getattr(opt, "text", str(opt)))
+                for idx, opt in enumerate(first_q.options)
+            ]
+
+        return SafeReassessmentQuestionResponse(
+            question_id=first_q.question_id,
+            concept_id=first_q.concept_id,
+            source_id=first_q.source_id,
+            stem=first_q.stem,
+            options=safe_opts,
+            difficulty=first_q.difficulty or "intermediate",
+            variant_type=getattr(first_q, "variant_type", "application"),
+            question_number=1,
+            total_questions=len(batch),
+        )
+
+    def prefetch_reassessment(
+        self,
+        user_id: str,
+        source_id: str,
+        concept_id: str,
+        session_id: str | None = None,
+    ) -> None:
+        """Trigger background prefetching of the reassessment question batch."""
+        clean_user = user_id.strip()
+        clean_source = source_id.strip()
+        clean_concept = concept_id.strip()
+
+        # If already cached or prefetching in progress, exit early
+        existing_sess = self.reassessment_queue.get_session(clean_user, clean_source, clean_concept)
+        if existing_sess and not existing_sess.is_invalidated and existing_sess.get_current_question():
+            return
+
+        import threading
+
+        def _bg_prefetch() -> None:
+            try:
+                self.generate_reassessment(
+                    user_id=clean_user,
+                    source_id=clean_source,
+                    concept_id=clean_concept,
+                    session_id=session_id,
+                )
+                logger.info(
+                    "[application_service] Prefetched reassessment batch for (%s, %s, %s)",
+                    clean_user, clean_source, clean_concept
+                )
+            except Exception as exc:
+                logger.warning(
+                    "[application_service] Background prefetch failed for (%s, %s, %s): %s",
+                    clean_user, clean_source, clean_concept, exc
+                )
+
+        t = threading.Thread(target=_bg_prefetch, daemon=True, name=f"prefetch-{clean_concept}")
+        t.start()
 
     # -------------------------------------------------------------------------
     # 4. Remediation Orchestration (Async & Non-Blocking)
@@ -847,3 +945,24 @@ class AdaptiveLearningService:
     def _build_safe_stream_url(self, video_job_id: str) -> str:
         """Build client-safe streaming route path without exposing filesystem paths."""
         return f"/video/{video_job_id}/stream"
+
+
+_default_application_service: ApplicationService | None = None
+
+
+def get_application_service() -> ApplicationService:
+    """Get or initialize singleton ApplicationService instance."""
+    global _default_application_service
+    if _default_application_service is None:
+        try:
+            from ...api.learning import get_adaptive_learning_service
+            return get_adaptive_learning_service()
+        except Exception:
+            _default_application_service = ApplicationService()
+    return _default_application_service
+
+
+def set_application_service(svc: ApplicationService | None) -> None:
+    """Set global application service instance (useful in tests or initialization)."""
+    global _default_application_service
+    _default_application_service = svc

@@ -1371,6 +1371,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                             <div>
                                 <span class="badge badge-peach-green" id="lblReassessConceptBadge">CONCEPT</span>
                                 <span class="badge badge-amber" id="lblReassessDifficultyBadge" style="margin-left:6px;">INTERMEDIATE</span>
+                                <span class="badge badge-blue" id="lblReassessProgressBadge" style="margin-left:6px;display:none;">Question 1 of 2</span>
                             </div>
                             <span class="badge badge-blue">GROUNDED REASSESSMENT</span>
                         </div>
@@ -3120,7 +3121,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 adaptiveState.remediationPollInterval = null;
             }
 
+            let isPollingInFlight = false;
             adaptiveState.remediationPollInterval = setInterval(async () => {
+                if (isPollingInFlight) return;
+                isPollingInFlight = true;
                 try {
                     const res = await fetch(`/api/learning/${encodeURIComponent(sourceId)}/remediation/${encodeURIComponent(jobId)}?user_id=${encodeURIComponent(adaptiveState.userId)}`);
                     if (!res.ok) {
@@ -3179,6 +3183,8 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     }
                 } catch (e) {
                     console.error('Error polling adaptive remediation job:', e);
+                } finally {
+                    isPollingInFlight = false;
                 }
             }, 2500);
         }
@@ -3260,6 +3266,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
             document.getElementById('lblReassessConceptBadge').textContent = q.concept_name || q.concept_id || 'PRACTICE';
             document.getElementById('lblReassessDifficultyBadge').textContent = (q.difficulty || 'intermediate').toUpperCase();
+            
+            const progressBadge = document.getElementById('lblReassessProgressBadge');
+            if (progressBadge) {
+                if (q.question_number && q.total_questions) {
+                    progressBadge.textContent = `Question ${q.question_number} of ${q.total_questions}`;
+                    progressBadge.style.display = 'inline-flex';
+                } else {
+                    progressBadge.style.display = 'none';
+                }
+            }
+
             document.getElementById('lblReassessStem').textContent = q.stem;
 
             const container = document.getElementById('reassessOptionsContainer');
@@ -3280,12 +3297,15 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                     adaptiveState.selectedOptionIdx = idx;
                 });
 
+                // Robust normalization: support both SafeOption {index, text} and raw string
+                const optText = (opt && typeof opt === 'object') ? (opt.text || '') : String(opt || '');
+
                 const span = document.createElement('span');
                 span.style.fontWeight = '600';
                 const strong = document.createElement('strong');
                 strong.textContent = `${String.fromCharCode(65 + idx)}. `;
                 span.appendChild(strong);
-                span.appendChild(document.createTextNode(opt.text || ''));
+                span.appendChild(document.createTextNode(optText));
 
                 label.appendChild(input);
                 label.appendChild(span);
@@ -3349,7 +3369,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 adaptiveState.currentQuestion = null;
                 adaptiveState.hasAnsweredReassessment = true;
 
-                // Show safe feedback in the feedback box
+                // Show safe authoritative feedback
                 const feedbackBox = document.getElementById('adaptiveFeedbackBox');
                 if (feedbackBox) {
                     feedbackBox.style.display = 'block';
@@ -3360,11 +3380,16 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         : `✗ Not quite. ${result.explanation || 'Review the explanation to reinforce your understanding.'}`;
                 }
 
-                // Hide question box until next question is loaded
+                // Hide question box
                 document.getElementById('adaptiveQuestionBox').style.display = 'none';
 
                 // Re-sync authoritative next action and roadmap
                 await syncAdaptiveLearning(sourceId);
+
+                // Phase 2 / Phase 10: If server next_action remains REASSESS, immediately fetch next question
+                if (result.next_action && result.next_action.action_type === 'REASSESS') {
+                    await triggerNextReassessmentQuestion();
+                }
             } catch (err) {
                 showInlineError('adaptiveFeedbackBox', `Submission error: ${err.message}`);
                 submitBtn.disabled = false;

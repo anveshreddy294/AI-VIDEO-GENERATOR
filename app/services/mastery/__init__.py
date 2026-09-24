@@ -30,6 +30,7 @@ from .question_registry import (
     InMemoryQuestionRegistry,
     QuestionRegistry,
 )
+from .reassessment_queue import ReassessmentQueue, ReassessmentSession
 from .reassessment_service import ReassessmentService
 from .repository import InMemoryMasteryRepository, MasteryRepository
 from .roadmap_models import (
@@ -106,6 +107,8 @@ __all__ = [
     "GroundingIntegrityError",
     "UnknownQuestionError",
     "ReassessmentService",
+    "ReassessmentQueue",
+    "ReassessmentSession",
     "LearningActionType",
     "ReasonCode",
     "NextLearningAction",

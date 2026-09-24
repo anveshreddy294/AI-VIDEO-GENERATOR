@@ -307,6 +307,23 @@ class RemediationOrchestrator:
                     self.state_machine.confirm_remediation(record, session_id=session_id)
                     self.mastery_repo.save(record)
 
+                    # Phase 8: Automatically trigger background reassessment prefetch while student watches video
+                    try:
+                        from .application_service import get_application_service
+                        app_svc = get_application_service()
+                        if app_svc and hasattr(app_svc, "prefetch_reassessment"):
+                            app_svc.prefetch_reassessment(
+                                user_id=user_id,
+                                source_id=source_id,
+                                concept_id=concept_id,
+                                session_id=session_id,
+                            )
+                    except Exception as prefetch_err:
+                        logger.warning(
+                            "[remediation] Failed to trigger background prefetch for (%s, %s): %s",
+                            source_id, concept_id, prefetch_err
+                        )
+
                 logger.info(
                     "[remediation] Successfully generated video %s for concept %s (duration=%.1fs); advanced to REASSESSING",
                     job.video_path,
