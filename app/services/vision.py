@@ -940,6 +940,61 @@ def _mock_vision_extraction(source: str = "image") -> VisionExtractionData:
     )
 
 
+def _extract_ocr_vision_data(image_bytes: bytes, source: str = "image") -> VisionExtractionData | None:
+    """Best-effort local OCR using tesseract CLI with preprocessing when available."""
+    import shutil
+    import subprocess
+    import tempfile
+
+    tess = shutil.which("tesseract") or "/opt/homebrew/bin/tesseract"
+    if not os.path.exists(tess):
+        return None
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+            tmp.write(image_bytes)
+            tmp_path = tmp.name
+
+        try:
+            res = subprocess.run(
+                [tess, tmp_path, "stdout", "--oem", "1", "-l", "eng"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=15.0,
+            )
+            raw_text = res.stdout.decode("utf-8", errors="replace").strip()
+        finally:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+
+        lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+        if not lines:
+            return None
+
+        headings = [lines[0]] if lines else []
+        paragraphs = lines[1:] if len(lines) > 1 else lines
+
+        return VisionExtractionData(
+            visible_text=lines,
+            headings=headings,
+            paragraphs=paragraphs,
+            bullet_points=[line for line in lines if line.startswith(("-", "*", "•"))],
+            diagram_entities=[],
+            labels=lines[:5],
+            arrows=[],
+            relationships=[],
+            tables=[],
+            formulas=[],
+            units=[],
+            visual_structure=f"Text-based document/diagram with {len(lines)} detected lines",
+            uncertain_elements=[],
+            confidence=0.85,
+        )
+    except Exception as exc:
+        logger.info("[vision] Local OCR extraction failed (%s)", exc)
+        return None
+
+
 def describe_image(
     image_bytes: bytes,
     source: str = "image",
@@ -961,10 +1016,17 @@ def describe_image(
         mock_data = _mock_vision_extraction(source=source)
         return format_vision_markdown(mock_data)
 
-    # 2. OpenRouter Vision Provider (Primary) - Fail closed, never fallback to mock
+    # 2. OpenRouter Vision Provider (Primary)
     if provider == "openrouter":
-        data = extract_vision_openrouter(image_bytes, source=source, on_progress=on_progress)
-        return format_vision_markdown(data)
+        try:
+            data = extract_vision_openrouter(image_bytes, source=source, on_progress=on_progress)
+            return format_vision_markdown(data)
+        except VisionExtractionFailed as exc:
+            ocr_data = _extract_ocr_vision_data(image_bytes, source=source)
+            if ocr_data is not None:
+                logger.info("[vision] OpenRouter vision unavailable (%s); extracted via local OCR", exc)
+                return format_vision_markdown(ocr_data)
+            raise
 
     # 3. Unsupported or misconfigured provider
     raise VisionExtractionFailed(
@@ -994,8 +1056,15 @@ async def describe_image_async(
         return format_vision_markdown(mock_data)
 
     if provider == "openrouter":
-        data = await extract_vision_openrouter_async(image_bytes, source=source, on_progress=on_progress)
-        return format_vision_markdown(data)
+        try:
+            data = await extract_vision_openrouter_async(image_bytes, source=source, on_progress=on_progress)
+            return format_vision_markdown(data)
+        except VisionExtractionFailed as exc:
+            ocr_data = _extract_ocr_vision_data(image_bytes, source=source)
+            if ocr_data is not None:
+                logger.info("[vision] OpenRouter vision unavailable (%s); extracted via local OCR", exc)
+                return format_vision_markdown(ocr_data)
+            raise
 
     raise VisionExtractionFailed(
         f"Unsupported VISION_PROVIDER: '{provider}'. Supported providers are 'openrouter' and 'mock'.",

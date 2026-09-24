@@ -112,7 +112,7 @@ class Settings:
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
 
         # --- Multimodal Vision Extraction (OpenRouter) ---
-        self.openrouter_api_key: str = os.getenv("OPENROUTER_API_KEY", "")
+        self._openrouter_api_key: str | None = None
         self.vision_provider: str = os.getenv("VISION_PROVIDER", "openrouter").strip().lower()
         self.vision_model: str = (
             os.getenv("OPENROUTER_VISION_MODEL")
@@ -129,7 +129,32 @@ class Settings:
         self.vision_rate_limit_fallback: bool = False
         self.pipeline_config_version: str = os.getenv("PIPELINE_CONFIG_VERSION", "v1").strip()
 
+    @property
+    def openrouter_api_key(self) -> str:
+        if self._openrouter_api_key is not None:
+            return self._openrouter_api_key
+        key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        if not key:
+            env_file = BASE_DIR / ".env"
+            if env_file.exists():
+                try:
+                    for line in env_file.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line.startswith("OPENROUTER_API_KEY=") and not line.startswith("#"):
+                            val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                            if val:
+                                return val
+                except Exception:
+                    pass
+        return key
 
+    @openrouter_api_key.setter
+    def openrouter_api_key(self, value: str | None) -> None:
+        self._openrouter_api_key = value
+        if value:
+            os.environ["OPENROUTER_API_KEY"] = value
+        elif "OPENROUTER_API_KEY" in os.environ:
+            del os.environ["OPENROUTER_API_KEY"]
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
