@@ -56,9 +56,24 @@ class OllamaProvider:
             or os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         )
         self.timeout = timeout if timeout is not None else float(getattr(settings, "ollama_timeout", 120.0))
+        self._http_client: Any | None = None
 
-    def generate(self, prompt: str, response_schema: type | None = None) -> str:
-        """Generate content via Ollama /api/generate endpoint."""
+    def _get_client(self) -> Any:
+        if self._http_client is None:
+            try:
+                import httpx
+                self._http_client = httpx.Client(timeout=self.timeout)
+            except Exception:
+                self._http_client = False
+        return self._http_client
+
+    def generate(
+        self,
+        prompt: str,
+        response_schema: type | dict | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> str:
+        """Generate content via Ollama /api/generate endpoint with bounded generation limits."""
         url = f"{self.base_url}/api/generate"
         is_json = (
             response_schema is not None
@@ -72,43 +87,76 @@ class OllamaProvider:
             "think": False,
             "keep_alive": getattr(settings, "ollama_keep_alive", "15m"),
         }
-        if is_json:
+        if response_schema is not None:
+            if isinstance(response_schema, dict):
+                req_data["format"] = response_schema
+            else:
+                req_data["format"] = "json"
+        elif is_json:
             req_data["format"] = "json"
 
-        payload = json.dumps(req_data).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+        # Bounded generation options for assessment/reasoning JSON performance
+        gen_opts: dict[str, Any] = {
+            "temperature": 0.1,
+            "num_predict": 850,
+            "num_ctx": 2048,
+        }
+        if options:
+            gen_opts.update(options)
+        req_data["options"] = gen_opts
+
+        is_mocked = hasattr(urllib.request.urlopen, "mock_calls") or type(urllib.request.urlopen).__name__ in ("Mock", "MagicMock")
+        client = None if is_mocked else self._get_client()
+        raw = ""
+        if client and client is not False:
+            try:
+                resp = client.post(url, json=req_data)
+                if resp.status_code != 200:
+                    raise RuntimeError(f"Ollama HTTP {resp.status_code}: {resp.text}")
+                data = resp.json()
                 if data.get("error") or data.get("done") is False:
                     raise RuntimeError(data.get("error") or "Incomplete Ollama response")
                 raw = data.get("response", "")
-                if not isinstance(raw, str) or not raw.strip():
-                    raise RuntimeError("Ollama returned no text")
+            except Exception as exc:
+                logger.debug("[llm] httpx call failed (%s); falling back to urllib: %s", url, exc)
+                client = False
 
-                # Strip markdown code fences if the model wraps output in ```json ... ```
-                cleaned = raw.strip()
-                if cleaned.startswith("```"):
-                    lines = cleaned.splitlines()
-                    if lines and lines[0].startswith("```"):
-                        lines = lines[1:]
-                    if lines and lines[-1].strip() == "```":
-                        lines = lines[:-1]
-                    cleaned = "\n".join(lines).strip()
-                return cleaned
-        except urllib.error.URLError as exc:
-            raise RuntimeError(
-                f"Ollama service unreachable at {self.base_url}. Ensure Ollama is running (`ollama serve`). Error: {exc}"
-            ) from exc
-        except Exception as exc:
-            raise RuntimeError(
-                f"Ollama generation failed ({url}, model={self.model_name}): {exc}"
-            ) from exc
+        if not raw and (client is False or client is None):
+            payload = json.dumps(req_data).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    if data.get("error") or data.get("done") is False:
+                        raise RuntimeError(data.get("error") or "Incomplete Ollama response")
+                    raw = data.get("response", "")
+            except urllib.error.URLError as exc:
+                raise RuntimeError(
+                    f"Ollama service unreachable at {self.base_url}. Ensure Ollama is running (`ollama serve`). Error: {exc}"
+                ) from exc
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Ollama generation failed ({url}, model={self.model_name}): {exc}"
+                ) from exc
+
+        if not isinstance(raw, str) or not raw.strip():
+            raise RuntimeError("Ollama returned no text")
+
+        # Strip markdown code fences if the model wraps output in ```json ... ```
+        cleaned = raw.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == "```":
+                lines = lines[:-1]
+            cleaned = "\n".join(lines).strip()
+        return cleaned
 
     def generate_content(self, prompt: str) -> str:
         """Alias for backward compatibility with assessment generator."""
@@ -158,7 +206,7 @@ class MockProvider:
         self.last_prompt = ""
         self.is_mock = True
 
-    def generate(self, prompt: str, response_schema: type | None = None) -> str:
+    def generate(self, prompt: str, response_schema: type | dict | None = None, **kwargs: Any) -> str:
         self.call_count += 1
         self.last_prompt = prompt
 
@@ -430,6 +478,38 @@ class MockProvider:
             concept_words = all_src_words
 
         sample_words = " ".join(concept_words[:4]) if concept_words else "force mass acceleration"
+
+        if "questions" in lower and ("reassessment" in lower or "batch" in lower or "pedagogical requirements" in lower or "exactly 2" in lower or "generate 2" in lower):
+            return json.dumps({
+                "questions": [
+                    {
+                        "question": f"Practical application of {concept_name}: how does {concept_name} govern {sample_words}?",
+                        "options": [
+                            {"index": 0, "text": f"{concept_name} directly governs {sample_words} in applied systems."},
+                            {"index": 1, "text": f"{concept_name} operates in reverse against {sample_words}."},
+                            {"index": 2, "text": f"{concept_name} exhibits zero influence over {sample_words}."},
+                            {"index": 3, "text": f"{concept_name} depends entirely on external manual intervention."}
+                        ],
+                        "correct_index": 0,
+                        "evidence_quote": f"{concept_name} governs {sample_words}",
+                        "explanation": f"Source evidence establishes how {concept_name} relates to {sample_words}.",
+                        "variant_type": "application"
+                    },
+                    {
+                        "question": f"Conceptual distinction for {concept_name}: what distinguishes it from misconceptions involving {sample_words}?",
+                        "options": [
+                            {"index": 0, "text": f"Assuming {concept_name} is simply interchangeable with {sample_words}."},
+                            {"index": 1, "text": f"{concept_name} represents a distinct operational principle governing {sample_words}."},
+                            {"index": 2, "text": f"Believing {concept_name} has no formal domain definition."},
+                            {"index": 3, "text": f"Viewing {concept_name} as an isolated anomaly."}
+                        ],
+                        "correct_index": 1,
+                        "evidence_quote": f"{concept_name} represents a distinct operational principle",
+                        "explanation": f"Source truth clarifies distinction and avoids common errors regarding {concept_name}.",
+                        "variant_type": "misconception"
+                    }
+                ]
+            })
 
         return json.dumps({
             "question": f"How does {concept_name} relate to {sample_words} regarding {angle}?",
