@@ -62,7 +62,11 @@ INSTRUCTOR_HTML = """
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: #0f1117;
+            background-color: #0f1117;
+            background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A//www.w3.org/2000/svg%27%20width%3D%27160%27%20height%3D%27160%27%20viewBox%3D%270%200%20160%20160%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%234ecb94%27%20stroke-width%3D%271.2%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%20opacity%3D%270.10%27%3E%3Ccircle%20cx%3D%2780%27%20cy%3D%2780%27%20r%3D%275%27%20fill%3D%27%23f09a80%27%20fill-opacity%3D%270.25%27%20stroke%3D%27none%27/%3E%3Cpath%20d%3D%27M80%2C72%20C76%2C58%2084%2C48%2080%2C42%20C76%2C48%2084%2C58%2080%2C72%20Z%27%20fill%3D%27%234ecb94%27%20fill-opacity%3D%270.05%27/%3E%3Cpath%20d%3D%27M80%2C88%20C84%2C102%2076%2C112%2080%2C118%20C84%2C112%2076%2C102%2080%2C88%20Z%27%20fill%3D%27%234ecb94%27%20fill-opacity%3D%270.05%27/%3E%3Cpath%20d%3D%27M72%2C80%20C58%2C76%2048%2C84%2042%2C80%20C48%2C76%2058%2C84%2072%2C80%20Z%27%20fill%3D%27%234ecb94%27%20fill-opacity%3D%270.05%27/%3E%3Cpath%20d%3D%27M88%2C80%20C102%2C84%20112%2C76%20118%2C80%20C112%2C84%20102%2C76%2088%2C80%20Z%27%20fill%3D%27%234ecb94%27%20fill-opacity%3D%270.05%27/%3E%3Cpath%20d%3D%27M80%2C42%20Q80%2C20%2050%2C20%20Q20%2C20%2020%2C50%20Q20%2C80%2042%2C80%27/%3E%3Cpath%20d%3D%27M80%2C118%20Q80%2C140%20110%2C140%20Q140%2C140%20140%2C110%20Q140%2C80%20118%2C80%27/%3E%3Ccircle%20cx%3D%270%27%20cy%3D%270%27%20r%3D%2710%27%20stroke-dasharray%3D%273%2C3%27/%3E%3Ccircle%20cx%3D%27160%27%20cy%3D%270%27%20r%3D%2710%27%20stroke-dasharray%3D%273%2C3%27/%3E%3Ccircle%20cx%3D%270%27%20cy%3D%27160%27%20r%3D%2710%27%20stroke-dasharray%3D%273%2C3%27/%3E%3Ccircle%20cx%3D%27160%27%20cy%3D%27160%27%20r%3D%2710%27%20stroke-dasharray%3D%273%2C3%27/%3E%3C/g%3E%3C/svg%3E");
+            background-repeat: repeat;
+            background-size: 160px 160px;
+            background-attachment: fixed;
             color: #e1e4e8;
             min-height: 100vh;
         }
