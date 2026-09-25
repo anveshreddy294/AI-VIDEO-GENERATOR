@@ -253,7 +253,7 @@ class TestVisionTimeoutRuntime(unittest.TestCase):
 
         # Verify cache key structure
         image_sha = hashlib.sha256(sample_img).hexdigest()
-        expected_key = f"{image_sha}:openrouter/free:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
+        expected_key = f"{image_sha}:{settings.vision_model}:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
         self.assertIn(expected_key, _VISION_EXTRACTION_CACHE)
 
     @patch("app.services.vision._mock_vision_extraction")

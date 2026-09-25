@@ -220,7 +220,7 @@ async def _execute_upload_and_assess(
             if err_code == "VISION_TIMEOUT":
                 safe_msg = "VISION_TIMEOUT: Image understanding exceeded the configured time limit. Please retry."
             elif err_code == "VISION_RATE_LIMIT":
-                safe_msg = f"VISION_RATE_LIMIT: OpenRouter rate limit reached (HTTP 429). {exc}"
+                safe_msg = f"VISION_RATE_LIMIT: Vision service busy or rate limited. {exc}"
             else:
                 safe_msg = f"{err_code}: {exc}"
             update_source_status(source_id, "FAILED", error_message=safe_msg)

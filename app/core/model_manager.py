@@ -63,7 +63,7 @@ class ModelManager:
                     if caps and "completion" not in caps and "tools" not in caps:
                         continue
                     size_mb = round(m.get("size", 0) / (1024 * 1024), 1)
-                    is_vision = any(v in name.lower() for v in ("vision", "llava", "minicpm", "moondream"))
+                    is_vision = any(v in name.lower() for v in ("vision", "llava", "minicpm", "gemma3"))
                     models.append({
                         "name": name,
                         "provider": "ollama",
