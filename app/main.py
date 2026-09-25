@@ -17,6 +17,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from .api.landing import router as landing_router
 from .api.dashboard import router as dashboard_router
 from .api.upload import router as upload_router
 from .api.assessment import router as assessment_router
@@ -69,6 +70,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
+app.include_router(landing_router)
 app.include_router(dashboard_router)
 app.include_router(upload_router)
 app.include_router(assessment_router)
