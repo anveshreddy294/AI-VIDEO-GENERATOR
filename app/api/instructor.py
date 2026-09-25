@@ -176,10 +176,20 @@ INSTRUCTOR_HTML = """
         }
         .progress-fill-green { background: #2ea043; height: 100%; }
         .progress-fill-amber { background: #d29922; height: 100%; }
-        .progress-fill-red { background: #da3633; height: 100%; }
+        .header, .container { position: relative; z-index: 1; }
+        #antigravityFloralCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 0;
+        }
     </style>
 </head>
 <body>
+    <canvas id="antigravityFloralCanvas"></canvas>
     <div class="header">
         <h1>
             <span> VisualAI Instructor Portal</span>
@@ -396,6 +406,227 @@ INSTRUCTOR_HTML = """
         }
 
         window.addEventListener('DOMContentLoaded', loadInstructorData);
+    </script>
+    <!-- Antigravity Floral Cursor Interaction Animation Script -->
+    <script>
+    (function initAntigravityFloral() {
+        const canvas = document.getElementById('antigravityFloralCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        let width = 0;
+        let height = 0;
+        let dpr = 1;
+
+        const mouse = {
+            x: -2000,
+            y: -2000,
+            targetX: -2000,
+            targetY: -2000,
+            radius: 180,
+            active: false
+        };
+
+        function resize() {
+            dpr = Math.min(window.devicePixelRatio || 1, 2);
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = Math.floor(width * dpr);
+            canvas.height = Math.floor(height * dpr);
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+
+        window.addEventListener('resize', resize, { passive: true });
+        resize();
+
+        window.addEventListener('mousemove', function(e) {
+            mouse.targetX = e.clientX;
+            mouse.targetY = e.clientY;
+            mouse.active = true;
+        }, { passive: true });
+
+        window.addEventListener('mouseleave', function() {
+            mouse.active = false;
+            mouse.targetX = -2000;
+            mouse.targetY = -2000;
+        }, { passive: true });
+
+        window.addEventListener('touchmove', function(e) {
+            if (e.touches && e.touches.length > 0) {
+                mouse.targetX = e.touches[0].clientX;
+                mouse.targetY = e.touches[0].clientY;
+                mouse.active = true;
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchend', function() {
+            mouse.active = false;
+            mouse.targetX = -2000;
+            mouse.targetY = -2000;
+        }, { passive: true });
+
+        const palette = {
+            petals: ['rgba(78, 203, 148, 0.45)', 'rgba(240, 154, 128, 0.48)', 'rgba(167, 243, 208, 0.35)', 'rgba(253, 226, 216, 0.35)'],
+            pollen: 'rgba(78, 203, 148, 0.65)',
+            center: 'rgba(240, 154, 128, 0.70)',
+            line: 'rgba(78, 203, 148, 0.12)'
+        };
+
+        class FloralParticle {
+            constructor() {
+                this.reset(true);
+            }
+
+            reset(initial) {
+                this.x = Math.random() * (width || 1200);
+                this.y = initial ? Math.random() * (height || 800) : (height + 25 + Math.random() * 40);
+                this.size = 5 + Math.random() * 11;
+                const randType = Math.random();
+                this.type = randType > 0.55 ? 'petal' : (randType > 0.25 ? 'flower' : 'pollen');
+
+                this.vx = (Math.random() - 0.5) * 0.45;
+                this.vy = -(0.25 + Math.random() * 0.55);
+                this.rotation = Math.random() * Math.PI * 2;
+                this.rotSpeed = (Math.random() - 0.5) * 0.022;
+                this.tilt = Math.random() * Math.PI;
+                this.tiltSpeed = (Math.random() - 0.5) * 0.025;
+
+                this.phase = Math.random() * Math.PI * 2;
+                this.phaseSpeed = 0.012 + Math.random() * 0.018;
+
+                this.fx = 0;
+                this.fy = 0;
+                this.colorIdx = Math.floor(Math.random() * 4);
+            }
+
+            update(time) {
+                this.phase += this.phaseSpeed;
+                this.rotation += this.rotSpeed;
+                this.tilt += this.tiltSpeed;
+
+                this.x += this.vx + Math.sin(this.phase) * 0.4;
+                this.y += this.vy;
+
+                if (mouse.x > -1000 && mouse.y > -1000) {
+                    const dx = this.x - mouse.x;
+                    const dy = this.y - mouse.y;
+                    const dist = Math.hypot(dx, dy);
+                    const maxDist = mouse.radius;
+
+                    if (dist < maxDist && dist > 1) {
+                        const factor = 1 - dist / maxDist;
+                        const angle = Math.atan2(dy, dx);
+                        const swirl = angle + Math.PI * 0.38;
+                        const push = factor * 4.4;
+                        this.fx += Math.cos(angle) * push + Math.cos(swirl) * push * 0.4;
+                        this.fy += Math.sin(angle) * push + Math.sin(swirl) * push * 0.4;
+                        this.rotation += factor * 0.06;
+                    }
+                }
+
+                this.x += this.fx;
+                this.y += this.fy;
+                this.fx *= 0.92;
+                this.fy *= 0.92;
+
+                if (this.y < -35) this.y = height + 25;
+                if (this.y > height + 45) this.y = -25;
+                if (this.x < -35) this.x = width + 25;
+                if (this.x > width + 35) this.x = -25;
+            }
+
+            draw(ctx) {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                const scaleY = Math.cos(this.tilt);
+                ctx.scale(1, Math.abs(scaleY) < 0.12 ? 0.12 : scaleY);
+
+                const color = palette.petals[this.colorIdx];
+                ctx.fillStyle = color;
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.1;
+
+                if (this.type === 'flower') {
+                    const r = this.size * 0.62;
+                    for (let i = 0; i < 5; i++) {
+                        const a = (i * Math.PI * 2) / 5;
+                        ctx.beginPath();
+                        ctx.ellipse(Math.cos(a) * r, Math.sin(a) * r, r * 0.72, r * 0.42, a, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r * 0.34, 0, Math.PI * 2);
+                    ctx.fillStyle = palette.center;
+                    ctx.fill();
+                } else if (this.type === 'petal') {
+                    const s = this.size;
+                    ctx.beginPath();
+                    ctx.moveTo(0, -s);
+                    ctx.bezierCurveTo(s * 0.72, -s * 0.45, s * 0.75, s * 0.55, 0, s);
+                    ctx.bezierCurveTo(-s * 0.75, s * 0.55, -s * 0.72, -s * 0.45, 0, -s);
+                    ctx.fill();
+                } else {
+                    const pr = this.size * 0.32;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, pr, 0, Math.PI * 2);
+                    ctx.fillStyle = palette.pollen;
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        const count = Math.min(55, Math.max(25, Math.floor((width * height) / 24000)));
+        const particles = [];
+        for (let i = 0; i < count; i++) {
+            particles.push(new FloralParticle());
+        }
+
+        function animate(now) {
+            requestAnimationFrame(animate);
+
+            if (mouse.active) {
+                mouse.x += (mouse.targetX - mouse.x) * 0.16;
+                mouse.y += (mouse.targetY - mouse.y) * 0.16;
+            } else {
+                mouse.x += (-2000 - mouse.x) * 0.1;
+                mouse.y += (-2000 - mouse.y) * 0.1;
+            }
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (mouse.x > -500 && mouse.y > -500) {
+                for (let i = 0; i < particles.length; i++) {
+                    const p1 = particles[i];
+                    const distCursor = Math.hypot(p1.x - mouse.x, p1.y - mouse.y);
+                    if (distCursor < 210) {
+                        for (let j = i + 1; j < particles.length; j++) {
+                            const p2 = particles[j];
+                            const d = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+                            if (d < 85) {
+                                ctx.beginPath();
+                                ctx.moveTo(p1.x, p1.y);
+                                ctx.lineTo(p2.x, p2.y);
+                                ctx.strokeStyle = palette.line;
+                                ctx.lineWidth = (1 - d / 85) * 1.3;
+                                ctx.stroke();
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].update(now);
+                particles[i].draw(ctx);
+            }
+        }
+
+        requestAnimationFrame(animate);
+    })();
     </script>
 </body>
 </html>
