@@ -1026,6 +1026,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             <button id="themeToggleBtn" class="neo-icon-btn" onclick="toggleTheme()" title="Toggle Theme (Light / Dark)">
                 <span id="themeIcon">Dark</span>
             </button>
+            <a href="/" class="neo-btn">
+                <span>Landing Page</span>
+            </a>
             <a href="/instructor" target="_blank" class="neo-btn">
                 <span> Instructor Portal</span>
             </a>
@@ -3739,7 +3742,6 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 """
 
 
-@router.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 @router.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard():
     """VisualAI dashboard - Interactive test runner and complete pipeline documentation."""
