@@ -58,6 +58,10 @@ else
     echo "[INFO] Docker not available. Using embedded on-disk Qdrant storage."
 fi
 
+# --- Check AI Models ---
+python scripts/download_models.py --inspect
+
+
 # --- Start server ---
 echo ""
 echo "[OK] Starting FastAPI backend on http://127.0.0.1:8000 ..."
