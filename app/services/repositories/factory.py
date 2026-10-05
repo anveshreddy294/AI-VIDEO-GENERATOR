@@ -1,0 +1,30 @@
+"""Repository factory for VisualAI persistence (Phase 12C).
+
+Returns the configured repository implementation (File or Supabase).
+"""
+
+from ...core.config import settings
+from .base import SourceRepository, AssessmentRepository, LearningProfileRepository
+from .file_repository import FileSourceRepository, FileAssessmentRepository, FileLearningProfileRepository
+from .supabase_repository import SupabaseSourceRepository, SupabaseAssessmentRepository, SupabaseLearningProfileRepository
+
+
+def get_source_repository() -> SourceRepository:
+    """Return the active source repository based on database provider configuration."""
+    if settings.database_provider == "supabase" and settings.supabase_url:
+        return SupabaseSourceRepository()
+    return FileSourceRepository()
+
+
+def get_assessment_repository() -> AssessmentRepository:
+    """Return the active assessment repository based on database provider configuration."""
+    if settings.database_provider == "supabase" and settings.supabase_url:
+        return SupabaseAssessmentRepository()
+    return FileAssessmentRepository()
+
+
+def get_learning_profile_repository() -> LearningProfileRepository:
+    """Return the active learning profile repository based on database provider configuration."""
+    if settings.database_provider == "supabase" and settings.supabase_url:
+        return SupabaseLearningProfileRepository()
+    return FileLearningProfileRepository()

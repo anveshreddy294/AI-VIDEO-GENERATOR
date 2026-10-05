@@ -197,23 +197,97 @@ def validate_extraction_quality(
             "Source contains only generic metadata, file paths, or MIME types.",
         )
 
-    # 4. Check for repetitive garbage characters / OCR gibberish
-    # e.g., ^^^^^^^^, %%%%%%, \x00\x00, aaaaaaaaa
-    non_alphanum = len(re.findall(r"[^A-Za-z0-9\s.,!?:;'\-\"()]", full_text))
-    total_chars = max(1, len(full_text))
-    if non_alphanum / total_chars > 0.45 and total_chars > 30:
+    # 4. Check for genuine extraction corruption, encoding faults, and OCR noise
+    # Standard formatting (whitespace runs, dashes, underscores, dots, separators, tables) must pass.
+
+    # 4A. Unicode replacement character corruption (e.g. \ufffd, )
+    replacement_count = full_text.count("\ufffd")
+    if replacement_count >= 3 or (len(full_text) > 10 and (replacement_count / len(full_text)) > 0.05):
+        logger.warning(
+            "[validator] Extraction failed: reason_code=UNICODE_REPLACEMENT_CORRUPTION, modality=%s, "
+            "units_count=%d, replacement_count=%d, total_chars=%d",
+            modality, len(units), replacement_count, len(full_text),
+        )
+        return (
+            False,
+            "EXTRACTION_INSUFFICIENT",
+            "The extracted text appears corrupted with unreadable character encoding. Try another file or retry extraction.",
+        )
+
+    # 4B. NUL and raw control characters (except standard whitespace \t, \n, \r)
+    nul_count = full_text.count("\x00")
+    if nul_count >= 2:
+        logger.warning(
+            "[validator] Extraction failed: reason_code=NUL_BYTE_CORRUPTION, modality=%s, "
+            "units_count=%d, nul_count=%d",
+            modality, len(units), nul_count,
+        )
+        return (
+            False,
+            "EXTRACTION_INSUFFICIENT",
+            "The extracted text contains binary NUL bytes from a corrupted stream or file.",
+        )
+
+    bad_controls = len(re.findall(r"[\x01-\x08\x0b\x0c\x0e-\x1f]", full_text))
+    if bad_controls > 5:
+        logger.warning(
+            "[validator] Extraction failed: reason_code=CONTROL_CHARACTER_CORRUPTION, modality=%s, "
+            "units_count=%d, bad_controls=%d",
+            modality, len(units), bad_controls,
+        )
+        return (
+            False,
+            "EXTRACTION_INSUFFICIENT",
+            "The extracted text contains excessive non-printable control characters.",
+        )
+
+    # 4C. Extreme repeated alphanumeric garbage (e.g., 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', '111111111111111111111111111111')
+    # Normal words like 'coooooool' (6 'o's) pass; threshold >= 25 consecutive identical alphanumeric chars
+    alphanumeric_repeat_match = re.search(r"([a-zA-Z0-9])\1{24,}", full_text)
+    if alphanumeric_repeat_match:
+        bad_char = alphanumeric_repeat_match.group(1)
+        seq_len = len(alphanumeric_repeat_match.group(0))
+        logger.warning(
+            "[validator] Extraction failed: reason_code=EXTREME_ALPHANUMERIC_REPEAT, modality=%s, "
+            "units_count=%d, bad_char=%r, codepoint=U+%04X, seq_length=%d",
+            modality, len(units), bad_char, ord(bad_char), seq_len,
+        )
+        return (
+            False,
+            "EXTRACTION_INSUFFICIENT",
+            "Extracted content contains repeated garbage character sequences.",
+        )
+
+    # 4D. Extreme repeated non-formatting symbol garbage (e.g., '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
+    # Standard separators (spaces, tabs, -, _, =, ., *, #, ~, +, |, /, \, :, ;, <, >, [, ], (, ), {, }, ", ') pass.
+    noise_repeat_match = re.search(r"([^a-zA-Z0-9\s\-_=.*#~+|/\\:;<>\[\](){}\"'─│┌┐└┘├┤┬┴┼═║╔╗╚╝╠╣╦╩╬])\1{14,}", full_text)
+    if noise_repeat_match:
+        bad_char = noise_repeat_match.group(1)
+        seq_len = len(noise_repeat_match.group(0))
+        logger.warning(
+            "[validator] Extraction failed: reason_code=EXTREME_NOISE_SYMBOL_REPEAT, modality=%s, "
+            "units_count=%d, bad_char=%r, codepoint=U+%04X, seq_length=%d",
+            modality, len(units), bad_char, ord(bad_char), seq_len,
+        )
         return (
             False,
             "EXTRACTION_INSUFFICIENT",
             "Extracted content contains unreadable OCR garbage or excessive non-text symbols.",
         )
 
-    # Check for character repetition (e.g. 'aaaaa', '......')
-    if re.search(r"(.)\1{12,}", full_text):
+    # 4E. High nonsensical-symbol density check
+    unusual_symbols = len(re.findall(r"[^A-Za-z0-9\s.,!?:;'\-_=*#~+/\\|<>\[\](){}%$&@^\"`]", full_text))
+    total_chars = max(1, len(full_text))
+    if unusual_symbols / total_chars > 0.40 and total_chars > 30:
+        logger.warning(
+            "[validator] Extraction failed: reason_code=HIGH_SYMBOL_DENSITY, modality=%s, "
+            "units_count=%d, unusual_symbols=%d, total_chars=%d, density=%.2f",
+            modality, len(units), unusual_symbols, total_chars, unusual_symbols / total_chars,
+        )
         return (
             False,
             "EXTRACTION_INSUFFICIENT",
-            "Extracted content contains repeated garbage character sequences.",
+            "Extracted content contains unreadable OCR garbage or excessive non-text symbols.",
         )
 
     # 5. Semantic token density check

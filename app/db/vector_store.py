@@ -39,14 +39,32 @@ from ..services.schemas import (
     StageDiagnostics,
 )
 
+import atexit
 import contextvars
+import threading
 
 logger = logging.getLogger(__name__)
 
 _client_instance: QdrantClient | None = None
+_client_lock = threading.Lock()
 _embed_diagnostics_var: contextvars.ContextVar[StageDiagnostics | None] = contextvars.ContextVar(
     "embed_diagnostics", default=None
 )
+
+
+def close_client() -> None:
+    """Close active Qdrant client connection and release underlying file handles."""
+    global _client_instance
+    with _client_lock:
+        if _client_instance is not None:
+            try:
+                _client_instance.close()
+            except Exception:
+                pass
+            _client_instance = None
+
+
+atexit.register(close_client)
 
 
 _active_embedding_dim: int = 768
@@ -63,32 +81,48 @@ def get_client() -> QdrantClient:
     if _client_instance is not None:
         return _client_instance
 
-    url = (settings.qdrant_url or "").strip()
-
-    if url.startswith("https://") or (
-        url and not any(h in url for h in ("localhost", "127.0.0.1"))
-    ):
-        _client_instance = QdrantClient(url=url, api_key=settings.qdrant_api_key or None)
-        return _client_instance
-
-    if url:
-        try:
-            probe_client = QdrantClient(
-                url=url, api_key=settings.qdrant_api_key or None, timeout=2.0
-            )
-            probe_client.get_collections()
-            _client_instance = probe_client
+    with _client_lock:
+        if _client_instance is not None:
             return _client_instance
-        except Exception:
-            logger.info(
-                "Local Qdrant server unreachable at %s; using embedded storage at %s",
-                url,
-                settings.qdrant_path,
-            )
 
-    settings.qdrant_path.mkdir(parents=True, exist_ok=True)
-    _client_instance = QdrantClient(path=str(settings.qdrant_path))
-    return _client_instance
+        url = (settings.qdrant_url or "").strip()
+
+        if url.startswith("https://") or (
+            url and not any(h in url for h in ("localhost", "127.0.0.1"))
+        ):
+            _client_instance = QdrantClient(url=url, api_key=settings.qdrant_api_key or None)
+            return _client_instance
+
+        if url:
+            try:
+                probe_client = QdrantClient(
+                    url=url, api_key=settings.qdrant_api_key or None, timeout=2.0
+                )
+                probe_client.get_collections()
+                _client_instance = probe_client
+                return _client_instance
+            except Exception as probe_err:
+                logger.info(
+                    "Local Qdrant server unreachable at %s (%s); falling back to embedded storage at %s",
+                    url,
+                    probe_err,
+                    settings.qdrant_path,
+                )
+
+        try:
+            settings.qdrant_path.mkdir(parents=True, exist_ok=True)
+            _client_instance = QdrantClient(path=str(settings.qdrant_path))
+            return _client_instance
+        except Exception as emb_err:
+            logger.error(
+                "[vector_store] Failed to initialize embedded Qdrant store at %s: %s",
+                settings.qdrant_path,
+                emb_err,
+            )
+            raise RuntimeError(
+                f"Vector database unavailable: remote '{url}' is unreachable and embedded store at "
+                f"'{settings.qdrant_path}' failed to open ({emb_err})."
+            ) from emb_err
 
 
 def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
@@ -110,7 +144,7 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     return vec
 
 
-def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
+def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> list[list[float]] | None:
     """Attempt batch embedding via Ollama /api/embed endpoint.
 
     Validates:
@@ -157,7 +191,15 @@ def _embed_ollama(texts: list[str]) -> list[list[float]] | None:
     successful_model: str | None = None
 
     for idx, model_name in enumerate(candidates):
-        payload = json.dumps({"model": model_name, "input": texts}).encode("utf-8")
+        if any(m in model_name for m in ("nomic-embed", "bge-", "e5-")):
+            prefix = "search_query: " if task_type == "retrieval_query" else "search_document: "
+            formatted_texts = [
+                f"{prefix}{t}" if not t.startswith(("search_query: ", "search_document: ")) else t
+                for t in texts
+            ]
+        else:
+            formatted_texts = texts
+        payload = json.dumps({"model": model_name, "input": formatted_texts}).encode("utf-8")
         req = urllib.request.Request(
             url,
             data=payload,
@@ -300,7 +342,7 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
         return vectors
 
     # 2. Local Ollama embeddings
-    ollama_vectors = _embed_ollama(texts)
+    ollama_vectors = _embed_ollama(texts, task_type=task_type)
     if ollama_vectors and len(ollama_vectors) == len(texts):
         dim = len(ollama_vectors[0])
         _active_embedding_dim = dim
@@ -313,6 +355,19 @@ def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list
     vectors = [_deterministic_embedding(t, dim=dim) for t in texts]
     _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False, dimension_validated=True))
     return vectors
+
+
+def embed_documents(texts: list[str]) -> list[list[float]]:
+    """Authoritative document embedding entrypoint for indexing (retrieval_document)."""
+    return _embed(texts, task_type="retrieval_document")
+
+
+def embed_query(query: str | list[str]) -> list[float] | list[list[float]]:
+    """Authoritative query embedding entrypoint for vector search (retrieval_query)."""
+    if isinstance(query, str):
+        res = _embed([query], task_type="retrieval_query")
+        return res[0] if res else []
+    return _embed(query, task_type="retrieval_query")
 
 
 _INDEXES_ENSURED: set[str] = set()
@@ -450,31 +505,16 @@ def search_layer_a(
     limit: int = 5,
     source_id: str | None = None,
     score_threshold: float | None = None,
+    user_id: str = "student_default",
 ) -> list[dict[str, Any]]:
-    try:
-        client = get_client()
-        vector = _embed([query], task_type="retrieval_query")[0]
-        must_conditions = [qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A"))]
-        if source_id:
-            must_conditions.append(qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)))
-        _diag = _embed_diagnostics_var.get()
-        if score_threshold is not None:
-            threshold = score_threshold
-        elif getattr(settings, "llm_provider", "") in ("mock", "test") or (_diag and _diag.fallback_used):
-            threshold = 0.05
-        else:
-            threshold = getattr(settings, "vector_similarity_threshold", 0.35)
-        hits = client.search(
-            collection_name=settings.collection_name,
-            query_vector=vector,
-            limit=limit,
-            query_filter=qmodels.Filter(must=must_conditions),
-            score_threshold=threshold,
-        )
-        return [h.payload for h in hits if h.payload]
-    except Exception as exc:
-        logger.warning("[vector_store] search_layer_a query failed: %s", exc)
-        return []
+    """Legacy compatibility search: delegates to authoritative search_source_chunks."""
+    return search_source_chunks(
+        user_id=user_id,
+        source_id=source_id or "",
+        query=query,
+        top_k=limit,
+        score_threshold=score_threshold,
+    )
 
 
 def search_source_chunks(
@@ -499,14 +539,17 @@ def search_source_chunks(
     - injection_status in ["clean", "sanitized"]
     - Safe degraded threshold on vector fallback (>= 0.25) to prevent arbitrary leakage
     """
-    client = get_client()
     try:
+        client = get_client()
         vector = _embed([query], task_type="retrieval_query")[0]
         must_conditions: list[Any] = [
             qmodels.FieldCondition(key="layer", match=qmodels.MatchValue(value="A")),
-            qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id)),
             qmodels.FieldCondition(key="retrieval_allowed", match=qmodels.MatchValue(value=True)),
         ]
+        if source_id:
+            must_conditions.append(
+                qmodels.FieldCondition(key="source_id", match=qmodels.MatchValue(value=source_id))
+            )
         should_conditions: list[Any] = []
         if user_id:
             if user_id == "student_default":

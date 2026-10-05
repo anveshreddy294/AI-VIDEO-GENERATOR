@@ -384,6 +384,30 @@ class MockProvider:
                 "concepts": extracted_concepts,
             })
 
+        # Check for batch assessment questions request
+        if "CONCEPTS TO TEST:" in prompt:
+            concepts_in_prompt = re.findall(r"- ID:\s*([A-Za-z0-9_-]+)\s*\|\s*Name:\s*([^|\n]+)\s*\|\s*Definition:\s*([^\n]+)", prompt)
+            batch_questions = []
+            for cid, cname, cdef in concepts_in_prompt:
+                cname = cname.strip()
+                cid = cid.strip()
+                words = [w for w in re.findall(r"\b[a-zA-Z]{4,}\b", cdef.lower()) if w not in {"this", "that", "with", "from", "which", "what", "where", "when", "about", "according", "statement", "describes", "characterizes", "study", "material", "curriculum", "source", "following", "defined", "concept", "principle", "based", "learning", "state", "primarily", "chunk"} and w != cname.lower()]
+                s_words = " ".join(words[:4]) if words else f"{cname.lower()} dynamics"
+                batch_questions.append({
+                    "concept_id": cid,
+                    "question": f"According to the study material for {cname}, which statement accurately captures its core definition regarding {s_words}?",
+                    "options": [
+                        {"index": 0, "text": f"{cname} is primarily defined as: {cdef[:90]}."},
+                        {"index": 1, "text": f"{cname} operates completely independently without requiring {s_words}."},
+                        {"index": 2, "text": f"{cname} acts exclusively to prevent {s_words} from occurring."},
+                        {"index": 3, "text": f"{cname} applies only when {s_words} is disabled or absent."},
+                    ],
+                    "correct_index": 0,
+                    "evidence_quote": cdef[:100],
+                    "explanation": f"Based on the grounded study material for {cname}.",
+                })
+            return json.dumps({"questions": batch_questions})
+
         # Default assessment question JSON - grounded dynamically if prompt contains concept or source material
         import re
         c_match = re.search(r"CONCEPT:\s*([^\n]+)", prompt)
@@ -394,7 +418,13 @@ class MockProvider:
 
         # Find significant source tokens for grounding
         src = ""
-        if "SOURCE MATERIAL" in prompt:
+        if "<source_context>" in prompt:
+            part = prompt.split("<source_context>", 1)[1]
+            if "</source_context>" in part:
+                src = part.split("</source_context>", 1)[0]
+            else:
+                src = part[:500]
+        elif "SOURCE MATERIAL" in prompt:
             part = prompt.split("SOURCE MATERIAL", 1)[1]
             if ":\n" in part:
                 part = part.split(":\n", 1)[1]

@@ -845,7 +845,7 @@ def get_profile(student_id: str, source_id: str):
 @router.get("/status/{session_id}")
 def get_session_status(session_id: str):
     """Check the status of an assessment session."""
-    session = load_session(session_id)
+    session = load_session(validate_id(session_id))
     if not session:
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
 
@@ -855,6 +855,44 @@ def get_session_status(session_id: str):
         "student_id": session.student_id,
         "source_id": session.source_id,
         "question_count": len(session.questions),
+        "created_at": session.created_at,
+        "expires_at": session.expires_at,
+        "submitted_at": session.submitted_at,
+    }
+
+
+@router.get("/session/{session_id}")
+def get_session_details(session_id: str):
+    """Authoritative session recovery endpoint for dashboard page refresh.
+
+    Returns the session metadata and active safe questions without leaking correct answers.
+    If the session is already submitted, returns the authoritative submitted results.
+    """
+    session = load_session(validate_id(session_id))
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found.")
+
+    safe_questions = [
+        SafeQuestion(
+            question_id=q.question_id,
+            concept_id=q.concept_id,
+            concept_name=q.concept_name,
+            stem=q.stem,
+            options=[SafeOption(index=opt.index, text=opt.text) for opt in q.options],
+            difficulty=q.difficulty,
+        )
+        for q in session.questions
+    ]
+
+    return {
+        "status": session.status,
+        "session_id": session.session_id,
+        "student_id": session.student_id,
+        "source_id": session.source_id,
+        "question_count": len(session.questions),
+        "questions": [sq.model_dump() for sq in safe_questions],
+        "submitted_answers": getattr(session, "submitted_answers", {}),
+        "submission_response": getattr(session, "submission_response", None),
         "created_at": session.created_at,
         "expires_at": session.expires_at,
         "submitted_at": session.submitted_at,

@@ -2,6 +2,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -130,12 +131,33 @@ class Settings:
         self.pipeline_config_version: str = os.getenv("PIPELINE_CONFIG_VERSION", "v1").strip()
         self.openrouter_api_key: str = ""
 
+        # --- Database & Persistence Architecture (Supabase / Local) ---
+        self.database_provider: str = os.getenv("DATABASE_PROVIDER", "file").strip().lower()
+        self.supabase_url: str = os.getenv("SUPABASE_URL", "").strip()
+        self.supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "").strip()
+        self.supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
         ext = Path(filename).suffix.lstrip(".").lower()
         return ext in self.allowed_extensions
 
-
+    def validate_runtime_configuration(self) -> dict[str, Any]:
+        """Validate required runtime configuration without leaking secret values."""
+        status: dict[str, Any] = {
+            "llm_provider": self.llm_provider,
+            "embedding_model": self.embedding_model,
+            "qdrant_url": self.qdrant_url,
+            "database_provider": self.database_provider,
+            "supabase_connected": bool(self.supabase_url and (self.supabase_anon_key or self.supabase_service_role_key)),
+            "warnings": [],
+        }
+        if self.database_provider == "supabase" and not status["supabase_connected"]:
+            status["warnings"].append(
+                "DATABASE_PROVIDER is set to 'supabase', but SUPABASE_URL or keys are not configured. "
+                "Capabilities requiring remote persistence will fall back to local file storage."
+            )
+        return status
 
 
 settings = Settings()

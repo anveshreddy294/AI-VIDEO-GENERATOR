@@ -341,6 +341,7 @@ class TestVisionOpenRouter(unittest.TestCase):
             os.environ.pop("OPENROUTER_VISION_MODEL", None)
             os.environ.pop("OLLAMA_VISION_MODEL", None)
             os.environ.pop("VISION_MODEL", None)
+            os.environ.pop("EMBEDDING_MODEL", None)
             s = Settings()
             self.assertEqual(s.vision_model, "gemma3:4b")
             self.assertEqual(s.reasoning_model, "llama3.2:3b")
