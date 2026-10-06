@@ -1,55 +1,65 @@
-"""Authentication and User Isolation Engine (Phase 13).
+"""Verified Supabase user boundary; caller labels never authorize ownership."""
+from __future__ import annotations
 
-Provides server-authoritative user identity resolution:
-1. Supabase Auth JWT validation when remote credentials are configured.
-2. Controlled fallback to caller-supplied user_id in local/hackathon mode
-   with strict path-traversal sanitization and audit logging.
-3. Explicit configuration check to prevent faking authentication.
-"""
+from typing import Annotated
 
-import json
-import logging
-import base64
-from typing import Any
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ...core.config import settings
-from ..storage import validate_id
+from ...core.supabase import (
+    AuthenticatedUser, SupabaseAuthenticationError, SupabaseConfigurationError,
+    SupabaseError, SupabaseResponseError, SupabaseRuntime, SupabaseUnavailable,
+    get_supabase_runtime,
+)
 
-logger = logging.getLogger(__name__)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 def is_supabase_auth_configured() -> bool:
-    """Check if Supabase Auth credentials are provided."""
-    return bool(settings.supabase_url and (settings.supabase_anon_key or settings.supabase_service_role_key))
+    return bool(settings.supabase_url and (settings.supabase_publishable_key or settings.supabase_anon_key))
 
 
-def extract_authenticated_user_id(
-    authorization: str | None = None,
-    fallback_user_id: str | None = None,
-) -> str:
-    """Resolve authoritative user_id from Authorization Bearer token or fallback.
+def auth_http_error(error: SupabaseError) -> HTTPException:
+    if isinstance(error, SupabaseAuthenticationError):
+        return HTTPException(401, 'Authentication failed', headers={'WWW-Authenticate': 'Bearer'})
+    if isinstance(error, (SupabaseConfigurationError, SupabaseUnavailable)):
+        return HTTPException(503, 'Supabase authentication service unavailable')
+    if isinstance(error, SupabaseResponseError):
+        return HTTPException(502, 'Supabase operation failed')
+    return HTTPException(502, 'Supabase operation failed')
 
-    If Supabase is configured, extracts sub claim from verified JWT.
-    If Supabase credentials are not configured, uses the sanitized fallback_user_id
-    and logs an audit trail.
-    """
-    if is_supabase_auth_configured() and authorization and authorization.startswith("Bearer "):
-        token = authorization.split(" ", 1)[1].strip()
-        try:
-            # Parse unverified claims to extract subject identity
-            # (In production with live remote, signature is validated against Supabase JWT secret)
-            parts = token.split(".")
-            if len(parts) >= 2:
-                padding = "=" * (4 - len(parts[1]) % 4)
-                claims = json.loads(base64.urlsafe_b64decode(parts[1] + padding).decode("utf-8"))
-                sub = claims.get("sub") or claims.get("user_id")
-                if sub:
-                    return validate_id(str(sub))
-        except Exception as exc:
-            logger.warning("[auth] JWT claim extraction failed: %s; falling back to tenant id", exc)
 
-    if fallback_user_id:
-        return validate_id(fallback_user_id.strip())
+def get_runtime() -> SupabaseRuntime:
+    try:
+        return get_supabase_runtime()
+    except SupabaseError as error:
+        raise auth_http_error(error) from None
 
-    return "student_default"
+
+def require_access_token(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]) -> str:
+    if credentials is None:
+        raise HTTPException(401, 'Bearer access token required', headers={'WWW-Authenticate': 'Bearer'})
+    return credentials.credentials
+
+
+def get_current_user(token: Annotated[str, Depends(require_access_token)],
+                     runtime: Annotated[SupabaseRuntime, Depends(get_runtime)]) -> AuthenticatedUser:
+    """Resolve verified UUID and explicitly provision its RLS-scoped profile."""
+    try:
+        user = runtime.verify_user(token)
+        runtime.ensure_profile(user, token)
+        return user
+    except SupabaseError as error:
+        raise auth_http_error(error) from None
+
+
+def extract_authenticated_user_id(authorization: str | None = None,
+                                  fallback_user_id: str | None = None) -> str:
+    """Compatibility entry point: fallback_user_id is metadata and never trusted."""
+    if not authorization or not authorization.lower().startswith('bearer '):
+        raise HTTPException(401, 'Bearer access token required', headers={'WWW-Authenticate': 'Bearer'})
+    try:
+        return str(get_supabase_runtime().verify_user(authorization.split(' ', 1)[1].strip()).user_id)
+    except SupabaseError as error:
+        raise auth_http_error(error) from None

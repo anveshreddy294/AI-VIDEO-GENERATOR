@@ -1,6 +1,8 @@
 """Tests for Supabase schema migrations, repository abstraction, and auth helpers (Phases 11, 12, 13)."""
 
 from pathlib import Path
+import pytest
+from fastapi import HTTPException
 from app.core.config import settings
 from app.services.repositories.factory import (
     get_source_repository,
@@ -58,18 +60,20 @@ def test_supabase_source_repository_graceful_fallback():
 
 
 def test_auth_helper_unconfigured_behavior():
-    """Verify auth helper marks configuration status and sanitizes fallback identity."""
+    """Caller identity/defaults never authorize, even in unconfigured local mode."""
     # When Supabase Auth is not configured
     is_conf = is_supabase_auth_configured()
     assert is_conf is False or isinstance(is_conf, bool)
 
     # Resolves fallback user_id safely
-    uid = extract_authenticated_user_id(fallback_user_id="student_456")
-    assert uid == "student_456"
+    with pytest.raises(HTTPException) as exc:
+        extract_authenticated_user_id(fallback_user_id="student_456")
+    assert exc.value.status_code == 401
 
     # Default tenant fallback
-    default_uid = extract_authenticated_user_id()
-    assert default_uid == "student_default"
+    with pytest.raises(HTTPException) as exc:
+        extract_authenticated_user_id()
+    assert exc.value.status_code == 401
 
 
 def test_runtime_configuration_validation():

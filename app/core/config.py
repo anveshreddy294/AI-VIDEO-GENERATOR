@@ -136,6 +136,10 @@ class Settings:
         self.supabase_url: str = os.getenv("SUPABASE_URL", "").strip()
         self.supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "").strip()
         self.supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+        self.supabase_publishable_key: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+        self.supabase_secret_key: str = os.getenv("SUPABASE_SECRET_KEY", "").strip()
+        self.supabase_jwt_audience: str = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated").strip()
+        self.supabase_timeout_seconds: float = float(os.getenv("SUPABASE_TIMEOUT_SECONDS", "10"))
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
@@ -149,13 +153,13 @@ class Settings:
             "embedding_model": self.embedding_model,
             "qdrant_url": self.qdrant_url,
             "database_provider": self.database_provider,
-            "supabase_connected": bool(self.supabase_url and (self.supabase_anon_key or self.supabase_service_role_key)),
+            "supabase_connected": bool(self.supabase_url and (self.supabase_publishable_key or self.supabase_anon_key)),
             "warnings": [],
         }
         if self.database_provider == "supabase" and not status["supabase_connected"]:
             status["warnings"].append(
                 "DATABASE_PROVIDER is set to 'supabase', but SUPABASE_URL or keys are not configured. "
-                "Capabilities requiring remote persistence will fall back to local file storage."
+                "Configure runtime credentials before enabling remote capabilities."
             )
         return status
 

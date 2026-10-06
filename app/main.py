@@ -27,6 +27,8 @@ from .api.video import router as video_router
 from .api.qa import router as qa_router
 from .api.models import router as models_router
 from .api.learning import router as learning_router
+from .api.auth import router as auth_router
+from .core.supabase import close_supabase_runtime, get_supabase_runtime, SupabaseConfigurationError
 
 # ---------------------------------------------------------------------------
 # Allowed origins - override via VISUALAI_CORS_ORIGINS env var (comma-sep)
@@ -37,10 +39,15 @@ ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
-    # Gracefully cancel and await all active pipeline tasks on server shutdown
-    from .services.pipeline_tracker import job_manager
-    await job_manager.shutdown_active_jobs(timeout=5.0)
+    try:
+        yield
+    finally:
+        # Drain pipeline work before releasing shared infrastructure.
+        from .services.pipeline_tracker import job_manager
+        try:
+            await job_manager.shutdown_active_jobs(timeout=5.0)
+        finally:
+            close_supabase_runtime()
 
 
 app = FastAPI(
@@ -80,6 +87,17 @@ app.include_router(video_router)
 app.include_router(qa_router)
 app.include_router(models_router)
 app.include_router(learning_router)
+app.include_router(auth_router)
+
+
+@app.get("/health/supabase")
+def health_supabase() -> JSONResponse:
+    """Return credential-free runtime configuration and actual Auth reachability."""
+    try:
+        status = get_supabase_runtime().health()
+    except SupabaseConfigurationError:
+        status = {"configured": False, "reachable": False, "status": "not_configured"}
+    return JSONResponse(status_code=200 if status["reachable"] else 503, content={"supabase": status})
 
 
 @app.get("/favicon.ico", include_in_schema=False)
