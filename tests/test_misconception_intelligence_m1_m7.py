@@ -76,6 +76,9 @@ from app.services.video.scene_schema import VideoArtifact, VideoJobStatus, Video
 from app.services.video.video_planner import plan_video_for_target
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def async_test(coro):
     @functools.wraps(coro)
     def wrapper(*args, **kwargs):

@@ -191,6 +191,8 @@ class RichChunk(BaseModel):
     asset_id: str
     session_id: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    source_type: Literal["pdf", "image", "txt", "video"] | None = None
+    content_id: str | None = None
 
     @model_validator(mode="before")
     @classmethod
@@ -309,6 +311,9 @@ class StageDiagnostics(BaseModel):
     """Observable diagnostics envelope emitted across subsystem boundaries."""
 
     stage: str = "general"
+    configured_model: str | None = None
+    model_used: str | None = None
+    vector_dimension: int | None = None
     provider_used: str = "default"
     fallback_used: bool = False
     fallback_reason: str | None = None

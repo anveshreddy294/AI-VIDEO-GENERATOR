@@ -16,13 +16,7 @@ from .extractor import extract_from_pdf
 from .schemas import ContentUnit
 from .vision import VisionExtractionFailed, describe_image_file, describe_image_file_async
 
-IMAGE_EXTENSIONS: set[str] = {"png", "jpg", "jpeg"}
-VIDEO_EXTENSIONS: set[str] = {"mp4", "mov", "mkv"}
-
-
-class UnsupportedFileType(Exception):
-    pass
-
+from .modality import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, UnsupportedFileType, detect_modality
 
 
 @dataclass
@@ -42,15 +36,15 @@ def dispatch(
     on_progress: Callable[[str], None] | None = None,
 ) -> ExtractionResult:
     """Route a validated source file to its modality extractor."""
-    ext = file_path.suffix.lstrip(".").lower()
+    modality = detect_modality(file_path)
 
-    if ext == "pdf":
+    if modality == "pdf":
         units = extract_from_pdf(file_path, source_id=source_id, asset_id=asset_id)
         return ExtractionResult(
             source_id=source_id, asset_id=asset_id, modality="pdf", units=units
         )
 
-    if ext in IMAGE_EXTENSIONS:
+    if modality == "image":
         description = describe_image_file(file_path, on_progress=on_progress)
         unit = ContentUnit(
             source_id=source_id,
@@ -68,7 +62,7 @@ def dispatch(
             source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
         )
 
-    if ext == "txt":
+    if modality == "txt":
         raw_text = file_path.read_text(encoding="utf-8", errors="replace")
         paragraphs = [p.strip() for p in raw_text.split("\n\n") if p.strip()]
         units: list[ContentUnit] = []
@@ -108,7 +102,7 @@ def dispatch(
             source_id=source_id, asset_id=asset_id, modality="txt", units=units
         )
 
-    if ext in VIDEO_EXTENSIONS:
+    if modality == "video":
         from .video.pipeline import process_video_units
         units = process_video_units(
             file_path, source_id=source_id, asset_id=asset_id
@@ -117,9 +111,7 @@ def dispatch(
             source_id=source_id, asset_id=asset_id, modality="video", units=units
         )
 
-    raise UnsupportedFileType(
-        f"Unsupported extension '.{ext}'. Allowed: pdf, png, jpg, jpeg, txt, mp4, mov, mkv."
-    )
+
 
 
 async def dispatch_async(
@@ -129,9 +121,9 @@ async def dispatch_async(
     on_progress: Callable[[str], None] | None = None,
 ) -> ExtractionResult:
     """Route a validated source file to its modality extractor asynchronously."""
-    ext = file_path.suffix.lstrip(".").lower()
+    modality = detect_modality(file_path)
 
-    if ext in IMAGE_EXTENSIONS:
+    if modality == "image":
         description = await describe_image_file_async(file_path, on_progress=on_progress)
         unit = ContentUnit(
             source_id=source_id,
@@ -150,4 +142,4 @@ async def dispatch_async(
         )
 
     # For other extractors (PDF, TXT, Video), run in thread pool to prevent blocking event loop
-    return await asyncio.to_thread(dispatch, file_path, source_id, asset_id, on_progress)
+    return await asyncio.to_thread(dispatch, file_path, source_id, asset_id, on_progress)

@@ -162,6 +162,8 @@ def search_concept_chunks(
         qmodels.FieldCondition(key="retrieval_allowed", match=qmodels.MatchValue(value=True)),
     ]
 
+    from ...db.vector_store import semantic_filter_conditions
+    must_conditions.extend(semantic_filter_conditions())
     try:
         hits = client.search(
             collection_name=settings.collection_name,

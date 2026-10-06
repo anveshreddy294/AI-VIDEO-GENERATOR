@@ -13,6 +13,10 @@ from app.services.chunker import create_rich_chunks
 from app.services.validator import validate_ingestion_quality
 
 
+import pytest
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def run_test():
     print("--- Testing Step 1 Pipeline ---")
     from app.core.config import settings

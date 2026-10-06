@@ -29,6 +29,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
 
 from ..core.config import settings
+from ..core.processing_errors import ProcessingError, ProcessingCode
 from ..services.schemas import (
     AuthoritativeSourceChunk,
     AuthoritativeVideoChunk,
@@ -69,6 +70,8 @@ atexit.register(close_client)
 
 _active_embedding_dim: int = 768
 _resolved_ollama_model: str | None = None
+_embedding_fallback_warnings: set[tuple[str, str]] = set()
+SUPPORTED_EMBEDDING_FALLBACKS = {"embeddinggemma", "nomic-embed-text"}
 
 
 def get_last_embed_diagnostics() -> StageDiagnostics | None:
@@ -127,6 +130,8 @@ def get_client() -> QdrantClient:
 
 def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     """Generate a deterministic normalized vector representation for offline/fallback mode."""
+    if settings.embedding_provider != 'mock':
+        raise ProcessingError('EMBEDDING_FAILED', 'Synthetic embeddings are disabled outside explicit test mode')
     import hashlib
     import re
     target_dim = dim or _active_embedding_dim
@@ -144,217 +149,104 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     return vec
 
 
+def _embedding_failed(code: ProcessingCode) -> None:
+    """Record a safe failure for the legacy optional-vector boundary."""
+    _embed_diagnostics_var.set(StageDiagnostics(provider_used='ollama', error_code=code,
+        grounding_verified=False, dimension_validated=False, configured_model=settings.embedding_model))
+
+
 def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> list[list[float]] | None:
-    """Attempt batch embedding via Ollama /api/embed endpoint.
-
-    Validates:
-    - Ollama connectivity, HTTP status, and timeout
-    - Valid JSON payload structure
-    - 'embeddings' key existence and list type
-    - Number of returned vectors equals number of input texts
-    - Every vector is a non-empty list of 768 numeric and finite floats
-    - All vectors have identical dimensions (768)
-
-    Differentiates:
-    - Provider unavailable (URLError, timeout) -> logged with warning
-    - Invalid provider response (bad JSON, missing/invalid embeddings) -> logged with diagnostics
-    """
+    """Use one configured model; only model-not-found permits the explicit supported fallback."""
     import json
     import math
     import urllib.error
     import urllib.request
-
     if not texts:
         return []
-
     global _resolved_ollama_model
-
-    base_url = (getattr(settings, "ollama_base_url", None) or getattr(settings, "ollama_url", "http://localhost:11434")).rstrip("/")
-    primary_model = (
-        getattr(settings, "ollama_embed_model", None)
-        or getattr(settings, "embedding_model", "embeddinggemma")
-    )
-    timeout = float(getattr(settings, "ollama_timeout", 30.0))
-
-    candidates: list[str] = []
-    if _resolved_ollama_model and _resolved_ollama_model not in candidates:
-        candidates.append(_resolved_ollama_model)
-    if primary_model and primary_model not in candidates:
-        candidates.append(primary_model)
-    # Common 768-dim Ollama embedding models for automatic fallback when configured model is not pulled
-    for fallback in ("nomic-embed-text", "nomic-embed-text:latest"):
-        if fallback not in candidates:
-            candidates.append(fallback)
-
-    url = f"{base_url}/api/embed"
-    resp_bytes: bytes | None = None
-    successful_model: str | None = None
-
-    for idx, model_name in enumerate(candidates):
-        if any(m in model_name for m in ("nomic-embed", "bge-", "e5-")):
-            prefix = "search_query: " if task_type == "retrieval_query" else "search_document: "
-            formatted_texts = [
-                f"{prefix}{t}" if not t.startswith(("search_query: ", "search_document: ")) else t
-                for t in texts
-            ]
-        else:
-            formatted_texts = texts
-        payload = json.dumps({"model": model_name, "input": formatted_texts}).encode("utf-8")
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-
+    _resolved_ollama_model = None
+    primary = settings.embedding_model
+    fallback = settings.embedding_fallback_model
+    candidates = [primary]
+    if fallback and fallback != primary and fallback.split(':')[0] in SUPPORTED_EMBEDDING_FALLBACKS:
+        candidates.append(fallback)
+    base_url = settings.ollama_base_url.rstrip('/')
+    for index, model in enumerate(candidates):
+        prefix = 'search_query: ' if task_type == 'retrieval_query' else 'search_document: '
+        formatted = ([text if text.startswith(('search_query: ', 'search_document: ')) else prefix + text
+                      for text in texts] if 'nomic-embed' in model else texts)
+        payload = json.dumps({'model': model, 'input': formatted, 'truncate': False,
+                              'keep_alive': getattr(settings, 'ollama_keep_alive', '15m')}).encode('utf-8')
+        request = urllib.request.Request(base_url + '/api/embed', data=payload,
+            headers={'Content-Type': 'application/json'}, method='POST')
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                resp_bytes = resp.read()
-                successful_model = model_name
-                break
-        except urllib.error.HTTPError as http_err:
-            if http_err.code == 404 and idx < len(candidates) - 1:
-                logger.info(
-                    "[vector_store] Ollama model '%s' not found (HTTP 404); attempting fallback '%s'",
-                    model_name,
-                    candidates[idx + 1],
-                )
+            with urllib.request.urlopen(request, timeout=settings.ollama_timeout) as response:
+                data = json.loads(response.read().decode('utf-8'))
+        except urllib.error.HTTPError as error:
+            if error.code == 404 and index + 1 < len(candidates):
+                pair = (primary, fallback)
+                if pair not in _embedding_fallback_warnings:
+                    logger.warning('Embedding model %s unavailable; using configured fallback %s', primary, fallback)
+                    _embedding_fallback_warnings.add(pair)
                 continue
-            logger.warning(
-                "[vector_store] Ollama HTTP error during batch embedding (%s, model=%s): %s",
-                url,
-                model_name,
-                http_err,
-            )
+            _embedding_failed('EMBEDDING_MODEL_UNAVAILABLE' if error.code == 404 else 'EMBEDDING_FAILED')
             return None
-        except urllib.error.URLError as url_err:
-            logger.warning(
-                "[vector_store] Ollama connection failure/timeout during batch embedding (%s): %s",
-                url,
-                url_err,
-            )
+        except (urllib.error.URLError, TimeoutError):
+            _embedding_failed('EMBEDDING_MODEL_UNAVAILABLE')
             return None
-        except TimeoutError as to_err:
-            logger.warning(
-                "[vector_store] Ollama request timed out after %.1fs during batch embedding: %s",
-                timeout,
-                to_err,
-            )
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            _embedding_failed('EMBEDDING_FAILED')
             return None
-
-    if resp_bytes is None:
-        return None
-
-    # 1. Parse JSON
-    try:
-        data = json.loads(resp_bytes.decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as dec_err:
-        logger.warning(
-            "[vector_store] Ollama returned non-JSON response during batch embedding: %s",
-            dec_err
-        )
-        return None
-
-    if not isinstance(data, dict):
-        logger.warning(
-            "[vector_store] Ollama response is not a JSON object: got %s",
-            type(data).__name__
-        )
-        return None
-
-    # 2. Extract and validate 'embeddings'
-    embeddings = data.get("embeddings")
-    if embeddings is None:
-        logger.warning(
-            "[vector_store] Ollama response missing 'embeddings' key (keys: %s)",
-            list(data.keys())
-        )
-        return None
-
-    if not isinstance(embeddings, list):
-        logger.warning(
-            "[vector_store] Ollama 'embeddings' is not a list: got %s",
-            type(embeddings).__name__
-        )
-        return None
-
-    if len(embeddings) != len(texts):
-        logger.warning(
-            "[vector_store] Ollama returned vector count mismatch: got %d, expected %d",
-            len(embeddings), len(texts)
-        )
-        return None
-
-    # 3. Validate numeric and finite values, and dimensions
-    expected_dim = 768
-    clean_vectors: list[list[float]] = []
-
-    for idx, emb in enumerate(embeddings):
-        if not isinstance(emb, list) or len(emb) == 0:
-            logger.warning(
-                "[vector_store] Ollama embedding at index %d is not a non-empty list (got %s, len=%d)",
-                idx, type(emb).__name__, len(emb) if isinstance(emb, list) else 0
-            )
+        vectors = data.get('embeddings') if isinstance(data, dict) else None
+        if not isinstance(vectors, list) or len(vectors) != len(texts):
+            _embedding_failed('EMBEDDING_FAILED')
             return None
-
-        if len(emb) != expected_dim:
-            logger.warning(
-                "[vector_store] Ollama embedding at index %d dimension mismatch: got %d, expected %d",
-                idx, len(emb), expected_dim
-            )
-            return None
-
-        clean_vector: list[float] = []
-        for v_idx, val in enumerate(emb):
-            if not isinstance(val, (int, float)) or isinstance(val, bool):
-                logger.warning(
-                    "[vector_store] Non-numeric value in embedding at [%d][%d]: %r (%s)",
-                    idx, v_idx, val, type(val).__name__
-                )
+        clean: list[list[float]] = []
+        for vector in vectors:
+            if not isinstance(vector, list) or len(vector) != _active_embedding_dim:
+                _embedding_failed('EMBEDDING_FAILED')
                 return None
-            f_val = float(val)
-            if not math.isfinite(f_val):
-                logger.warning(
-                    "[vector_store] Non-finite value in embedding at [%d][%d]: %r",
-                    idx, v_idx, f_val
-                )
+            if any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(value) for value in vector):
+                _embedding_failed('EMBEDDING_FAILED')
                 return None
-            clean_vector.append(f_val)
-
-        clean_vectors.append(clean_vector)
-
-    if successful_model:
-        _resolved_ollama_model = successful_model
-    return clean_vectors
+            row = [float(value) for value in vector]
+            if not any(value != 0 for value in row):
+                _embedding_failed('EMBEDDING_FAILED')
+                return None
+            clean.append(row)
+        resolved = data.get('model', model)
+        if not isinstance(resolved, str) or resolved.split(':')[0] != model.split(':')[0]:
+            _embedding_failed('EMBEDDING_FAILED')
+            return None
+        _resolved_ollama_model = resolved
+        _embed_diagnostics_var.set(StageDiagnostics(provider_used='ollama', fallback_used=index > 0,
+            fallback_reason='Configured model unavailable' if index > 0 else None,
+            grounding_verified=True, dimension_validated=True, configured_model=primary,
+            model_used=resolved, vector_dimension=len(clean[0])))
+        return clean
+    _embedding_failed('EMBEDDING_MODEL_UNAVAILABLE')
+    return None
 
 
 def _embed(texts: list[str], task_type: str = "retrieval_document") -> list[list[float]]:
-    """Embedding pipeline: supports local Ollama embeddings and deterministic fallback."""
-    global _active_embedding_dim
+    """Production embeddings fail closed; test vectors require an explicit independent provider."""
     if not texts:
         return []
-
-    # 1. Deterministic offline vectors for mock/test runs
-    if getattr(settings, "llm_provider", "") in ("mock", "test"):
-        dim = _active_embedding_dim
-        vectors = [_deterministic_embedding(t, dim=dim) for t in texts]
-        _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False, dimension_validated=True))
+    if settings.embedding_provider == 'mock':
+        _embed_diagnostics_var.set(StageDiagnostics(provider_used='deterministic_test', fallback_used=False,
+            grounding_verified=False, dimension_validated=True, vector_dimension=_active_embedding_dim))
+        return [_deterministic_embedding(text) for text in texts]
+    if settings.embedding_provider != 'ollama':
+        raise ProcessingError('EMBEDDING_MODEL_UNAVAILABLE', 'Embedding provider is unavailable')
+    vectors = _embed_ollama(texts, task_type=task_type)
+    if vectors is not None:
         return vectors
-
-    # 2. Local Ollama embeddings
-    ollama_vectors = _embed_ollama(texts, task_type=task_type)
-    if ollama_vectors and len(ollama_vectors) == len(texts):
-        dim = len(ollama_vectors[0])
-        _active_embedding_dim = dim
-        _embed_diagnostics_var.set(StageDiagnostics(provider_used="ollama", fallback_used=False, grounding_verified=True, dimension_validated=True))
-        return ollama_vectors
-
-    # 3. Resilient offline deterministic hash fallback
-    logger.info("[vector_store] Ollama embeddings unavailable or invalid; using deterministic normalized hash embedding fallback.")
-    dim = _active_embedding_dim
-    vectors = [_deterministic_embedding(t, dim=dim) for t in texts]
-    _embed_diagnostics_var.set(StageDiagnostics(provider_used="deterministic_hash_fallback", fallback_used=True, grounding_verified=False, dimension_validated=True))
-    return vectors
+    diagnostics = get_last_embed_diagnostics()
+    code: ProcessingCode = ('EMBEDDING_MODEL_UNAVAILABLE' if diagnostics and
+                            diagnostics.error_code == 'EMBEDDING_MODEL_UNAVAILABLE' else 'EMBEDDING_FAILED')
+    raise ProcessingError(code, 'Configured embedding model unavailable' if code == 'EMBEDDING_MODEL_UNAVAILABLE'
+                          else 'Embedding generation or vector validation failed')
 
 
 def embed_documents(texts: list[str]) -> list[list[float]]:
@@ -453,6 +345,38 @@ def _payload(chunk: LayerChunk) -> dict[str, Any]:
     return payload
 
 
+
+class RetrievalUnavailable(RuntimeError):
+    """No vectors match the active query embedding space for this source."""
+
+
+def embedding_provenance() -> dict[str, str | int]:
+    """Describe the model that actually produced the last validated vector batch."""
+    diagnostic = get_last_embed_diagnostics()
+    if settings.embedding_provider == "mock":
+        return {"embedding_provider": "mock", "embedding_model": "deterministic_test",
+                "embedding_dimension": _active_embedding_dim, "embedding_kind": "synthetic_test",
+                "embedding_version": "1"}
+    if (diagnostic is None or not diagnostic.dimension_validated or
+            diagnostic.provider_used != "ollama" or not diagnostic.model_used or
+            diagnostic.vector_dimension != _active_embedding_dim):
+        raise ProcessingError("EMBEDDING_FAILED", "Validated embedding provenance unavailable")
+    return {"embedding_provider": diagnostic.provider_used,
+            "embedding_model": diagnostic.model_used.removesuffix(":latest"),
+            "embedding_dimension": _active_embedding_dim,
+            "embedding_kind": "semantic", "embedding_version": "1"}
+
+
+def semantic_filter_conditions(model: str | None = None) -> list[qmodels.FieldCondition]:
+    """Confine production queries to the exact validated query embedding space."""
+    if settings.embedding_provider == "mock":
+        return []  # Explicit isolated test mode retains historical fixture compatibility.
+    expected = (embedding_provenance() if model is None else {
+        "embedding_provider": "ollama", "embedding_model": model.removesuffix(":latest"),
+        "embedding_dimension": _active_embedding_dim, "embedding_kind": "semantic", "embedding_version": "1"})
+    return [qmodels.FieldCondition(key=key, match=qmodels.MatchValue(value=value))
+            for key, value in expected.items()]
+
 def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     if not chunks:
         return 0
@@ -462,7 +386,7 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     ensure_collection(client, len(vectors[0]))
     if len(vectors) != len(chunks):
         raise RuntimeError("Embedding count mismatch")
-    points = [qmodels.PointStruct(id=_point_id(c), vector=v, payload=_payload(c)) for c, v in zip(chunks, vectors)]
+    points = [qmodels.PointStruct(id=_point_id(c), vector=v, payload={**_payload(c), **embedding_provenance()}) for c, v in zip(chunks, vectors)]
     client.upsert(collection_name=settings.collection_name, points=points, wait=True)
     stored = client.retrieve(collection_name=settings.collection_name, ids=[p.id for p in points], with_payload=True)
     if {str(p.id) for p in stored} != {str(p.id) for p in points}:
@@ -486,7 +410,7 @@ def upsert_layer_b_scenes(scenes: list[LayerBVideoSceneChunk]) -> int:
     if len(vectors) != len(scenes):
         raise RuntimeError("Scene embedding count mismatch")
     points = [
-        qmodels.PointStruct(id=_point_id(s), vector=v, payload=_payload(s))
+        qmodels.PointStruct(id=_point_id(s), vector=v, payload={**_payload(s), **embedding_provenance()})
         for s, v in zip(scenes, vectors)
     ]
     client.upsert(collection_name=settings.collection_name, points=points, wait=True)
@@ -592,10 +516,14 @@ def search_source_chunks(
         else:
             threshold = getattr(settings, "vector_similarity_threshold", 0.35)
 
+        must_conditions.extend(semantic_filter_conditions())
         filter_kwargs: dict[str, Any] = {"must": must_conditions}
         if should_conditions:
             filter_kwargs["should"] = should_conditions
 
+        if settings.embedding_provider != "mock" and client.count(
+                settings.collection_name, count_filter=qmodels.Filter(**filter_kwargs), exact=True).count == 0:
+            raise RetrievalUnavailable("No compatible semantic vectors available for this source")
         hits = client.search(
             collection_name=settings.collection_name,
             query_vector=vector,
@@ -614,8 +542,10 @@ def search_source_chunks(
             payload["similarity_score"] = h.score
             results.append(payload)
         return results
+    except RetrievalUnavailable:
+        raise
     except Exception as exc:
-        logger.warning("[vector_store] search_source_chunks failed: %s", exc)
+        logger.warning("[vector_store] search_source_chunks failed: %s", type(exc).__name__)
         return []
 
 
@@ -734,6 +664,7 @@ def retrieve_exact_chunks(
                     qmodels.FieldCondition(key="concept_ids", match=qmodels.MatchAny(any=clean_concept_ids))
                 )
 
+        must_conditions.extend(semantic_filter_conditions(model=settings.embedding_model))
         scroll_filter = qmodels.Filter(must=must_conditions) if must_conditions else None
 
         records, _ = client.scroll(

@@ -37,6 +37,10 @@ from app.api.pipeline import (
 )
 
 
+import pytest
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 class TestPipelineObservability(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         from app.core.config import settings

@@ -10,6 +10,9 @@ from app.core.config import settings
 from app.services.pipeline_tracker import job_manager, PipelineJob
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def test_concurrency_semaphore_bounds_active_jobs():
     """Assert that concurrent jobs never exceed MAX_BACKGROUND_JOBS."""
     async def _test():

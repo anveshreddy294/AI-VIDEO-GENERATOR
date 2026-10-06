@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..core.config import settings
+from .sources import SourceDependency
 from ..services.chunker import create_rich_chunks
 from ..services.dispatcher import IMAGE_EXTENSIONS, UnsupportedFileType, VisionExtractionFailed, dispatch, dispatch_async
 from ..services.ingestion.normalizer import normalize_content_units
@@ -146,7 +147,7 @@ async def _execute_upload_and_assess(
 
         # Stage 2: Extracting Content
         initial_msg = (
-            "18% — Preparing image for visual understanding"
+            "18% â€” Preparing image for visual understanding"
             if persistent_file.suffix.lstrip(".").lower() in IMAGE_EXTENSIONS
             else "Extracting multimodal content via modality dispatcher..."
         )
@@ -176,7 +177,7 @@ async def _execute_upload_and_assess(
                     job_id=job_id,
                     stage="extracting_content",
                     status="running",
-                    message=f"18% — {substage_msg}",
+                    message=f"18% â€” {substage_msg}",
                     progress_percent=18,
                     metadata={"source_id": source_id, "substage": substage_msg},
                 ),
@@ -444,7 +445,7 @@ async def _execute_upload_and_assess(
         except Exception as exc:
             logger.warning("[pipeline_job] Primary Qdrant upsert failed: %s. Retrying explicitly with local fallback...", exc)
             def sync_fallback():
-                from ..db.vector_store import get_client, ensure_collection, _embed, _point_id, _payload
+                from ..db.vector_store import get_client, ensure_collection, _embed, _point_id, _payload, embedding_provenance
                 from ..services.schemas import StageDiagnostics
                 from qdrant_client import QdrantClient
                 from qdrant_client.http import models as qmodels
@@ -456,7 +457,7 @@ async def _execute_upload_and_assess(
                 texts = [c.text for c in rich_chunks]
                 vectors = _embed(texts)
                 points = [
-                    qmodels.PointStruct(id=_point_id(c), vector=v, payload=_payload(c))
+                    qmodels.PointStruct(id=_point_id(c), vector=v, payload={**_payload(c), **embedding_provenance()})
                     for c, v in zip(rich_chunks, vectors)
                 ]
                 if points:
@@ -864,6 +865,7 @@ async def create_upload_job(
     file: UploadFile = File(...),
     student_id: str = "student_default",
     max_questions: int = 5,
+    repository: SourceDependency = None,
 ) -> JobCreationResponse:
     """Create background ingestion + assessment job and return job_id for SSE progress tracking."""
     if not job_manager.can_accept_job():
@@ -893,6 +895,10 @@ async def create_upload_job(
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise
+
+    if repository is not None:
+        from .source_jobs import queue_source_job
+        return await queue_source_job(background_tasks, repository, temp_path, filename)
 
     file_sha256 = hasher.hexdigest()
     pipeline_version = getattr(settings, "pipeline_config_version", "v1")
@@ -931,6 +937,7 @@ async def create_upload_job(
 async def create_assess_existing_job(
     payload: AssessExistingRequest,
     background_tasks: BackgroundTasks,
+    repository: SourceDependency = None,
 ) -> JobCreationResponse:
     """Create background assessment generation job for existing source and return job_id."""
     if not job_manager.can_accept_job():
@@ -940,6 +947,8 @@ async def create_assess_existing_job(
             headers={"Retry-After": "30"},
         )
 
+    if repository is not None:
+        raise HTTPException(409, "Assessment persistence is not integrated with Supabase sources yet")
     job = job_manager.create_job(job_type="assess_existing")
     background_tasks.add_task(
         _execute_assess_existing,
@@ -956,9 +965,11 @@ async def create_assess_existing_job(
 
 
 @router.get("/jobs/{job_id}/events")
-async def stream_job_events(job_id: str):
+async def stream_job_events(job_id: str, repository: SourceDependency = None):
     """Server-Sent Events (SSE) telemetry stream for a pipeline job."""
     job = job_manager.get_job(job_id)
+    if repository is not None and (job is None or job.metadata.get("source_owner") != repository.owner_id):
+        raise HTTPException(404, "Job not found")
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
 
@@ -992,9 +1003,11 @@ async def stream_job_events(job_id: str):
 
 
 @router.get("/jobs/{job_id}")
-async def get_job_status(job_id: str) -> dict[str, Any]:
+async def get_job_status(job_id: str, repository: SourceDependency = None) -> dict[str, Any]:
     """Retrieve full job snapshot including current status and result."""
     job = job_manager.get_job(job_id)
+    if repository is not None and (job is None or job.metadata.get("source_owner") != repository.owner_id):
+        raise HTTPException(404, "Job not found")
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     return job.model_dump()
@@ -1004,8 +1017,12 @@ async def get_job_status(job_id: str) -> dict[str, Any]:
 async def retry_failed_job(
     job_id: str,
     background_tasks: BackgroundTasks,
+    repository: SourceDependency = None,
 ) -> JobCreationResponse:
     """Idempotently retry extraction for a failed pipeline job reusing persistent files and source metadata."""
+    if repository is not None:
+        from .source_jobs import retry_source_job
+        return await retry_source_job(background_tasks, repository, job_id)
     old_job = job_manager.get_job(job_id)
     if not old_job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
@@ -1111,9 +1128,11 @@ async def retry_failed_job(
 
 
 @router.post("/jobs/{job_id}/cancel", response_model=dict[str, Any])
-async def cancel_pipeline_job(job_id: str) -> dict[str, Any]:
+async def cancel_pipeline_job(job_id: str, repository: SourceDependency = None) -> dict[str, Any]:
     """Explicitly cancel a running or pending pipeline job."""
     job = job_manager.get_job(job_id)
+    if repository is not None and (job is None or job.metadata.get("source_owner") != repository.owner_id):
+        raise HTTPException(404, "Job not found")
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
     if job.is_finished:

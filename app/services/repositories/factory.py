@@ -4,15 +4,21 @@ Returns the configured repository implementation (File or Supabase).
 """
 
 from ...core.config import settings
+from ...core.supabase import AuthenticatedUser, SupabaseRuntime, SupabaseConfigurationError
 from .base import SourceRepository, AssessmentRepository, LearningProfileRepository
 from .file_repository import FileSourceRepository, FileAssessmentRepository, FileLearningProfileRepository
 from .supabase_repository import SupabaseSourceRepository, SupabaseAssessmentRepository, SupabaseLearningProfileRepository
 
 
-def get_source_repository() -> SourceRepository:
+def get_source_repository(*, user: AuthenticatedUser | None = None, token: str | None = None,
+                          runtime: SupabaseRuntime | None = None) -> SourceRepository:
     """Return the active source repository based on database provider configuration."""
-    if settings.database_provider == "supabase" and settings.supabase_url:
-        return SupabaseSourceRepository()
+    if settings.database_provider == "supabase":
+        if user is None or not token or runtime is None:
+            raise SupabaseConfigurationError("Verified user context required for Supabase sources")
+        return SupabaseSourceRepository(user, token, runtime)
+    if settings.database_provider not in {"file", "local"}:
+        raise SupabaseConfigurationError("Unknown source database provider")
     return FileSourceRepository()
 
 

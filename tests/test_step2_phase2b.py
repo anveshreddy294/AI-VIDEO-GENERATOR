@@ -36,6 +36,10 @@ from app.services.schemas import ConceptNode, KnowledgeGraph
 client = TestClient(app)
 
 
+import pytest
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def _make_valid_question(concept_id: str, concept_name: str, source_id: str, difficulty: str = "intermediate") -> Question:
     """Helper to create a valid Question for testing."""
     return Question(

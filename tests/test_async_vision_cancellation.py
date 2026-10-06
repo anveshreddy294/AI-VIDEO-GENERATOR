@@ -55,6 +55,9 @@ VALID_EXTRACTION_JSON = {
 }
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 @pytest.fixture(autouse=True)
 def setup_teardown():
     _VISION_EXTRACTION_CACHE.clear()

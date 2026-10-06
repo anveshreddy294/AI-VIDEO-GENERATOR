@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..services.qa.grounded_answer import generate_grounded_answer, list_answer_traces
 from ..services.schemas import QARequest, QAResponse
+from ..db.vector_store import RetrievalUnavailable
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,9 @@ async def ask_grounded_question(request: QARequest) -> QAResponse:
     try:
         response = await generate_grounded_answer(request)
         return response
+    except RetrievalUnavailable:
+        raise HTTPException(503, detail={"code": "RETRIEVAL_UNAVAILABLE",
+            "message": "No compatible semantic vectors available for this source."}) from None
     except Exception as exc:
         logger.exception("[qa] Error generating grounded answer for source %s", request.source_id)
         raise HTTPException(

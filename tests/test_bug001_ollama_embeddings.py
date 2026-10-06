@@ -156,6 +156,7 @@ def test_embed_ollama_timeout(monkeypatch):
 def test_embed_pipeline_success_vs_fallback(monkeypatch):
     # 1. Success case uses Ollama provider
     monkeypatch.setattr(settings, "llm_provider", "ollama")
+    monkeypatch.setattr(settings, "embedding_provider", "ollama")
     real_vec = [0.5] * 768
     mock_resp = _mock_response({"embeddings": [real_vec]})
     monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=30.0: mock_resp)
@@ -168,16 +169,12 @@ def test_embed_pipeline_success_vs_fallback(monkeypatch):
     assert diag.fallback_used is False
     assert diag.grounding_verified is True
 
-    # 2. Failure case activates deterministic fallback
+    # Provider failure is observable and cannot fabricate production vectors.
     def mock_fail(req, timeout=30.0):
         raise urllib.error.URLError("Ollama service down")
-
     monkeypatch.setattr(urllib.request, "urlopen", mock_fail)
-
-    vectors_fallback = _embed(["sample text"])
-    assert len(vectors_fallback) == 1
-    assert len(vectors_fallback[0]) == len(real_vec)
-    diag_fb = get_last_embed_diagnostics()
-    assert diag_fb is not None
-    assert diag_fb.provider_used == "deterministic_hash_fallback"
-    assert diag_fb.fallback_used is True
+    from app.core.processing_errors import ProcessingError
+    with pytest.raises(ProcessingError) as failure:
+        _embed(["sample text"])
+    assert failure.value.code == 'EMBEDDING_MODEL_UNAVAILABLE'
+    assert get_last_embed_diagnostics().error_code == 'EMBEDDING_MODEL_UNAVAILABLE'

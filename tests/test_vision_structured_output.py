@@ -37,6 +37,9 @@ SAMPLE_IMAGE_BYTES = (
     b"\x01\x00\x00?\x00\xbf\x00\xff\xd9"
 )
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 @pytest.fixture(autouse=True)
 def clear_vision_cache():
     _VISION_EXTRACTION_CACHE.clear()

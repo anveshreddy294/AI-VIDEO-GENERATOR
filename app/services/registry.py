@@ -60,6 +60,8 @@ SOURCES_INDEX_FILE = get_registry_dir() / "sources_index.json"
 
 def _load_sources_index() -> dict[str, dict[str, Any]]:
     """Loads sources index by merging seed fixtures with runtime additions."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     fixtures_index: dict[str, dict[str, Any]] = {}
     fixtures_file = get_fixtures_registry_dir() / "sources_index.json"
     if settings.include_fixture_sources and fixtures_file.exists():
@@ -81,6 +83,8 @@ def _load_sources_index() -> dict[str, dict[str, Any]]:
 
 def _save_sources_index(index: dict[str, dict[str, Any]]) -> None:
     """Save sources index exclusively to isolated runtime storage."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     runtime_file = get_registry_dir() / "sources_index.json"
     atomic_json(runtime_file, index)
 
@@ -111,17 +115,8 @@ def validate_file(file_path: Path, filename: str) -> tuple[str, str]:
     if size > 500 * 1024 * 1024:
         raise ValueError(f"File '{filename}' exceeds maximum allowed size of 500MB.")
 
-    # Determine source_type
-    if ext == "pdf":
-        source_type = "pdf"
-    elif ext in settings.IMAGE_EXTENSIONS if hasattr(settings, "IMAGE_EXTENSIONS") else ext in {"png", "jpg", "jpeg"}:
-        source_type = "image"
-    elif ext == "txt":
-        source_type = "txt"
-    elif ext in settings.video_extensions:
-        source_type = "video"
-    else:
-        source_type = "pdf"
+    from .modality import detect_modality
+    source_type = detect_modality(Path(filename))
 
     guessed_mime, _ = mimetypes.guess_type(filename)
     mime_type = guessed_mime or f"application/{ext}"
@@ -168,6 +163,8 @@ def register_source(
     title: str | None = None,
 ) -> tuple[SourceRecord, Path]:
     """Validate file, compute hash, create SourceRecord with versioning, and persist original file."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     source_type, mime_type = validate_file(temp_path, filename)
     file_hash = calculate_sha256(temp_path)
     file_size = temp_path.stat().st_size
@@ -225,6 +222,8 @@ def register_source(
 
 def _record_source_version(record: SourceRecord) -> None:
     """Record immutable version entry in source_versions.json."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     versions_file = get_registry_dir() / "source_versions.json"
     data: dict[str, list[dict[str, Any]]] = {}
     if versions_file.exists():
@@ -249,6 +248,8 @@ def _record_source_version(record: SourceRecord) -> None:
 @serialized
 def save_source_record(record: SourceRecord) -> None:
     """Save/update a SourceRecord in the persistent registry."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     record.updated_at = datetime.now(timezone.utc).isoformat()
     index = _load_sources_index()
     index[record.source_id] = record.model_dump()
@@ -262,6 +263,8 @@ def update_source_status(
     error_message: str | None = None,
 ) -> SourceRecord:
     """Update status of a source in the registry with defensive domain normalization."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     index = _load_sources_index()
     if source_id not in index:
         raise KeyError(f"Source ID '{source_id}' not found in registry.")
@@ -296,6 +299,8 @@ def update_source_status(
 
 def save_content_units(source_id: str, content_units: list[ContentUnit]) -> None:
     """Persist normalized ContentUnits for a source to JSON in runtime registry."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     source_dir = get_registry_dir() / validate_id(source_id)
     source_dir.mkdir(parents=True, exist_ok=True)
     cu_file = source_dir / "content_units.json"
@@ -305,6 +310,8 @@ def save_content_units(source_id: str, content_units: list[ContentUnit]) -> None
 
 def load_content_units(source_id: str) -> list[ContentUnit]:
     """Load normalized ContentUnits for a source with runtime, fixture, and legacy fallback."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use the authenticated Supabase source repository; local source access is disabled")
     # 1. Check runtime registry
     cu_file = get_registry_dir() / validate_id(source_id) / "content_units.json"
     # 2. Check fixtures registry
@@ -378,10 +385,14 @@ def get_source(source_id: str) -> SourceRecord | None:
 
 
 def save_rich_chunks(source_id: str, chunks) -> None:
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version chunks; local source chunks are disabled")
     atomic_json(get_registry_dir() / validate_id(source_id) / "rich_chunks.json", [c.model_dump() for c in chunks])
 
 
 def load_rich_chunks(source_id: str) -> list[dict]:
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version chunks; local source chunks are disabled")
     path = get_registry_dir() / validate_id(source_id) / "rich_chunks.json"
     if not path.exists():
         return []
@@ -392,6 +403,8 @@ def load_rich_chunks(source_id: str) -> list[dict]:
 
 def save_normalized_records(user_id: str, source_id: str, version: str, records: list[dict[str, Any]]) -> Path:
     """Save normalized content records under storage/runtime/normalized/{user_id}/{source_id}/{version}/normalized.json."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version evidence; local source evidence is disabled")
     norm_dir = settings.runtime_dir / "normalized" / validate_id(user_id) / validate_id(source_id) / validate_id(version)
     norm_dir.mkdir(parents=True, exist_ok=True)
     norm_file = norm_dir / "normalized.json"
@@ -400,6 +413,8 @@ def save_normalized_records(user_id: str, source_id: str, version: str, records:
 
 
 def load_normalized_records(user_id: str, source_id: str, version: str = "v1") -> list[dict[str, Any]]:
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version evidence; local source evidence is disabled")
     norm_file = settings.runtime_dir / "normalized" / validate_id(user_id) / validate_id(source_id) / validate_id(version) / "normalized.json"
     if not norm_file.exists():
         return []
@@ -408,6 +423,8 @@ def load_normalized_records(user_id: str, source_id: str, version: str = "v1") -
 
 def save_sanitized_records(user_id: str, source_id: str, version: str, records: list[dict[str, Any]]) -> Path:
     """Save sanitized content records under storage/runtime/sanitized/{user_id}/{source_id}/{version}/sanitized.json."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version evidence; local source evidence is disabled")
     san_dir = settings.runtime_dir / "sanitized" / validate_id(user_id) / validate_id(source_id) / validate_id(version)
     san_dir.mkdir(parents=True, exist_ok=True)
     san_file = san_dir / "sanitized.json"
@@ -416,6 +433,8 @@ def save_sanitized_records(user_id: str, source_id: str, version: str, records: 
 
 
 def load_sanitized_records(user_id: str, source_id: str, version: str = "v1") -> list[dict[str, Any]]:
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version evidence; local source evidence is disabled")
     san_file = settings.runtime_dir / "sanitized" / validate_id(user_id) / validate_id(source_id) / validate_id(version) / "sanitized.json"
     if not san_file.exists():
         return []
@@ -424,6 +443,8 @@ def load_sanitized_records(user_id: str, source_id: str, version: str = "v1") ->
 
 def save_quarantine_records(user_id: str, source_id: str, version: str, records: list[dict[str, Any]]) -> Path:
     """Save quarantined prompt-injection records under storage/runtime/quarantine/{user_id}/{source_id}/{version}/quarantine.json."""
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version evidence; local source evidence is disabled")
     quar_dir = settings.runtime_dir / "quarantine" / validate_id(user_id) / validate_id(source_id) / validate_id(version)
     quar_dir.mkdir(parents=True, exist_ok=True)
     quar_file = quar_dir / "quarantine.json"
@@ -432,6 +453,8 @@ def save_quarantine_records(user_id: str, source_id: str, version: str, records:
 
 
 def load_quarantine_records(user_id: str, source_id: str, version: str = "v1") -> list[dict[str, Any]]:
+    if settings.database_provider == "supabase":
+        raise RuntimeError("Use authenticated source-version evidence; local source evidence is disabled")
     quar_file = settings.runtime_dir / "quarantine" / validate_id(user_id) / validate_id(source_id) / validate_id(version) / "quarantine.json"
     if not quar_file.exists():
         return []

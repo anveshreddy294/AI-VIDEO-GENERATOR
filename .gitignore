@@ -30,3 +30,7 @@ scratch/
 __pycache__/
 .pytest_cache/
 *.pyc
+
+stabilization-final-backup.patch
+
+pre-commit-final-backup.patch

@@ -17,6 +17,7 @@ import urllib.request
 from typing import Any
 
 from .config import settings
+from .processing_errors import ProcessingError, ProcessingCode
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,9 @@ class ModelManager:
         images: list[str] | None = None,
         is_json: bool = True,
         timeout: float = 30.0,
+        max_output_tokens: int | None = None,
+        reasoning_only: bool = False,
+        json_schema: dict[str, object] | None = None,
     ) -> tuple[str, str]:
         """Attempt generation using active model; automatically falls back through chain if failure occurs.
 
@@ -171,6 +175,10 @@ class ModelManager:
             tuple of (response_text, model_name_used)
         """
         chain = self.fallback_chain if self.enable_fallback else [{"model": self.active_model, "provider": self.active_provider}]
+        if reasoning_only:
+            # Source reasoning never routes ordinary text through a configured vision model.
+            chain = ([{"model": "mock", "provider": "mock"}] if self.active_provider == "mock"
+                     else [{"model": "llama3.2:3b", "provider": "ollama"}])
         last_err: Exception | None = None
 
         for candidate in chain:
@@ -195,8 +203,11 @@ class ModelManager:
                         "stream": False,
                         "think": False,
                     }
+                    if max_output_tokens is not None:
+                        req_data["options"] = {"num_predict": max_output_tokens, "temperature": 0}
+                    req_data["keep_alive"] = getattr(settings, "ollama_keep_alive", "15m")
                     if is_json:
-                        req_data["format"] = "json"
+                        req_data["format"] = json_schema or "json"
                     if images:
                         req_data["images"] = images
 
@@ -212,6 +223,8 @@ class ModelManager:
                         if data.get("error"):
                             raise RuntimeError(data.get("error"))
                         raw = data.get("response", "")
+                        if data.get("done") is False or data.get("done_reason") == "length":
+                            raise ValueError("Incomplete model output")
                         if raw and raw.strip():
                             return raw.strip(), m_name
                         raise ValueError(f"Model {m_name} returned empty response")
@@ -220,11 +233,16 @@ class ModelManager:
                 last_err = exc
                 logger.warning(
                     "[model_manager] Model '%s' (%s) failed: %s. Trying next model in fallback chain...",
-                    m_name, m_provider, exc
+                    m_name, m_provider, type(exc).__name__
                 )
 
         # If everything in the chain failed, raise
-        raise RuntimeError(f"All models in fallback chain failed. Last error: {last_err}")
+        if isinstance(last_err, (TimeoutError, urllib.error.URLError)) and (
+            isinstance(last_err, TimeoutError) or isinstance(getattr(last_err, "reason", None), TimeoutError)
+        ):
+            raise TimeoutError("Reasoning model timed out") from None
+        code: ProcessingCode = ('MODEL_UNAVAILABLE' if isinstance(last_err, urllib.error.URLError) else 'INVALID_MODEL_OUTPUT')
+        raise ProcessingError(code, "All models in fallback chain failed") from None
 
 
 # Global singleton

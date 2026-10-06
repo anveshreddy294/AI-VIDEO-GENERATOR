@@ -12,7 +12,8 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
+from .ingestion.failures import SourceFailure
 
 logger = logging.getLogger(__name__)
 
@@ -111,10 +112,23 @@ class PipelineJob(BaseModel):
     events: list[ProgressEvent] = Field(default_factory=list)
     result: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    failure: SourceFailure | None = None
     error: str | None = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     is_finished: bool = False
+
+    @computed_field
+    @property
+    def state(self) -> Literal['QUEUED', 'RUNNING', 'SUCCEEDED', 'FAILED']:
+        """Explicit public lifecycle while preserving legacy status compatibility."""
+        if self.status == 'pending':
+            return 'QUEUED'
+        if self.status == 'completed' and self.is_finished:
+            return 'SUCCEEDED'
+        if self.status == 'failed':
+            return 'FAILED'
+        return 'RUNNING'
 
 
 class JobManager:

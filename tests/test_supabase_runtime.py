@@ -28,6 +28,9 @@ PROFILE: dict[str, str | None] = {
 }
 
 
+pytestmark = pytest.mark.usefixtures("supabase_storage_mode")
+
+
 def access_token(**overrides: object) -> str:
     """Synthetic token: mock GoTrue acceptance is the test signature boundary."""
     claims: dict[str, object] = {'sub': str(OWNER), 'iss': PROJECT_URL + '/auth/v1',

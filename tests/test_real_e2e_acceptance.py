@@ -17,6 +17,7 @@ Exercises the complete real pipeline against the running FastAPI application:
 """
 
 import io
+import os
 import time
 import pytest
 import requests
@@ -45,6 +46,8 @@ def create_test_image() -> bytes:
 
 @pytest.mark.e2e
 def test_real_end_to_end_acceptance_workflow():
+    if os.getenv("VISUALAI_RUN_LEGACY_E2E") != "true":
+        pytest.skip("Legacy file-mode assessment E2E is opt-in; set VISUALAI_RUN_LEGACY_E2E=true against a dedicated file-mode server")
     # 0. Health check
     try:
         health_resp = requests.get(f"{BASE_URL}/docs", timeout=2)

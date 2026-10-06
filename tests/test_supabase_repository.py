@@ -43,20 +43,17 @@ def test_supabase_migration_sql_exists_and_contains_core_tables():
     assert "CREATE POLICY" in sql
 
 
-def test_repository_factory_defaults_to_file_repository_when_unconfigured():
-    """When Supabase is not configured, repository factory must safely return file repository."""
-    src_repo = get_source_repository()
-    assert isinstance(src_repo, (FileSourceRepository, SupabaseSourceRepository))
-    if not settings.supabase_url:
-        assert isinstance(src_repo, FileSourceRepository)
+def test_repository_factory_defaults_to_file_repository_when_unconfigured(file_storage_mode: None):
+    """Documented unconfigured/file mode chooses file; URL presence does not select Supabase."""
+    assert settings.database_provider == 'file'
+    assert isinstance(get_source_repository(), FileSourceRepository)
 
 
-def test_supabase_source_repository_graceful_fallback():
-    """When Supabase credentials are missing, SupabaseSourceRepository falls back to local file repo."""
-    repo = SupabaseSourceRepository()
-    # Should not raise exception
-    sources = repo.list_sources()
-    assert isinstance(sources, list)
+def test_supabase_source_repository_requires_verified_context(monkeypatch, supabase_storage_mode: None):
+    from app.core.supabase import SupabaseConfigurationError
+    monkeypatch.setattr(settings, 'database_provider', 'supabase')
+    with pytest.raises(SupabaseConfigurationError):
+        get_source_repository()
 
 
 def test_auth_helper_unconfigured_behavior():

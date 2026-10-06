@@ -19,6 +19,9 @@ SAMPLE_PNG_BYTES = (
 )
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def test_image_pipeline_fails_closed_on_429(tmp_path, monkeypatch):
     """Verify that when OpenRouter vision returns 429, the pipeline fails closed cleanly with VISION_RATE_LIMIT."""
     async def _run():

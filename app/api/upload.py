@@ -20,6 +20,7 @@ from uuid import uuid4
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from ..core.config import settings
+from .sources import SourceDependency
 from ..services.chunker import create_rich_chunks
 from ..services.dispatcher import UnsupportedFileType, VisionExtractionFailed, dispatch
 from ..services.ingestion.normalizer import normalize_content_units
@@ -44,7 +45,7 @@ router = APIRouter(prefix="/upload", tags=["Step 1 - Ingestion"])
 # SEC-006: Configurable maximum upload size (default: 200 MB)
 _MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "200")) * 1024 * 1024
 
-# SEC-007: Extension → allowed MIME types mapping for basic content validation
+# SEC-007: Extension â†’ allowed MIME types mapping for basic content validation
 _MIME_ALLOWLIST: dict[str, set[str]] = {
     "pdf":  {"application/pdf"},
     "txt":  {"text/plain", "application/octet-stream"},
@@ -86,7 +87,7 @@ def _validate_mime(filename: str, content_type: str | None) -> None:
 
 @router.post(
     "",
-    summary="Upload study material → Get knowledge blueprint",
+    summary="Upload study material â†’ Get knowledge blueprint",
     description=(
         "Upload a PDF, image, text file, or lecture video (MP4/MOV/MKV). "
         "The system extracts content, builds a knowledge graph with concepts and prerequisites, "
@@ -99,14 +100,19 @@ async def upload_file(
     auto_start_assessment: bool = False,
     student_id: str = "student_default",
     max_questions: int = 5,
+    repository: SourceDependency = None,
 ):
     filename = file.filename or "unnamed"
+
+    if repository is not None and auto_start_assessment:
+        raise HTTPException(409, "Supabase source mode does not yet support assessment handoff")
 
     # SEC-007: Validate Content-Type vs extension before reading the file
     _validate_mime(filename, file.content_type)
 
     # Save to temp location for hash calculation and validation
     temp_name = f"{uuid4().hex}_{Path(filename).name}"
+    settings.upload_dir.mkdir(parents=True, exist_ok=True)
     temp_path = settings.upload_dir / temp_name
 
     # SEC-006: Stream file to disk, tracking size to enforce upload limit
@@ -132,6 +138,17 @@ async def upload_file(
         temp_path.unlink(missing_ok=True)
         logger.exception("Failed to write uploaded file to temp storage")
         raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
+
+    if repository is not None:
+        from ..services.ingestion.source_ingestion import ingest_source
+        try:
+            return await asyncio.to_thread(ingest_source, repository, temp_path, filename)
+        except ValueError:
+            raise HTTPException(400, "Source file validation failed") from None
+        except ValidationFailed:
+            raise HTTPException(422, "Source content validation failed") from None
+        finally:
+            temp_path.unlink(missing_ok=True)
 
     source_record = None
 

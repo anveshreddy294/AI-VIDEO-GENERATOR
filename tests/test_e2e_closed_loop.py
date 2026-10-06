@@ -52,6 +52,9 @@ from app.services.video.engine import execute_video_generation_job
 from app.services.video.scene_schema import VideoJobStatus
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def test_end_to_end_closed_loop(tmp_path: Path, monkeypatch):
     """Verify the full closed learning loop: Ingestion -> Quiz 1 -> Gap -> Video -> Quiz 2 -> Mastery."""
     asyncio.run(_run_test_end_to_end_closed_loop(tmp_path, monkeypatch))

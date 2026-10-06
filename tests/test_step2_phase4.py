@@ -59,6 +59,10 @@ from app.services.schemas import ConceptNode, KnowledgeGraph
 client = TestClient(app)
 
 
+import pytest
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def _sample_concept(cid: str, name: str, definition: str = "", prereqs: list[str] | None = None) -> ConceptNode:
     return ConceptNode(
         concept_id=cid,

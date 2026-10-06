@@ -39,6 +39,10 @@ from app.services.assessment.video_target import (
 from app.services.schemas import ConceptNode, KnowledgeGraph
 
 
+import pytest
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 def test_step2_flow():
     print("=================================================================")
     print("       TESTING STEP 2 MASTER EXECUTION FLOW (END-TO-END)         ")

@@ -14,6 +14,9 @@ from contextlib import asynccontextmanager
 from .core.config import settings
 
 from fastapi import FastAPI, Request, Response
+from .api.sources import router as sources_router, SourceDependency
+from .core.supabase import SupabaseError
+from .services.security.auth import auth_http_error
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -88,6 +91,13 @@ app.include_router(qa_router)
 app.include_router(models_router)
 app.include_router(learning_router)
 app.include_router(auth_router)
+app.include_router(sources_router)
+
+
+@app.exception_handler(SupabaseError)
+async def supabase_failure(request: Request, error: SupabaseError):
+    boundary = auth_http_error(error)
+    return JSONResponse(status_code=boundary.status_code, content={"detail": boundary.detail}, headers=boundary.headers)
 
 
 @app.get("/health/supabase")
@@ -171,10 +181,14 @@ def health_video() -> dict:
 
 
 @app.get("/sources")
-def get_sources():
+def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str, object]]]:
     """List all registered sources with readiness and concept counts."""
     from .services.registry import _load_sources_index, load_knowledge_graph
 
+    if repository is not None:
+        return {"sources": [{"source_id": row.source_id, "filename": row.filename,
+                 "status": row.status, "modality": row.source_type,
+                 "created_at": row.created_at} for row in repository.list_sources()]}
     index = _load_sources_index()
     results = []
     for sid, rec in index.items():
@@ -203,7 +217,8 @@ def debug_qdrant(request: Request):
             status_code=403,
             content={"detail": "Debug endpoint disabled. Set VISUALAI_DEBUG=true to enable (development only)."},
         )
-    from .db.vector_store import get_client, ensure_collection, _embed
+    from .db.vector_store import get_client, ensure_collection, _embed, semantic_filter_conditions
+    from qdrant_client import models as qmodels
     from .core.config import settings
 
     client = get_client()
@@ -222,6 +237,7 @@ def debug_qdrant(request: Request):
         hits = client.search(
             collection_name=settings.collection_name,
             query_vector=vector,
+            query_filter=qmodels.Filter(must=semantic_filter_conditions()),
             limit=3,
         )
         result["unfiltered_hits"] = len(hits)

@@ -64,6 +64,9 @@ from app.services.video.video_planner import plan_video_for_target
 from app.services.video.whisper_alignment import MockWhisperAligner, get_whisper_aligner
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 @pytest.fixture
 def sample_video_plan() -> VideoPlan:
     """Create a valid sample VideoPlan for testing."""

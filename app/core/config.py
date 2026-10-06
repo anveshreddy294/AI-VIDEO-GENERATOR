@@ -19,7 +19,9 @@ class Settings:
         self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_v1")
 
         # --- Models ---
-        self.embedding_model: str = os.getenv("EMBEDDING_MODEL", "embeddinggemma")
+        self.embedding_model: str = (os.getenv("OLLAMA_EMBED_MODEL") or os.getenv("EMBEDDING_MODEL", "embeddinggemma")).strip()
+        self.embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "ollama").strip().lower()
+        self.embedding_fallback_model: str = os.getenv("EMBEDDING_FALLBACK_MODEL", "embeddinggemma").strip()
         self.generation_model: str = os.getenv("GENERATION_MODEL", "llama3.2:3b")
 
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
@@ -77,7 +79,7 @@ class Settings:
         self.ollama_base_url: str = (os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
         self.ollama_url: str = self.ollama_base_url
         self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-        self.ollama_embed_model: str = os.getenv("OLLAMA_EMBED_MODEL", self.embedding_model)
+        self.ollama_embed_model: str = self.embedding_model
         self.ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
 
         # --- Step 3: Video Engine Directories & Configuration ---

@@ -14,7 +14,7 @@ Coordinates learner progression through the verified Step 5 domain services:
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 

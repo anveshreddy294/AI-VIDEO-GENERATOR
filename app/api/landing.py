@@ -9,7 +9,8 @@ Features:
 """
 
 from fastapi import APIRouter
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
+from pathlib import Path
 
 router = APIRouter(tags=["landing"])
 
@@ -1258,8 +1259,8 @@ SIGNUP_HTML = """<!DOCTYPE html>
                 </div>
 
                 <div class="form-group">
-                    <label class="form-label" for="studentId">Student ID / Username</label>
-                    <input class="form-input" type="text" id="studentId" placeholder="e.g. student_123" value="student_123" required>
+                    <label class="form-label" for="signupEmail">Email</label>
+                    <input class="form-input" type="email" id="signupEmail" autocomplete="email" required>
                 </div>
 
                 <div class="form-group">
@@ -1274,7 +1275,7 @@ SIGNUP_HTML = """<!DOCTYPE html>
 
                 <div class="form-group">
                     <label class="form-label" for="password">Password</label>
-                    <input class="form-input" type="password" id="password" placeholder="Create a secure password" required minlength="4" value="student123">
+                    <input class="form-input" type="password" id="password" placeholder="Create a secure password" autocomplete="new-password" required minlength="8">
                 </div>
 
                 <button type="submit" id="btnSubmitSignup" class="btn-auth-submit">
@@ -1290,37 +1291,31 @@ SIGNUP_HTML = """<!DOCTYPE html>
         </div>
     </div>
 
+    <script src="/assets/auth.js"></script>
     <script>
-    function handleSignup(event) {
-        event.preventDefault();
-        const fullName = document.getElementById('fullName').value.trim();
-        const studentId = document.getElementById('studentId').value.trim() || 'student_123';
-        const subject = document.getElementById('subjectFocus').value;
-        const toast = document.getElementById('signupToast');
-        const submitBtn = document.getElementById('btnSubmitSignup');
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Configuring Personalized Workspace...';
-
-        const profile = {
-            fullName: fullName,
-            studentId: studentId,
-            subject: subject,
-            createdAt: new Date().toISOString()
-        };
-        localStorage.setItem('visualai_user', JSON.stringify(profile));
-        localStorage.setItem('visualai_student_id', studentId);
-
-        toast.style.display = 'block';
-        toast.style.background = 'var(--peach-green-soft)';
-        toast.style.color = 'var(--peach-green)';
-        toast.style.border = '1px solid var(--peach-green-border)';
-        toast.textContent = 'Account created successfully! Launching dashboard...';
-
-        setTimeout(() => {
-            window.location.href = '/dashboard?user_id=' + encodeURIComponent(studentId);
-        }, 600);
+/** @param {Event} event */
+async function handleSignup(event) {
+    event.preventDefault();
+    const toast = document.getElementById('signupToast');
+    const button = document.getElementById('btnSubmitSignup');
+    button.disabled = true;
+    toast.style.display = 'block';
+    toast.textContent = 'Creating your account...';
+    try {
+        const ready = await window.VisualAIAuth.signup(
+            document.getElementById('signupEmail').value.trim(),
+            document.getElementById('password').value,
+            document.getElementById('fullName').value.trim());
+        document.getElementById('password').value = '';
+        if (ready) window.location.assign('/dashboard');
+        else toast.textContent = 'Check your email to confirm your account, then sign in.';
+    } catch {
+        toast.textContent = 'Account creation failed. Check your details or sign in if you already have an account.';
+    } finally {
+        button.disabled = false;
     }
+}
+
     </script>
 
     /*CANVAS_SCRIPT*/
@@ -1526,26 +1521,22 @@ LOGIN_HTML = """<!DOCTYPE html>
             <div class="auth-header">
                 <div class="auth-logo-badge">V</div>
                 <h2 class="auth-title">Welcome Back</h2>
-                <p class="auth-subtitle">Enter your student ID to resume your learning session</p>
+                <p class="auth-subtitle">Sign in with your email and password</p>
             </div>
 
             <form id="loginForm" onsubmit="handleLogin(event)">
                 <div class="form-group">
-                    <label class="form-label" for="loginStudentId">Student ID or Username</label>
-                    <input class="form-input" type="text" id="loginStudentId" placeholder="e.g. student_123" value="student_123" required>
+                    <label class="form-label" for="loginEmail">Email</label>
+                    <input class="form-input" type="email" id="loginEmail" autocomplete="username" required>
                 </div>
 
                 <div class="form-group">
                     <label class="form-label" for="loginPassword">Password</label>
-                    <input class="form-input" type="password" id="loginPassword" placeholder="••••••••" value="password123" required>
+                    <input class="form-input" type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required>
                 </div>
 
                 <button type="submit" id="btnLoginSubmit" class="btn-auth-submit">
                     Verify & Enter Dashboard →
-                </button>
-
-                <button type="button" class="btn-quick-demo" onclick="quickDemoLogin()">
-                    ⚡ 1-Click Demo Login (student_123)
                 </button>
 
                 <div id="loginToast" class="auth-status-toast"></div>
@@ -1557,36 +1548,27 @@ LOGIN_HTML = """<!DOCTYPE html>
         </div>
     </div>
 
+    <script src="/assets/auth.js"></script>
     <script>
-    function handleLogin(event) {
-        event.preventDefault();
-        const studentId = document.getElementById('loginStudentId').value.trim() || 'student_123';
-        proceedToDashboard(studentId);
+/** @param {Event} event */
+async function handleLogin(event) {
+    event.preventDefault();
+    const toast = document.getElementById('loginToast');
+    const button = document.getElementById('btnLoginSubmit');
+    button.disabled = true;
+    toast.style.display = 'block';
+    toast.textContent = 'Signing in...';
+    try {
+        await window.VisualAIAuth.login(document.getElementById('loginEmail').value.trim(),
+                                        document.getElementById('loginPassword').value);
+        document.getElementById('loginPassword').value = '';
+        window.location.assign('/dashboard');
+    } catch {
+        toast.textContent = 'Sign-in failed. Check your email and password, then try again.';
+    } finally {
+        button.disabled = false;
     }
-
-    function quickDemoLogin() {
-        document.getElementById('loginStudentId').value = 'student_123';
-        proceedToDashboard('student_123');
-    }
-
-    function proceedToDashboard(studentId) {
-        const toast = document.getElementById('loginToast');
-        const submitBtn = document.getElementById('btnLoginSubmit');
-
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Verifying Credentials...';
-
-        localStorage.setItem('visualai_student_id', studentId);
-        toast.style.display = 'block';
-        toast.style.background = 'var(--peach-green-soft)';
-        toast.style.color = 'var(--peach-green)';
-        toast.style.border = '1px solid var(--peach-green-border)';
-        toast.textContent = 'Verification successful! Loading learning dashboard...';
-
-        setTimeout(() => {
-            window.location.href = '/dashboard?user_id=' + encodeURIComponent(studentId);
-        }, 500);
-    }
+}
     </script>
 
     /*CANVAS_SCRIPT*/
@@ -1615,3 +1597,10 @@ def get_signup_page() -> HTMLResponse:
 def get_login_page() -> HTMLResponse:
     """Render the student login verification page."""
     return HTMLResponse(content=LOGIN_HTML)
+
+
+@router.get('/assets/auth.js', include_in_schema=False)
+def browser_auth_script() -> FileResponse:
+    """Serve only the public session helper; credentials are never embedded."""
+    return FileResponse(Path(__file__).resolve().parent.parent / 'static' / 'auth.js',
+                        media_type='text/javascript', headers={'Cache-Control': 'no-cache'})

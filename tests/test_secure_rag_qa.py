@@ -86,6 +86,9 @@ from app.services.security.content_sanitizer import (
 )
 
 
+pytestmark = pytest.mark.usefixtures("file_storage_mode")
+
+
 @pytest.fixture
 def client() -> TestClient:
     return TestClient(app)

@@ -6,12 +6,13 @@ Dual-Layer Video RAG, and Anti-Loop Kill Switch protection.
 """
 
 from fastapi import APIRouter
+from ..core.config import settings
 from fastapi.responses import HTMLResponse
 
 router = APIRouter(tags=["dashboard"])
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="en" data-theme="light" data-source-provider="__SOURCE_PROVIDER__">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -999,6 +1000,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
     
     </style>
+    <script src="/assets/auth.js"></script>
 </head>
 <body>
 
@@ -1139,6 +1141,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                         <input type="number" id="maxQuestions" class="neo-input" value="5" min="1" max="15" />
                     </div>
                 </div>
+                <p id="authStatus" role="status"></p>
+                <button id="authLogout" hidden onclick="window.VisualAIAuth.logout()">Sign out</button>
+                <p id="sourceResult" role="status" style="display:none;"></p>
                 <button class="neo-btn neo-btn-peach-green" id="btnUpload" onclick="runUpload()" style="width:100%;justify-content:center;padding:14px;">
                     <span> Ingest Material &amp; Start Diagnostic Assessment</span>
                 </button>
@@ -1757,9 +1762,93 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
+        const supabaseMode = document.documentElement.dataset.sourceProvider === 'supabase';
+        const SOURCE_POLL_INTERVAL_MS = 1000;
+        const SOURCE_JOB_TIMEOUT_MS = 10 * 60 * 1000;
+
+        /** @param {string} path @param {RequestInit} [options] */
+        function sourceFetch(path, options = {}) {
+            return supabaseMode ? window.VisualAIAuth.protectedFetch(path, options) : fetch(path, options);
+        }
+
+        async function initializeSourceAuth() {
+            if (!supabaseMode) return true;
+            try {
+                const identity = await window.VisualAIAuth.currentIdentity();
+                document.getElementById('authStatus').textContent = 'Signed in as ' + (identity.email || 'authenticated learner');
+                document.getElementById('btnUpload').textContent = 'Analyze Learning Material';
+                document.getElementById('studentId').closest('.form-grid').hidden = true;
+                document.getElementById('studentId').disabled = true;
+                document.getElementById('studentId').value = '';
+                document.getElementById('studentIdExisting').disabled = true;
+                document.getElementById('studentIdExisting').value = '';
+                document.getElementById('studentIdExisting').closest('.form-group').hidden = true;
+                document.getElementById('btnAssessExisting').disabled = true;
+                document.getElementById('btnAssessExisting').textContent = 'Assessment integration pending';
+                document.getElementById('authLogout').hidden = false;
+                return true;
+            } catch {
+                document.getElementById('authStatus').textContent = 'Sign in again to access your learning materials.';
+                document.getElementById('btnUpload').disabled = true;
+                return false;
+            }
+        }
+
+        /** @param {string} jobId */
+        async function waitForSourceJob(jobId) {
+            const deadline = Date.now() + SOURCE_JOB_TIMEOUT_MS;
+            while (Date.now() < deadline) {
+                const response = await sourceFetch('/pipeline/jobs/' + encodeURIComponent(jobId));
+                if (!response.ok) throw new Error('Could not retrieve the source job.');
+                const job = await response.json();
+                document.getElementById('sourceResult').textContent = 'Analyzing material: ' + (job.progress_percent || 0) + '%';
+                if (job.is_finished) {
+                    if (job.status !== 'completed' || job.result?.status !== 'READY') {
+                        const failure = job.failure;
+                        const safeStages = ['EXTRACTION', 'NORMALIZATION', 'STRUCTURING', 'CHUNKING', 'PERSISTENCE', 'INDEXING'];
+                        if (failure && safeStages.includes(failure.stage) && typeof failure.message === 'string') {
+                            throw new Error(failure.stage + ': ' + failure.message + (failure.retryable ? ' Retry the upload.' : ''));
+                        }
+                        throw new Error('Source ingestion failed. Repeat the upload to retry safely.');
+                    }
+                    return job.result;
+                }
+                await new Promise(resolve => setTimeout(resolve, SOURCE_POLL_INTERVAL_MS));
+            }
+            throw new Error('Ingestion is still running. Refresh the material list before retrying.');
+        }
+
+        async function runSourceUpload() {
+            const file = document.getElementById('fileInput').files?.[0];
+            if (!file) { alert('Please select a course file to upload.'); return; }
+            const button = document.getElementById('btnUpload');
+            const output = document.getElementById('sourceResult');
+            button.disabled = true;
+            output.style.display = 'block';
+            output.textContent = 'Uploading learning material...';
+            const body = new FormData();
+            body.append('file', file);
+            try {
+                // This existing endpoint queues SOURCE-ONLY work when Supabase is selected.
+                const response = await sourceFetch('/pipeline/upload-and-assess', {method: 'POST', body});
+                if (!response.ok) throw new Error('Source upload was not accepted.');
+                const created = await response.json();
+                const result = await waitForSourceJob(created.job_id);
+                output.textContent = 'SOURCE_READY: ' + result.filename + ' — ' + result.content_units +
+                    ' content units; source ' + result.source_id;
+                await loadSources();
+            } catch (error) {
+                output.textContent = error instanceof Error ? error.message : 'Source ingestion failed. Please retry.';
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Analyze Learning Material';
+            }
+        }
+
         async function loadSources() {
             try {
-                const res = await fetch('/sources');
+                const res = await sourceFetch('/sources');
+                if (!res.ok) throw new Error('Could not load your learning materials.');
                 const data = await res.json();
                 const select = document.getElementById('sourceSelect');
                 select.innerHTML = '';
@@ -2009,6 +2098,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         async function runUpload() {
+            if (supabaseMode) { await runSourceUpload(); return; }
             const fileInput = document.getElementById('fileInput');
             if (!fileInput.files || fileInput.files.length === 0) {
                 alert('Please select a course file to upload.');
@@ -2061,6 +2151,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         }
 
         async function runExistingAssess() {
+            if (supabaseMode) { alert("Assessment integration is not available for Supabase sources yet."); return; }
             const select = document.getElementById('sourceSelect');
             const sourceId = select.value;
             if (!sourceId) {
@@ -3439,10 +3530,14 @@ DASHBOARD_HTML = """<!DOCTYPE html>
             }
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
-            loadSources();
+        window.addEventListener('DOMContentLoaded', async () => {
+            const signedIn = await initializeSourceAuth();
+            if (!signedIn) return;
+            await loadSources();
             initCounters();
             loadModelOptions();
+
+            if (supabaseMode) return;
 
             // Refresh state rehydration from safe client-side navigation context
             const activeUser = getActiveUserId();
@@ -3745,4 +3840,11 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 @router.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard():
     """VisualAI dashboard - Interactive test runner and complete pipeline documentation."""
-    return HTMLResponse(content=DASHBOARD_HTML)
+    content = DASHBOARD_HTML.replace('__SOURCE_PROVIDER__', 'supabase' if settings.database_provider == 'supabase' else 'file')
+    if settings.database_provider == 'supabase':
+        # Hide legacy identity/assessment controls before JavaScript initialization.
+        content = content.replace('value="student_1"', 'value="" disabled')
+        content = content.replace('<label class="form-label" for="studentId">Student Identifier</label>', '')
+        content = content.replace('<label class="form-label" for="studentIdExisting">Student Identifier</label>', '')
+        content = content.replace('Ingest Material &amp; Start Diagnostic Assessment', 'Analyze Learning Material')
+    return HTMLResponse(content=content, headers={'Cache-Control': 'no-store'})
