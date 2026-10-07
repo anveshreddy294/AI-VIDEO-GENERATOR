@@ -1,5 +1,8 @@
 """Automated test suite for async vision extraction, cancellation, semaphore safety, and job dedup."""
 
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
+
 import asyncio
 import json
 from pathlib import Path
@@ -14,7 +17,11 @@ from app.core.config import settings
 from app.main import app
 from app.services.dispatcher import ExtractionResult, dispatch_async
 from app.services.pipeline_tracker import job_manager
-from app.services.registry import get_source_record, register_source, update_source_status
+from app.services.registry import (
+    get_source_record,
+    register_source,
+    update_source_status,
+)
 from app.services.schemas import VisionExtractionData
 from app.services.vision import (
     VISION_TIMEOUT,
@@ -80,9 +87,13 @@ def test_scenario_a_async_vision_attempt1_success(monkeypatch):
             json={
                 "id": "gen-1",
                 "model": "google/gemini-2.0-flash-exp:free",
-                "choices": [{"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}],
+                "choices": [
+                    {"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}
+                ],
             },
-            request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+            request=httpx.Request(
+                "POST", "https://openrouter.ai/api/v1/chat/completions"
+            ),
         )
 
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
@@ -112,16 +123,22 @@ def test_scenario_b_schema_fallback_to_json_object(monkeypatch):
         resp1 = httpx.Response(
             status_code=400,
             text="Unsupported response_format json_schema",
-            request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+            request=httpx.Request(
+                "POST", "https://openrouter.ai/api/v1/chat/completions"
+            ),
         )
         resp2 = httpx.Response(
             status_code=200,
             json={
                 "id": "gen-2",
                 "model": "google/gemini-2.0-flash-exp:free",
-                "choices": [{"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}],
+                "choices": [
+                    {"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}
+                ],
             },
-            request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+            request=httpx.Request(
+                "POST", "https://openrouter.ai/api/v1/chat/completions"
+            ),
         )
 
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
@@ -147,7 +164,9 @@ def test_scenario_c_read_timeout_fails_cleanly(monkeypatch):
         monkeypatch.setattr(settings, "vision_fallback_model", "")
 
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
-            mock_post.side_effect = httpx.ReadTimeout("Read timed out", request=MagicMock())
+            mock_post.side_effect = httpx.ReadTimeout(
+                "Read timed out", request=MagicMock()
+            )
             with pytest.raises(VisionExtractionFailed) as exc_info:
                 await extract_vision_openrouter_async(SAMPLE_IMAGE_BYTES)
 
@@ -171,7 +190,9 @@ def test_scenario_d_stage_timeout_marks_job_failed(monkeypatch):
 
         with patch("httpx.AsyncClient.post", side_effect=hanging_post):
             with pytest.raises(asyncio.TimeoutError):
-                await asyncio.wait_for(extract_vision_openrouter_async(SAMPLE_IMAGE_BYTES), timeout=0.1)
+                await asyncio.wait_for(
+                    extract_vision_openrouter_async(SAMPLE_IMAGE_BYTES), timeout=0.1
+                )
 
     asyncio.run(_run())
 
@@ -194,14 +215,18 @@ def test_scenario_e_true_async_cancellation(monkeypatch):
                 raise
 
         with patch("httpx.AsyncClient.post", side_effect=hanging_post):
-            task = asyncio.create_task(extract_vision_openrouter_async(SAMPLE_IMAGE_BYTES))
+            task = asyncio.create_task(
+                extract_vision_openrouter_async(SAMPLE_IMAGE_BYTES)
+            )
             await asyncio.sleep(0.05)
             task.cancel()
 
             with pytest.raises(asyncio.CancelledError):
                 await task
 
-            assert cancelled_event.is_set(), "Underlying async HTTP request was not cancelled!"
+            assert (
+                cancelled_event.is_set()
+            ), "Underlying async HTTP request was not cancelled!"
 
     asyncio.run(_run())
 
@@ -244,7 +269,6 @@ def test_scenario_f_graceful_shutdown():
 
         await job_manager.shutdown_active_jobs(timeout=1.0)
 
-
         assert cancelled_1 is True
         assert cancelled_2 is True
         assert t1.cancelled() or t1.done()
@@ -263,7 +287,9 @@ def test_scenario_g_source_status_on_cancelled_no_validation_error(tmp_path):
     rec, _ = register_source(test_file, "test.jpeg", uploaded_by="student_test")
 
     # Calling update_source_status with "CANCELLED" must map to "FAILED" without raising ValidationError
-    rec_updated = update_source_status(rec.source_id, "CANCELLED", error_message="User cancelled job")
+    rec_updated = update_source_status(
+        rec.source_id, "CANCELLED", error_message="User cancelled job"
+    )
 
     assert rec_updated is not None
     assert rec_updated.status == "FAILED"
@@ -327,7 +353,9 @@ def test_scenario_i_atomic_duplicate_upload_dedup():
 
         # Simulate two concurrent calls
         async def call_dedup():
-            return await job_manager.get_or_create_active_job(dedup_key, job_type="upload_and_assess")
+            return await job_manager.get_or_create_active_job(
+                dedup_key, job_type="upload_and_assess"
+            )
 
         results = await asyncio.gather(call_dedup(), call_dedup())
 
@@ -357,14 +385,20 @@ def test_scenario_j_dispatch_async_image(tmp_path, monkeypatch):
             json={
                 "id": "gen-1",
                 "model": "google/gemini-2.0-flash-exp:free",
-                "choices": [{"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}],
+                "choices": [
+                    {"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}
+                ],
             },
-            request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+            request=httpx.Request(
+                "POST", "https://openrouter.ai/api/v1/chat/completions"
+            ),
         )
 
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
             mock_post.return_value = mock_resp
-            result = await dispatch_async(test_image, source_id="SRC_123", asset_id="AST_123")
+            result = await dispatch_async(
+                test_image, source_id="SRC_123", asset_id="AST_123"
+            )
 
             assert isinstance(result, ExtractionResult)
             assert result.modality == "image"
@@ -387,7 +421,9 @@ def test_scenario_k_bounded_attempt_budget_default_two_attempts(monkeypatch):
         resp = httpx.Response(
             status_code=500,
             text="Internal Server Error",
-            request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+            request=httpx.Request(
+                "POST", "https://openrouter.ai/api/v1/chat/completions"
+            ),
         )
 
         with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
@@ -399,3 +435,17 @@ def test_scenario_k_bounded_attempt_budget_default_two_attempts(monkeypatch):
             assert mock_post.call_count == 2
 
     asyncio.run(_run())
+
+
+@pytest.fixture(autouse=True)
+def mocked_post_stream_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Retain cancellation doubles while production consumes bounded streams."""
+
+    @asynccontextmanager
+    async def stream(
+        client: httpx.AsyncClient, method: str, url: str, **kwargs: object
+    ) -> AsyncIterator[httpx.Response]:
+        response = await client.post(url, **kwargs)
+        yield response
+
+    monkeypatch.setattr(httpx.AsyncClient, "stream", stream)

@@ -45,19 +45,9 @@ def dispatch(
         )
 
     if modality == "image":
-        description = describe_image_file(file_path, on_progress=on_progress)
-        unit = ContentUnit(
-            source_id=source_id,
-            asset_id=asset_id,
-            modality="image",
-            text=f"[IMAGE: {file_path.name}]\n{description}",
-            visual_description=description,
-            sequence_index=0,
-            image_id=f"IMG_{file_path.stem}",
-            image_path=str(file_path),
-            extraction_method="vision_model",
-            confidence_score=0.95,
-        )
+        from .visual_evidence import visual_content_unit
+        unit = visual_content_unit(file_path.read_bytes(), source_id=source_id,
+            asset_id=asset_id, source=file_path.name, image_path=str(file_path))
         return ExtractionResult(
             source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
         )
@@ -124,19 +114,9 @@ async def dispatch_async(
     modality = detect_modality(file_path)
 
     if modality == "image":
-        description = await describe_image_file_async(file_path, on_progress=on_progress)
-        unit = ContentUnit(
-            source_id=source_id,
-            asset_id=asset_id,
-            modality="image",
-            text=f"[IMAGE: {file_path.name}]\n{description}",
-            visual_description=description,
-            sequence_index=0,
-            image_id=f"IMG_{file_path.stem}",
-            image_path=str(file_path),
-            extraction_method="vision_model",
-            confidence_score=0.95,
-        )
+        from .visual_evidence import visual_content_unit
+        unit = await asyncio.to_thread(visual_content_unit, file_path.read_bytes(),
+            source_id=source_id, asset_id=asset_id, source=file_path.name, image_path=str(file_path))
         return ExtractionResult(
             source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
         )

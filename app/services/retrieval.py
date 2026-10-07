@@ -524,6 +524,10 @@ class RetrievalService:
                             )
                         )
                     )
+                    if unit.provenance.get("visual_schema_version"):
+                        visual_index = unit.provenance.get("visual_index", 0)
+                        label = f"Figure {visual_index + 1}" if isinstance(visual_index, int) else "Figure"
+                        location = (location + "  --  " + label) if unit.page_number else ("Image upload  --  " + label)
                     title = " / ".join(unit.heading_path)
                     items.append(
                         EvidenceItem(

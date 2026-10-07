@@ -16,6 +16,8 @@ from .vision import describe_image
 
 logger = logging.getLogger(__name__)
 PDF_MAX_VISION_CALLS = 25
+PDF_MIN_VISUAL_PIXELS = 50
+PDF_RENDER_SCALE = 2.0
 
 
 def extract_from_pdf(
@@ -24,6 +26,7 @@ def extract_from_pdf(
     """Read text first; call vision only for actual page images or scanned drawings."""
     from .modality import visual_extraction_required
     from .vision import VisionExtractionFailed
+
     units: list[ContentUnit] = []
     calls = 0
     with fitz.open(pdf_path) as doc:
@@ -33,53 +36,92 @@ def extract_from_pdf(
                 if block[6] != 0 or not block[4].strip():
                     continue
                 has_text = True
-                units.append(ContentUnit(source_id=source_id, asset_id=asset_id, modality="pdf",
-                    text=block[4].strip(), page_number=page_number, sequence_index=len(units),
-                    bbox=[float(value) for value in block[:4]], extraction_method="pymupdf_block",
-                    confidence_score=1.0))
+                units.append(
+                    ContentUnit(
+                        source_id=source_id,
+                        asset_id=asset_id,
+                        modality="pdf",
+                        text=block[4].strip(),
+                        page_number=page_number,
+                        sequence_index=len(units),
+                        bbox=[float(value) for value in block[:4]],
+                        extraction_method="pymupdf_block",
+                        confidence_score=1.0,
+                    )
+                )
             images = _extract_page_images_with_info(page, page_number)
-            scanned = not has_text and bool(images or page.get_images(full=True) or page.get_drawings())
-            if not visual_extraction_required('pdf', has_text=has_text,
-                                              has_visual_content=bool(images)):
+            scanned = not has_text and bool(
+                images or page.get_images(full=True) or page.get_drawings()
+            )
+            if not visual_extraction_required(
+                "pdf", has_text=has_text, has_visual_content=bool(images)
+            ):
                 continue
             # Blank pages are not scanned evidence. Never manufacture diagram placeholders.
             if not images and not scanned:
                 continue
-            visual_inputs: list[PageImage] = ([{"bytes": _render_page(page), "bbox": None, "xref": 0}]
-                             if scanned else images)
+            visual_inputs: list[PageImage] = (
+                [{"bytes": _render_page(page), "bbox": None, "xref": 0}]
+                if scanned
+                else images
+            )
             for image in visual_inputs:
                 if calls >= PDF_MAX_VISION_CALLS:
-                    raise VisionExtractionFailed("PDF visual extraction budget exceeded")
+                    raise VisionExtractionFailed(
+                        "PDF visual extraction budget exceeded"
+                    )
                 calls += 1
-                description = describe_image(image["bytes"], source=f"{pdf_path.name} p.{page_number}")
-                if not description.strip():
-                    raise VisionExtractionFailed("PDF visual extraction returned no evidence")
                 image_id = f"IMG_{page_number}_{image['xref']}"
                 images_dir = settings.upload_dir / source_id / "images"
                 images_dir.mkdir(parents=True, exist_ok=True)
-                image_path = images_dir / (image_id + '.png')
+                image_path = images_dir / (image_id + ".png")
                 image_path.write_bytes(image["bytes"])
-                units.append(ContentUnit(source_id=source_id, asset_id=asset_id, modality="pdf",
-                    text=description, visual_description=description, page_number=page_number,
-                    sequence_index=len(units), bbox=image['bbox'], image_id=image_id,
-                    image_path=str(image_path), extraction_method=("vision_model_scanned" if scanned else "vision_model"),
-                    confidence_score=0.90))
+                from .visual_evidence import visual_content_unit
+
+                unit = visual_content_unit(
+                    image["bytes"],
+                    source_id=source_id,
+                    asset_id=asset_id,
+                    source=f"{pdf_path.name} p.{page_number}",
+                    modality="pdf",
+                    page_number=page_number,
+                    visual_index=calls - 1,
+                    bbox=image["bbox"],
+                    image_path=str(image_path),
+                )
+                unit.sequence_index = len(units)
+                if unit.bbox:
+                    unit.provenance["normalized_bbox"] = [
+                        unit.bbox[0] / page.rect.width,
+                        unit.bbox[1] / page.rect.height,
+                        unit.bbox[2] / page.rect.width,
+                        unit.bbox[3] / page.rect.height,
+                    ]
+                units.append(unit)
     return units
 
 
 class PageImage(TypedDict):
     """Embedded image bytes and their page provenance."""
+
     xref: int
     bytes: bytes
     bbox: list[float] | None
 
 
-def _extract_page_images_with_info(page: fitz.Page, page_number: int) -> list[PageImage]:
+def _extract_page_images_with_info(
+    page: fitz.Page, page_number: int
+) -> list[PageImage]:
     """Extract embedded images with xref and bounding box info."""
     results: list[PageImage] = []
     seen: set[int] = set()
 
     for image_info in page.get_images(full=True):
+        from .visual_evidence import MAX_IMAGE_PIXELS
+        from .vision import VisionExtractionFailed
+
+        if image_info[2] * image_info[3] > MAX_IMAGE_PIXELS:
+            raise VisionExtractionFailed("PDF image pixel budget exceeded")
         xref = image_info[0]
         if xref in seen:
             continue
@@ -94,8 +136,14 @@ def _extract_page_images_with_info(page: fitz.Page, page_number: int) -> list[Pa
                     r = rects[0]
                     bbox = [float(r.x0), float(r.y0), float(r.x1), float(r.y1)]
             except Exception as exc:
-                logger.debug("[extractor] Could not get image rect for xref %s: %s", xref, exc)
+                logger.debug(
+                    "[extractor] Could not get image rect for xref %s: %s", xref, exc
+                )
 
+            if len(results) >= PDF_MAX_VISION_CALLS:
+                from .vision import VisionExtractionFailed
+
+                raise VisionExtractionFailed("PDF visual extraction budget exceeded")
             results.append({"xref": xref, "bytes": img_bytes, "bbox": bbox})
 
     return results
@@ -108,17 +156,23 @@ def _try_extract_image(page: fitz.Page, xref: int, page_number: int) -> bytes | 
             pix = fitz.Pixmap(pix, 0)
         elif pix.colorspace and pix.colorspace.n > 3:
             pix = fitz.Pixmap(fitz.csRGB, pix)
-        if pix.width < 50 or pix.height < 50:
+        if pix.width < PDF_MIN_VISUAL_PIXELS or pix.height < PDF_MIN_VISUAL_PIXELS:
             return None
         png = pix.tobytes("png")
         return png
     except Exception as exc:
-        logger.debug("[extractor] Could not extract pixmap for xref %s on page %s: %s", xref, page_number, exc)
-    return None
+        from .vision import VisionExtractionFailed
+
+        raise VisionExtractionFailed("Required PDF image could not be decoded") from exc
 
 
 def _render_page(page: fitz.Page) -> bytes:
-    mat = fitz.Matrix(2.0, 2.0)
+    from .visual_evidence import MAX_IMAGE_PIXELS
+    from .vision import VisionExtractionFailed
+
+    if page.rect.width * page.rect.height * PDF_RENDER_SCALE**2 > MAX_IMAGE_PIXELS:
+        raise VisionExtractionFailed("PDF page pixel budget exceeded")
+    mat = fitz.Matrix(PDF_RENDER_SCALE, PDF_RENDER_SCALE)
     pix = page.get_pixmap(matrix=mat)
     png = pix.tobytes("png")
     return png

@@ -35,3 +35,7 @@ test('future actions disabled and learner controls have labels',()=>{
     assert.match(html,/button disabled[^>]*>Visualize/);
     assert(html.includes('label for="question"')&&html.includes('aria-live="polite"'));
 });
+
+test('visual citations identify uploaded image without internal IDs',()=>{
+    assert.equal(ui.location({extraction_method:'vision_ollama'}),'Image upload -- visual evidence');
+});

@@ -64,7 +64,7 @@ SELECTS: dict[str, str] = {
     + ")",
     "source_versions": "user_id,source_id,source_version:version,version_label:source_version,knowledge_state,schema_version:knowledge_schema_version,operation_id:knowledge_operation_id,payload_hash:knowledge_payload_hash,committed_at:knowledge_committed_at",
     "content_units": ",".join(ContentUnit.model_fields)
-    + ",user_id,source_version,provenance",
+    + ",user_id,source_version",
 }
 ORDERS = {
     "topics": "sequence,topic_id",

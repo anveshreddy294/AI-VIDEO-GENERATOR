@@ -38,7 +38,7 @@ def validate_snapshot_chunks(
             **{
                 k: v
                 for k, v in unit.content.model_dump().items()
-                if k in EvidenceMetadata.model_fields
+                if k in EvidenceMetadata.model_fields and k != "provenance"
                 and k not in SourceScope.model_fields
             },
         )

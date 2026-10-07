@@ -43,7 +43,11 @@ def ingestion_stage(stage: Stage) -> Iterator[None]:
     except SourceIngestionFailed:
         raise
     except Exception as error:
-        if stage == 'STRUCTURING':
+        from ..vision import VisionExtractionFailed
+        if isinstance(error, VisionExtractionFailed):
+            code = 'VISION_EXTRACTION_FAILED'
+            message = 'Visual evidence extraction failed; no fabricated content was accepted.'
+        elif stage == 'STRUCTURING':
             code = 'STRUCTURE_TIMEOUT' if isinstance(error, TimeoutError) else 'STRUCTURE_EXTRACTION_FAILED'
             message = 'Could not extract grounded concepts from the source.'
         else:

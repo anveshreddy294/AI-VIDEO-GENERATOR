@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Any, Literal, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, model_validator, field_validator
+from pydantic import BaseModel, Field, JsonValue, model_validator, field_validator
 
 
 class SourceRecord(BaseModel):
@@ -51,25 +51,7 @@ class SourceRecord(BaseModel):
     )
 
 
-class VisionExtractionData(BaseModel):
-    """Normalized structured evidence extracted from an image by vision model."""
-
-    visible_text: list[str] = Field(default_factory=list)
-    headings: list[str] = Field(default_factory=list)
-    paragraphs: list[str] = Field(default_factory=list)
-    bullet_points: list[str] = Field(default_factory=list)
-    diagram_entities: list[str] = Field(default_factory=list)
-    labels: list[str] = Field(default_factory=list)
-    arrows: list[str] = Field(default_factory=list)
-    relationships: list[str] = Field(default_factory=list)
-    tables: list[Any] = Field(default_factory=list)
-    formulas: list[str] = Field(default_factory=list)
-    units: list[str] = Field(default_factory=list)
-    visual_structure: str = ""
-    uncertain_elements: list[str] = Field(default_factory=list)
-    confidence: float = 0.0
-
-
+from .visual_contracts import VisionExtractionData
 
 class ContentUnit(BaseModel):
     """The central canonical abstraction of the ingestion system."""
@@ -80,6 +62,7 @@ class ContentUnit(BaseModel):
     layer: Literal["A"] = "A"
     modality: Literal["pdf", "image", "txt", "video"]
     text: str
+    provenance: dict[str, JsonValue] = Field(default_factory=dict)
     visual_description: str | None = None
     page_number: int | None = None
     page_start: int | None = None

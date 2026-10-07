@@ -75,7 +75,7 @@ def normalize_content_unit(unit: ContentUnit, source_version: str = "v1") -> Nor
 
     # Raw vs Extracted text
     text_content = (unit.text or "").strip()
-    if unit.visual_description and unit.visual_description not in text_content:
+    if unit.visual_description and unit.visual_description not in text_content and not unit.provenance.get("visual_schema_version"):
         full_text = f"{text_content}\n[Visual Description]: {unit.visual_description}".strip()
     else:
         full_text = text_content
@@ -96,7 +96,7 @@ def normalize_content_unit(unit: ContentUnit, source_version: str = "v1") -> Nor
     pg_end = getattr(unit, "page_end", None) or unit.page_number
 
     slide_num = getattr(unit, "slide_number", None)
-    unit_meta = getattr(unit, "metadata", None)
+    unit_meta = unit.provenance
     if slide_num is None and isinstance(unit_meta, dict):
         slide_num = unit_meta.get("slide")
 

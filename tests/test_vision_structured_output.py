@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from tests.test_async_vision_cancellation import mocked_post_stream_adapter
 
 from fastapi.testclient import TestClient
 

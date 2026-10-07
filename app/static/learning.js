@@ -61,6 +61,7 @@
         if (typeof metadata.slide_number === 'number') return 'Slide ' + metadata.slide_number;
         if (typeof metadata.timestamp_start === 'number') return 'Timestamp ' + metadata.timestamp_start + '–' + metadata.timestamp_end;
         if (typeof metadata.section === 'string') return 'Section ' + metadata.section;
+        if (typeof metadata.extraction_method === 'string' && metadata.extraction_method.startsWith('vision_')) return 'Image upload -- visual evidence';
         if (typeof metadata.sequence_index === 'number') return 'Content ' + (metadata.sequence_index + 1);
         return 'Source evidence';
     }

@@ -35,9 +35,12 @@ def test_txt_never_calls_vision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 @pytest.mark.parametrize('extension', ['png', 'jpg', 'jpeg'])
 def test_images_require_vision(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, extension: str) -> None:
     path = tmp_path / ('image.' + extension)
-    path.write_bytes(b'image fixture')
-    vision = MagicMock(return_value='Observed chlorophyll diagram.')
-    monkeypatch.setattr(dispatcher, 'describe_image_file', vision)
+    path.write_bytes((Path(__file__).parent/'fixtures/multimodal/printed.png').read_bytes())
+    from app.services import visual_evidence
+    def visual(*args, **kwargs):
+        return ContentUnit(source_id=kwargs['source_id'],asset_id=kwargs['asset_id'],modality='image',text='Observed chlorophyll diagram.',visual_description='Observed chlorophyll diagram.')
+    vision=MagicMock(side_effect=visual)
+    monkeypatch.setattr(visual_evidence,'visual_content_unit',vision)
     assert dispatcher.dispatch(path, 'SRC_test', 'AST_test').units[0].visual_description
     vision.assert_called_once()
 
@@ -55,10 +58,13 @@ def test_pdf_only_visual_pages_invoke_vision(tmp_path: Path, monkeypatch: pytest
             image.clear_with(255)
             page.insert_image(fitz.Rect(60, 60, 200, 200), stream=image.tobytes('png'))
         doc.save(path)
-    vision = MagicMock(return_value='A rectangular visual diagram.')
-    monkeypatch.setattr(extractor, 'describe_image', vision)
+    from app.services import visual_evidence
+    def visual(*args, **kwargs):
+        return ContentUnit(source_id=kwargs['source_id'],asset_id=kwargs['asset_id'],modality='pdf',text='A rectangular visual diagram.',page_number=kwargs['page_number'],extraction_method='vision_ollama')
+    vision=MagicMock(side_effect=visual)
+    monkeypatch.setattr(visual_evidence,'visual_content_unit',vision)
     result = extractor.extract_from_pdf(path, 'SRC_test', 'AST_test')
-    assert [row.extraction_method for row in result] == ['pymupdf_block', 'vision_model_scanned']
+    assert [row.extraction_method for row in result] == ['pymupdf_block', 'vision_ollama']
     assert vision.call_count == 1
     assert 'p.2' in vision.call_args.kwargs['source']
 

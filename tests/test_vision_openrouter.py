@@ -108,7 +108,7 @@ class TestVisionOpenRouter(unittest.TestCase):
     def test_validation_accepts_valid_educational_extraction(self):
         """Accept valid structured evidence containing text and diagram relations."""
         valid_data = {
-            "visible_text": ["Smart Grid Energy System", "Solar Generation: 45 kW"],
+            "visible_text": ["Smart Grid Energy System", "Solar Generation: 45 kW", "P = V * I"],
             "headings": ["Polar Station Energy Architecture"],
             "paragraphs": ["The system manages renewable sources to reduce fuel consumption."],
             "bullet_points": ["Solar panel array", "Wind turbine generator"],
@@ -282,7 +282,7 @@ class TestVisionOpenRouter(unittest.TestCase):
         import tempfile
         settings.vision_provider = "mock"
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+            tmp.write((Path(__file__).parent / "fixtures/multimodal/printed.png").read_bytes())
             tmp_path = Path(tmp.name)
 
         try:
@@ -291,7 +291,7 @@ class TestVisionOpenRouter(unittest.TestCase):
             self.assertEqual(res.modality, "image")
             self.assertEqual(len(res.units), 1)
             unit = res.units[0]
-            self.assertTrue(unit.text.startswith(f"[IMAGE: {tmp_path.name}]"))
+            self.assertEqual(unit.provenance["provider"], "mock")
             self.assertIn("### Headings & Key Topics", unit.text)
             self.assertIn("### Diagram Entities & Conceptual Flow", unit.text)
             self.assertNotIn("Image asset for", unit.text)
@@ -304,13 +304,14 @@ class TestVisionOpenRouter(unittest.TestCase):
         settings.vision_provider = "openrouter"
         settings.openrouter_api_key = ""  # Will trigger failure
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-            tmp.write(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+            tmp.write((Path(__file__).parent / "fixtures/multimodal/printed.png").read_bytes())
             tmp_path = Path(tmp.name)
 
         try:
             from app.services.dispatcher import dispatch
-            with self.assertRaises(VisionExtractionFailed):
-                dispatch(tmp_path, source_id="SRC_test2", asset_id="AST_test2")
+            with patch("app.services.visual_evidence.extract_vision_ollama", side_effect=VisionExtractionFailed("Provider unavailable")):
+                with self.assertRaises(VisionExtractionFailed):
+                    dispatch(tmp_path, source_id="SRC_test2", asset_id="AST_test2")
         finally:
             tmp_path.unlink(missing_ok=True)
 
@@ -368,7 +369,7 @@ class TestVisionOpenRouter(unittest.TestCase):
                 {
                     "message": {
                         "content": json.dumps({
-                            "visible_text": ["Diagram title: Photosynthesis"],
+                            "visible_text": ["Diagram title: Photosynthesis", "6CO2 + 6H2O -> C6H12O6 + 6O2"],
                             "headings": ["Photosynthesis"],
                             "paragraphs": ["Light energy is converted into chemical energy."],
                             "bullet_points": [],

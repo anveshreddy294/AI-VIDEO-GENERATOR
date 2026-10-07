@@ -117,7 +117,7 @@ class SupabaseSourceRepository:
             if unit.source_id != record.source_id or unit.asset_id != record.asset_id:
                 raise SupabaseResponseError('Content provenance mismatch')
             row = JSON_OBJECT.validate_python(unit.model_dump(mode='json'))
-            row.update(user_id=self.owner_id, source_version=record.version, provenance={})
+            row.update(user_id=self.owner_id, source_version=record.version, provenance=unit.provenance)
             unit_rows.append(row)
         version_row = JSON_OBJECT.validate_python(version.model_dump(mode='json'))
         version_row['user_id'] = self.owner_id

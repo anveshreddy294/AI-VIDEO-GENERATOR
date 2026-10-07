@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import Field, model_validator
+from pydantic import Field, JsonValue, model_validator
 
 from .chunker import _token_len
 from .content_understanding import ContentRole
@@ -84,6 +84,7 @@ class ChunkMetadata(Contract):
     chunking_policy_hash: str
     canonical_source_version: int
     understanding_version: str
+    visual_provenance: list[dict[str, JsonValue]] = Field(default_factory=list)
 
 
 class ChunkQuality(Contract):
@@ -351,8 +352,11 @@ def create_educational_chunks(
             chunking_policy_hash=policy_hash,
             canonical_source_version=scope.source_version,
             understanding_version="educational-v1",
+            visual_provenance=[{key: value for key,value in b.unit.provenance.items()
+                if key in ('semantic_kind','provider','model','visual_index','normalized_bbox','validation_state')}
+                for b in group if b.unit.provenance.get('visual_schema_version')],
         )
-        identity = f"{scope.user_id}:{scope.source_id}:{scope.source_version}:{metadata.model_dump_json()}:{text}"
+        identity = f"{scope.user_id}:{scope.source_id}:{scope.source_version}:{metadata.model_dump_json(exclude_defaults=True)}:{text}"
         pages = [b.unit.content.page_start or b.unit.content.page_number for b in group]
         ends = [b.unit.content.page_end or b.unit.content.page_number for b in group]
         chunks.append(
@@ -388,7 +392,7 @@ def create_educational_chunks(
                 extraction_method=first.unit.content.extraction_method,
                 injection_status="sanitized",
                 retrieval_allowed=True,
-                metadata=metadata.model_dump(mode="json"),
+                metadata=metadata.model_dump(mode="json", exclude_defaults=True),
             )
         )
     oversized = sum(_token_len(c.text) > policy.max_tokens for c in chunks)
