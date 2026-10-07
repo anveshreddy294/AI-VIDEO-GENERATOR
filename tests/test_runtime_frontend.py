@@ -48,10 +48,12 @@ def test_supabase_dashboard_has_truthful_source_only_controls(monkeypatch: pytes
     assert 'Analyze Learning Material' in content
     assert 'value="student_1"' not in content
     assert 'for="studentId">Student Identifier' not in content
-    assert "if (supabaseMode) { await runSourceUpload(); return; }" in content
-    assert "if (supabaseMode) return;" in content
-    assert 'window.VisualAIAuth.protectedFetch' in content
-    assert "sourceFetch('/pipeline/upload-and-assess', {method: 'POST', body})" in content
+    assert 'My sources' in content and 'Explore your topics' in content
+    assert 'Focused learning' in content and 'Notes · coming next' in content
+    assert '/assets/learning.js' in content and '/assets/auth.js' in content
+    script=TestClient(app).get('/assets/learning.js').text
+    assert "Reflect.get(window, 'VisualAIAuth')" in script and 'auth.protectedFetch' in script
+    assert "api('/pipeline/upload-and-assess',{method:'POST',body})" in script
 
 
 def test_file_dashboard_retains_existing_workflow(monkeypatch: pytest.MonkeyPatch) -> None:

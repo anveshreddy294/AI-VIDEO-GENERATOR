@@ -3840,6 +3840,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 @router.api_route("/dashboard", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def dashboard():
     """VisualAI dashboard - Interactive test runner and complete pipeline documentation."""
+    if settings.database_provider == 'supabase':
+        from .learner import learning_page
+        return learning_page()
     content = DASHBOARD_HTML.replace('__SOURCE_PROVIDER__', 'supabase' if settings.database_provider == 'supabase' else 'file')
     if settings.database_provider == 'supabase':
         # Hide legacy identity/assessment controls before JavaScript initialization.

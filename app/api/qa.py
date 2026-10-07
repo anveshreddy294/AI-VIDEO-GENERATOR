@@ -27,6 +27,11 @@ from ..services.retrieval import (
     IndexUnavailable,
 )
 from ..services.qa.canonical_answer import CanonicalQARequest, generate_canonical_answer
+from ..services.learning_session import (
+    SessionQARequest,
+    LearningSessionService,
+    SessionStorageUnavailable,
+)
 
 from ..services.qa.grounded_answer import generate_grounded_answer, list_answer_traces
 from ..services.schemas import QARequest, QAResponse
@@ -132,7 +137,17 @@ async def _context(request: Request) -> KnowledgeRepository:
 async def _canonical_answer(request: Request) -> QAResponse:
     context = await _context(request)
     try:
-        body = CanonicalQARequest.model_validate(await request.json())
+        raw = await request.body()
+        from pydantic import TypeAdapter, JsonValue
+
+        value = TypeAdapter(dict[str, JsonValue]).validate_json(raw)
+        if "session_id" in value:
+            session_request = SessionQARequest.model_validate_json(raw)
+            body = await run_in_threadpool(
+                LearningSessionService(context).qa_request, session_request
+            )
+        else:
+            body = CanonicalQARequest.model_validate_json(raw)
     except (ValidationError, ValueError):
         raise HTTPException(
             422,
@@ -141,6 +156,10 @@ async def _canonical_answer(request: Request) -> QAResponse:
                 "message": "Explicit source version and valid selectors required",
             },
         ) from None
+    except KnowledgeError as error:
+        raise _safe_error(error) from None
+    except SessionStorageUnavailable:
+        raise HTTPException(503, {"code": "SESSION_STORAGE_UNAVAILABLE"}) from None
     try:
         return await generate_grounded_answer(body, context=context)
     except KnowledgeError as error:
