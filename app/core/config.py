@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from pydantic import SecretStr
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -81,6 +82,16 @@ class Settings:
         self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
         self.ollama_embed_model: str = self.embedding_model
         self.ollama_timeout: float = float(os.getenv("OLLAMA_TIMEOUT", "120.0"))
+
+        # Dedicated semantic routing; legacy/vision/video provider selection is unchanged.
+        self.cloudflare_worker_url: str = os.getenv("CLOUDFLARE_WORKER_URL", "").strip()
+        self.cloudflare_worker_secret: SecretStr = SecretStr(os.getenv("CLOUDFLARE_WORKER_SECRET", ""))
+        self.cloudflare_connect_timeout: float = float(os.getenv("CLOUDFLARE_CONNECT_TIMEOUT", "5"))
+        self.cloudflare_read_timeout: float = float(os.getenv("CLOUDFLARE_READ_TIMEOUT", "45"))
+        self.cloudflare_overall_timeout: float = float(os.getenv("CLOUDFLARE_OVERALL_TIMEOUT", "60"))
+        self.cloudflare_max_retries: int = int(os.getenv("CLOUDFLARE_MAX_RETRIES", "1"))
+        self.cloudflare_circuit_threshold: int = int(os.getenv("CLOUDFLARE_CIRCUIT_THRESHOLD", "3"))
+        self.cloudflare_circuit_cooldown: float = float(os.getenv("CLOUDFLARE_CIRCUIT_COOLDOWN", "60"))
 
         # --- Step 3: Video Engine Directories & Configuration ---
         self.video_plans_dir: Path = BASE_DIR / os.getenv("VIDEO_PLANS_DIR", "storage/runtime/video_plans")

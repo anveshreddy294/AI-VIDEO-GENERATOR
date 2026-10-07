@@ -41,7 +41,8 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
                 job.status = 'completed'
                 job.is_finished = True
             await job_manager.emit_event(job_id=job_id, stage='source_ready', status='completed',
-                message='Canonical source committed and indexed.', progress_percent=100, terminal=True,
+                message=('Source and knowledge READY; semantic indexing complete.' if result.get('knowledge_state')=='READY'
+                         else 'Canonical source committed and indexed.'), progress_percent=100, terminal=True,
                 metadata={'source_id': result['source_id']})
     except asyncio.CancelledError:
         # to_thread work may continue; durable INDEXING/FAILED state can be retried independently.

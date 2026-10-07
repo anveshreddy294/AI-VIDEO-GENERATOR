@@ -168,6 +168,7 @@ class ModelManager:
         max_output_tokens: int | None = None,
         reasoning_only: bool = False,
         json_schema: dict[str, object] | None = None,
+        context_tokens: int | None = None,
     ) -> tuple[str, str]:
         """Attempt generation using active model; automatically falls back through chain if failure occurs.
 
@@ -205,6 +206,12 @@ class ModelManager:
                     }
                     if max_output_tokens is not None:
                         req_data["options"] = {"num_predict": max_output_tokens, "temperature": 0}
+                    if context_tokens is not None:
+                        if type(context_tokens) is not int or not 1024 <= context_tokens <= 32768:
+                            raise ValueError("Invalid reasoning context budget")
+                        options = req_data.get("options", {})
+                        options["num_ctx"] = context_tokens
+                        req_data["options"] = options
                     req_data["keep_alive"] = getattr(settings, "ollama_keep_alive", "15m")
                     if is_json:
                         req_data["format"] = json_schema or "json"

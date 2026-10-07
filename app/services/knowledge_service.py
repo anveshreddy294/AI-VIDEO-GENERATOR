@@ -36,7 +36,8 @@ class KnowledgeService:
     def __init__(self, repository: KnowledgeRepository) -> None:
         self.repository = repository
 
-    def _validate(self, data: CanonicalKnowledge) -> None:
+    @staticmethod
+    def _validate(data: CanonicalKnowledge) -> None:
         topics = {row.topic_id: row for row in data.topics}
         subs = {row.subtopic_id: row for row in data.subtopics}
         concepts = {row.concept_id: row for row in data.concepts}

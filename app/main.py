@@ -18,6 +18,7 @@ from .services.security.legacy_boundary import legacy_learning_boundary
 from .api.sources import router as sources_router, SourceDependency
 from .api.knowledge import router as knowledge_router
 from .core.supabase import SupabaseError
+from .services.ingestion.failures import SourceIngestionFailed
 from .services.security.auth import auth_http_error
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -95,6 +96,14 @@ app.include_router(learning_router, dependencies=[Depends(legacy_learning_bounda
 app.include_router(auth_router)
 app.include_router(sources_router)
 app.include_router(knowledge_router)
+
+
+@app.exception_handler(SourceIngestionFailed)
+async def source_processing_failure(request: Request, error: SourceIngestionFailed) -> JSONResponse:
+    """Expose safe stage/reason categories for direct uploads as well as background jobs."""
+    unavailable=error.failure.reason_code in {'MODEL_TIMEOUT','MODEL_UNAVAILABLE'} or error.failure.code=='PROVIDER_UNAVAILABLE'
+    return JSONResponse(status_code=503 if unavailable else 422,
+        content={'detail':error.failure.model_dump(mode='json')},headers={'Cache-Control':'private, no-store'})
 
 
 @app.exception_handler(SupabaseError)

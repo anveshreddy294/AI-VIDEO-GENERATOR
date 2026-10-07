@@ -299,6 +299,21 @@ class KnowledgeRepository:
             or concept_id in (row.concept_id, row.related_concept_id)
         ]
 
+    def list_scoped_content(self, scope: SourceScope) -> list[ScopedContentUnit]:
+        """Paged set hydration for understanding without per-unit database calls."""
+        self._ensure_scope(scope)
+        result: list[ScopedContentUnit] = []
+        for row in self._read(scope, 'content_units'):
+            content_id=row.get('content_id')
+            if not isinstance(content_id,str): raise KnowledgeError('INVALID_PROVIDER_RESPONSE')
+            try:
+                result.append(ScopedContentUnit(**scope.model_dump(),content_id=content_id,
+                    content=ContentUnit.model_validate({k:v for k,v in row.items() if k in ContentUnit.model_fields}),
+                    provenance=OBJECT.validate_python(row['provenance'])))
+            except (ValidationError,KeyError):
+                raise KnowledgeError('INVALID_PROVIDER_RESPONSE') from None
+        return result
+
     def get_scoped_content(
         self, scope: SourceScope, content_id: str
     ) -> ScopedContentUnit:
@@ -355,6 +370,7 @@ class KnowledgeRepository:
         if len(json.dumps(body).encode()) > MAX_SNAPSHOT_BYTES:
             raise KnowledgeError("PAYLOAD_TOO_LARGE")
         try:
+            self.database_calls += 1
             result = OBJECT.validate_python(
                 self.runtime.user_request(
                     "POST",

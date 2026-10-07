@@ -328,7 +328,11 @@ def _point_id(chunk: LayerChunk) -> str:
 
 def _payload(chunk: LayerChunk) -> dict[str, Any]:
     if isinstance(chunk, (RichChunk, LayerBVideoSceneChunk)):
-        return chunk.model_dump()
+        payload=chunk.model_dump()
+        if isinstance(chunk,RichChunk) and chunk.metadata.get('chunking_policy_version'):
+            from ..services.educational_chunker import ChunkMetadata
+            payload.update(ChunkMetadata.model_validate(chunk.metadata).model_dump(mode='json'))
+        return payload
 
     payload: dict[str, Any] = {
         "layer": "A",
@@ -386,6 +390,10 @@ def semantic_filter_conditions(model: str | None = None) -> list[qmodels.FieldCo
 def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     if not chunks:
         return 0
+
+    if settings.embedding_provider == 'mock' and any(isinstance(c,RichChunk)
+            and c.metadata.get('chunking_policy_version') for c in chunks):
+        raise ProcessingError('EMBEDDING_MODEL_UNAVAILABLE','Educational indexing requires semantic embeddings')
 
     client = get_client()
     vectors = _embed([c.text for c in chunks])

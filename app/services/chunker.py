@@ -25,7 +25,7 @@ def create_rich_chunks(
     source_version: str = "v1",
     source_hash: str | None = None,
 ) -> list[RichChunk]:
-    """Group ContentUnits by section/concept boundaries into RAG-ready RichChunks."""
+    """Legacy per-unit token splitting; canonical educational grouping uses educational_chunker."""
     if not units:
         return []
 

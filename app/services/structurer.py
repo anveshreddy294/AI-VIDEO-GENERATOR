@@ -20,6 +20,17 @@ from .schemas import ConceptNode, ContentUnit, KnowledgeGraph, StageDiagnostics,
 logger = logging.getLogger(__name__)
 
 
+def generate_educational_proposal(prompt: str) -> str:
+    """Cloudflare primary, bounded local fallback; no change to legacy/video reasoning."""
+    from ..core.reasoning import Message, ReasoningRequest, get_reasoning_router
+    from .evidence_anchors import AnchoredStructureProposal
+    from .content_understanding import MODEL_OUTPUT_TOKENS
+    task = "structure_repair" if "\nREPAIR:" in prompt else "content_understanding"
+    request = ReasoningRequest(task=task, messages=[Message(role="user", content=prompt)],
+        max_tokens=MODEL_OUTPUT_TOKENS, response_schema=AnchoredStructureProposal.model_json_schema())
+    return get_reasoning_router().generate(request).response
+
+
 class KnowledgeExtractionFailed(ValueError):
     """Raised when knowledge structuring cannot extract valid, source-grounded concepts."""
 
