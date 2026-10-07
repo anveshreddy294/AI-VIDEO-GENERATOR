@@ -1,0 +1,31 @@
+{
+  "records": [
+    {
+      "tier": "fast",
+      "model_requested": "@cf/moondream/moondream3.1-9B-A2B",
+      "status": "FAIL",
+      "ollama_calls": 0,
+      "error_category": "VISION_INVALID_RESPONSE",
+      "request_latency_ms": 13690
+    },
+    {
+      "tier": "general",
+      "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "status": "PASS",
+      "ollama_calls": 0,
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "request_latency_ms": 23677
+    },
+    {
+      "tier": "deep",
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "status": "PASS",
+      "ollama_calls": 0,
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "request_latency_ms": 13811
+    }
+  ],
+  "benchmark_blocked": true,
+  "rollback_version": "da6b3c6f-c633-450b-a773-376f2263bf2d",
+  "deployed_version": "baeec9c3-95e1-49b8-95c7-801120b81090"
+}

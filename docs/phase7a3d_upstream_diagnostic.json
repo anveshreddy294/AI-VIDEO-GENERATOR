@@ -1,0 +1,7 @@
+{
+  "http_status": 502,
+  "error": "AI_PROVIDER_ERROR",
+  "native_code": null,
+  "request_latency_ms": 1245.8803000627086,
+  "worker_version": "62e942ab-c5ef-4397-ab1d-69192c703275"
+}

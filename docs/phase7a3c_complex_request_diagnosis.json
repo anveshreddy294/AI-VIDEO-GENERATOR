@@ -1,0 +1,29 @@
+{
+  "original_dimensions": [
+    800,
+    440
+  ],
+  "optimized_dimensions": [
+    800,
+    440
+  ],
+  "encoded_characters": 14014,
+  "transport_bytes": 10492,
+  "components": 5,
+  "direct_edges": 5,
+  "visible_label_characters": 32,
+  "total_visible_characters_with_heading": 51,
+  "text_density_characters_per_megapixel": 144.88636363636363,
+  "new_prompt_characters": 1075,
+  "old_max_tokens": 2048,
+  "complex_max_tokens": 2048,
+  "flowchart_max_tokens": 2048,
+  "backend_read_timeout_s": 45.0,
+  "backend_overall_timeout_s": 60.0,
+  "visual_stage_deadline_s": 90.0,
+  "worker_inference_timeout_s": 45,
+  "historical_timeout_layer": "UNKNOWN_BACKEND_AND_WORKER_45S_RACE",
+  "timeout_increased": false,
+  "reduced_token_budget_rejected": true,
+  "reason": "Native finish_reason length with all 1024 tokens spent before an answer; restored original ceiling, timeouts unchanged."
+}

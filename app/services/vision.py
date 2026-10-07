@@ -591,13 +591,17 @@ async def extract_vision_ollama_async(
     image_bytes: bytes,
     source: str = "image",
     on_progress: Callable[[str], None] | None = None,
+    *, deadline: float | None = None, max_attempts: int = 2,
 ) -> VisionExtractionData:
     primary_model = str(
         getattr(settings, "vision_model", None)
         or getattr(settings, "ollama_vision_model", "gemma3:4b")
     ).strip()
     image_sha = hashlib.sha256(image_bytes).hexdigest()
-    cache_key = f"{image_sha}:{primary_model}:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
+    from .visual_router import scope_cache_key
+    scope_key = scope_cache_key()
+    scope_prefix = f"{scope_key}:" if scope_key else ""
+    cache_key = f"{scope_prefix}{image_sha}:{primary_model}:{VISION_PROMPT_VERSION}:{VISION_CACHE_SCHEMA_VERSION}"
 
     if cache_key in _VISION_EXTRACTION_CACHE:
         logger.info(
@@ -609,7 +613,7 @@ async def extract_vision_ollama_async(
 
     start_mono = time.monotonic()
     stage_timeout = float(getattr(settings, "vision_stage_timeout_seconds", 90.0))
-    deadline = start_mono + stage_timeout
+    deadline = min(deadline if deadline is not None else float("inf"), start_mono + stage_timeout)
     logger.info(
         "[vision] extraction_start source=%s model=%s stage_budget=%.1fs",
         source,
@@ -637,6 +641,9 @@ async def extract_vision_ollama_async(
     else:
         candidate_models.append(primary_model)
 
+    if max_attempts not in (1, 2):
+        raise ValueError("Visual attempts must be bounded")
+    candidate_models = candidate_models[:max_attempts]
     last_error: Exception | None = None
     last_error_code: str = VISION_PROVIDER_FAILED
 
@@ -809,7 +816,17 @@ async def extract_vision_ollama_async(
                     )
                 validated = _parse_raw_text_to_vision_data(content_str, source)
                 validated._actual_provider = "ollama"
-                validated._actual_model = str(resolved_model)
+                if not isinstance(resolved_model, str) or not 0 < len(resolved_model) <= 160:
+                    raise VisionExtractionFailed("Invalid actual model provenance", VISION_INVALID_RESPONSE)
+                validated._actual_model = resolved_model
+                validated._routing_provenance = {
+                    "provider_requested":"ollama", "provider_used":"ollama",
+                    "model_requested":primary_model, "actual_model_used":resolved_model,
+                    "attempt_count":attempt_idx, "fallback_used":attempt_idx > 1,
+                    "fallback_reason":last_error_code if attempt_idx > 1 else None,
+                    "provider_latency_ms":(time.monotonic()-start_mono)*1000,
+                    "explicit_local_mode":True,
+                }
                 if len(_VISION_EXTRACTION_CACHE) >= MAX_VISION_CACHE_ENTRIES:
                     _VISION_EXTRACTION_CACHE.pop(next(iter(_VISION_EXTRACTION_CACHE)))
                 _VISION_EXTRACTION_CACHE[cache_key] = validated
@@ -868,6 +885,7 @@ def extract_vision_ollama(
     image_bytes: bytes,
     source: str = "image",
     on_progress: Callable[[str], None] | None = None,
+    *, deadline: float | None = None, max_attempts: int = 2,
 ) -> VisionExtractionData:
     """Synchronous bridge for Ollama vision extraction."""
     try:
@@ -879,12 +897,12 @@ def extract_vision_ollama(
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             return pool.submit(
                 lambda: asyncio.run(
-                    extract_vision_ollama_async(image_bytes, source, on_progress)
+                    extract_vision_ollama_async(image_bytes, source, on_progress, deadline=deadline, max_attempts=max_attempts)
                 )
             ).result()
     else:
         return asyncio.run(
-            extract_vision_ollama_async(image_bytes, source, on_progress)
+            extract_vision_ollama_async(image_bytes, source, on_progress, deadline=deadline, max_attempts=max_attempts)
         )
 
 

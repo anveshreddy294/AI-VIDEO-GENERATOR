@@ -1,0 +1,59 @@
+{
+  "records": [
+    {
+      "case": "SIMPLE",
+      "fixture": "printed.png",
+      "workload": "printed",
+      "status": "FAIL",
+      "job_id": "JOB_1c89528dcc31",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "EXTRACTION",
+        "code": "VISION_EXTRACTION_FAILED",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Visual evidence extraction failed; no fabricated content was accepted."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "elapsed_until_failure_ms": 49577.5425999891
+    },
+    {
+      "case": "STANDARD",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "status": "FAIL",
+      "job_id": "JOB_a6eceb257b0a",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "EXTRACTION",
+        "code": "VISION_EXTRACTION_FAILED",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Visual evidence extraction failed; no fabricated content was accepted."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "elapsed_until_failure_ms": 50981.40000004787
+    },
+    {
+      "case": "COMPLEX",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "status": "FAIL",
+      "job_id": "JOB_7263f3d4f7bd",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "EXTRACTION",
+        "code": "VISION_EXTRACTION_FAILED",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Visual evidence extraction failed; no fabricated content was accepted."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "elapsed_until_failure_ms": 49060.89120008983
+    }
+  ],
+  "timing_note": "Failed attempts have elapsed_until_failure_ms; no upload-to-READY measurement exists."
+}

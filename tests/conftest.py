@@ -61,6 +61,7 @@ def default_test_environment(monkeypatch: pytest.MonkeyPatch, isolated_storage: 
     """Use offline models and restore dependency overrides without selecting a storage mode."""
     from app.core.config import settings
     from app.main import app
+    monkeypatch.setattr(settings, 'vision_provider', 'ollama')
     monkeypatch.setattr(settings, 'llm_provider', 'mock')
     monkeypatch.setattr(settings, 'embedding_provider', 'mock')
     monkeypatch.setattr(settings, 'qdrant_url', '')

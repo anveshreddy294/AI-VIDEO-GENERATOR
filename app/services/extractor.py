@@ -77,6 +77,16 @@ def extract_from_pdf(
                 image_path = images_dir / (image_id + ".png")
                 image_path.write_bytes(image["bytes"])
                 from .visual_evidence import visual_content_unit
+                from .visual_router import VisualSignals
+                from .visual_verifier import SourceAnchor, VisualSourceContext
+                import hashlib
+
+                # Native parser text is independently scoped to this exact page/region.
+                anchor_text = page.get_text("text", clip=fitz.Rect(image["bbox"]) if image["bbox"] else page.rect).strip()
+                anchor_context = VisualSourceContext(source_id=source_id, asset_id=asset_id,
+                    image_sha256=hashlib.sha256(image["bytes"]).hexdigest(), page_number=page_number,
+                    bbox=tuple(float(v) for v in image["bbox"]) if image["bbox"] else None)
+                source_anchors = (SourceAnchor(origin="pdf_native", context=anchor_context, text=anchor_text),) if anchor_text else ()
 
                 unit = visual_content_unit(
                     image["bytes"],
@@ -85,9 +95,11 @@ def extract_from_pdf(
                     source=f"{pdf_path.name} p.{page_number}",
                     modality="pdf",
                     page_number=page_number,
+                    source_anchors=source_anchors,
                     visual_index=calls - 1,
                     bbox=image["bbox"],
                     image_path=str(image_path),
+                    routing_signals=VisualSignals(visual_region_count=len(visual_inputs),native_pdf_text=has_text),
                 )
                 unit.sequence_index = len(units)
                 if unit.bbox:

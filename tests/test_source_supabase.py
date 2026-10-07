@@ -440,3 +440,29 @@ def test_structuring_failure_reasons_stay_distinct(context: Context, monkeypatch
     assert (job.failure.reason_code==code if code=='MODEL_UNAVAILABLE' else job.failure.code=='INVALID_MODEL_OUTPUT')
     assert remote.sources and remote.versions and remote.units
     assert not remote.knowledge['concepts']
+
+
+@pytest.mark.parametrize("hint,expected", [("complex_diagram", 200), ("arbitrary-model", 422)])
+def test_visual_workload_metadata_is_validated_and_owner_comes_from_jwt(context: Context, monkeypatch: pytest.MonkeyPatch, hint: str, expected: int) -> None:
+    from app.api import sources, pipeline, source_jobs
+    from app.services.pipeline_tracker import JobManager
+    from app.services.visual_router import VisualSignals
+    from app.main import app
+    _, repo, path = context
+    manager = JobManager()
+    monkeypatch.setattr(pipeline, "job_manager", manager)
+    monkeypatch.setattr(source_jobs, "job_manager", manager)
+    monkeypatch.setattr(sources, "get_runtime", lambda: repo.runtime)
+    monkeypatch.setattr(sources, "get_current_user", lambda token, runtime: repo.user)
+    captured: list[VisualSignals] = []
+    def accepted(repository: SupabaseSourceRepository, path: Path, filename: str, *, routing_signals: VisualSignals) -> dict[str, JsonValue]:
+        assert repository.owner_id == str(OWNER)
+        captured.append(routing_signals)
+        return {"source_id": "SRC_fixture", "status": "READY"}
+    monkeypatch.setattr(source_jobs, "ingest_source", accepted)
+    response = TestClient(app).post("/pipeline/upload-and-assess", params={"visual_workload": hint, "student_id": str(OTHER)}, headers={"Authorization": "Bearer test-token"}, files={"file": ("fixture.txt", path.read_bytes(), "text/plain")})
+    assert response.status_code == expected
+    if expected == 200:
+        assert len(captured) == 1 and captured[0].complexity == "COMPLEX"
+    else:
+        assert captured == []

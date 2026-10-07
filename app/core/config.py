@@ -125,8 +125,11 @@ class Settings:
         self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
 
-        # --- Multimodal Vision Extraction (Ollama Google Gemma 3 4B - Instant Local Vision) ---
-        self.vision_provider: str = os.getenv("VISION_PROVIDER", "ollama").strip().lower()
+        # --- Cloud-primary visual routing; local Gemma remains explicit/offline/fallback. ---
+        self.vision_provider: str = os.getenv("VISION_PROVIDER", "cloudflare").strip().lower()
+        self.visual_independent_verifier: str = os.getenv("VISUAL_INDEPENDENT_VERIFIER", "none").strip().lower()
+        if self.visual_independent_verifier not in ("none", "ollama"):
+            raise ValueError("VISUAL_INDEPENDENT_VERIFIER must be none or ollama")
         self.ollama_vision_model: str = os.getenv("OLLAMA_VISION_MODEL", "gemma3:4b").strip()
         self.vision_model: str = (
             os.getenv("VISION_MODEL")

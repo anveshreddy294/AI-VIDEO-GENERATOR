@@ -1,0 +1,101 @@
+{
+  "records": [
+    {
+      "case": "SIMPLE",
+      "source": {
+        "source_id": "SRC_5ca7fc63903255b48c8a2503324bad48",
+        "status": "FAILED",
+        "version": 1
+      },
+      "versions": [
+        {
+          "version": 1,
+          "knowledge_state": "LEGACY_UNMAPPED",
+          "knowledge_operation_id": null
+        }
+      ],
+      "units": [
+        {
+          "content_id": "CU_9d74ddeb2a1e54259387290f3955327a",
+          "provider": "ollama",
+          "model": "gemma3:4b",
+          "routing": {
+            "workload": "printed",
+            "cache_hit": false,
+            "request_id": "6a3e0813-04b3-49e6-9cf6-40ad074055ea",
+            "routing_ms": 0.2780999056994915,
+            "attempt_count": 2,
+            "fallback_used": true,
+            "provider_used": "ollama",
+            "selected_tier": "general",
+            "policy_version": "benchmark-7a3c-v1",
+            "fallback_reason": "PROVIDER_UNAVAILABLE",
+            "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+            "routing_reasons": [
+              "measured_quality_gate_then_request_latency"
+            ],
+            "route_complexity": "SIMPLE",
+            "actual_model_used": "gemma3:4b",
+            "triage_latency_ms": 0.0,
+            "provider_requested": "cloudflare",
+            "provider_latency_ms": 24810.890699969605,
+            "validation_latency_ms": 0.17310003750026226,
+            "image_preprocessing_ms": 38.815799984149635
+          }
+        }
+      ],
+      "foreign_denied": true,
+      "restart_owner_http": 200,
+      "restart_foreign_http": 404
+    },
+    {
+      "case": "STANDARD",
+      "source": {
+        "source_id": "SRC_3264673dd59c5e5db4fc37232e686cd6",
+        "status": "FAILED",
+        "version": 1
+      },
+      "versions": [
+        {
+          "version": 1,
+          "knowledge_state": "LEGACY_UNMAPPED",
+          "knowledge_operation_id": null
+        }
+      ],
+      "units": [
+        {
+          "content_id": "CU_38a4170a32dd57998d9dddbb45d1007f",
+          "provider": "ollama",
+          "model": "gemma3:4b",
+          "routing": {
+            "workload": "flowchart",
+            "cache_hit": false,
+            "request_id": "0bf07ad2-13d1-4a58-ad86-f06aea1d3cb5",
+            "routing_ms": 0.19619986414909363,
+            "attempt_count": 3,
+            "fallback_used": true,
+            "provider_used": "ollama",
+            "selected_tier": "general",
+            "policy_version": "benchmark-7a3c-v1",
+            "fallback_reason": "PROVIDER_UNAVAILABLE",
+            "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+            "routing_reasons": [
+              "measured_quality_gate_then_request_latency"
+            ],
+            "route_complexity": "STANDARD",
+            "actual_model_used": "gemma3:4b",
+            "triage_latency_ms": 0.0,
+            "provider_requested": "cloudflare",
+            "provider_latency_ms": 26911.88700008206,
+            "validation_latency_ms": 0.21279999054968357,
+            "image_preprocessing_ms": 12.988800066523254
+          }
+        }
+      ],
+      "foreign_denied": true,
+      "restart_owner_http": 200,
+      "restart_foreign_http": 404
+    }
+  ],
+  "ready_count": 0
+}

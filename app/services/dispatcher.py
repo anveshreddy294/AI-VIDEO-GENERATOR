@@ -14,6 +14,7 @@ from typing import Callable
 
 from .extractor import extract_from_pdf
 from .schemas import ContentUnit
+from .visual_router import VisualSignals
 from .vision import VisionExtractionFailed, describe_image_file, describe_image_file_async
 
 from .modality import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, UnsupportedFileType, detect_modality
@@ -34,6 +35,7 @@ def dispatch(
     source_id: str,
     asset_id: str,
     on_progress: Callable[[str], None] | None = None,
+    *, routing_signals: VisualSignals | None = None,
 ) -> ExtractionResult:
     """Route a validated source file to its modality extractor."""
     modality = detect_modality(file_path)
@@ -47,7 +49,7 @@ def dispatch(
     if modality == "image":
         from .visual_evidence import visual_content_unit
         unit = visual_content_unit(file_path.read_bytes(), source_id=source_id,
-            asset_id=asset_id, source=file_path.name, image_path=str(file_path))
+            asset_id=asset_id, source=file_path.name, image_path=str(file_path), routing_signals=routing_signals)
         return ExtractionResult(
             source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
         )
@@ -109,6 +111,7 @@ async def dispatch_async(
     source_id: str,
     asset_id: str,
     on_progress: Callable[[str], None] | None = None,
+    *, routing_signals: VisualSignals | None = None,
 ) -> ExtractionResult:
     """Route a validated source file to its modality extractor asynchronously."""
     modality = detect_modality(file_path)
@@ -116,10 +119,10 @@ async def dispatch_async(
     if modality == "image":
         from .visual_evidence import visual_content_unit
         unit = await asyncio.to_thread(visual_content_unit, file_path.read_bytes(),
-            source_id=source_id, asset_id=asset_id, source=file_path.name, image_path=str(file_path))
+            source_id=source_id, asset_id=asset_id, source=file_path.name, image_path=str(file_path), routing_signals=routing_signals)
         return ExtractionResult(
             source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
         )
 
     # For other extractors (PDF, TXT, Video), run in thread pool to prevent blocking event loop
-    return await asyncio.to_thread(dispatch, file_path, source_id, asset_id, on_progress)
+    return await asyncio.to_thread(dispatch, file_path, source_id, asset_id, on_progress, routing_signals=routing_signals)

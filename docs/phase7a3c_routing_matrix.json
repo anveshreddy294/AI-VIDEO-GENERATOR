@@ -1,0 +1,283 @@
+{
+  "moondream_role": "REMOVE_FROM_PRODUCTION_ROUTING",
+  "full_simple_quality_passes": 0,
+  "full_simple_attempts": 3,
+  "triage_quality_passes": 0,
+  "triage_attempts": 8,
+  "routing_ms_median_1000": 0.002200016751885414,
+  "assisted_routing_request_ms": [
+    2183,
+    1054,
+    1070,
+    1042,
+    1047,
+    1165,
+    1085,
+    1207
+  ],
+  "policy_complete": true,
+  "matrix": [
+    {
+      "workload": "printed",
+      "fixture": "printed.png",
+      "selected_model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "quality_score": 1.0,
+      "request_latency_ms": 23991.93420005031,
+      "provider_latency_ms": 23440.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/google/gemma-4-26b-a4b-it",
+        "ollama"
+      ],
+      "deterministic_signal": "unknown/general or TEXT"
+    },
+    {
+      "workload": "handwriting",
+      "fixture": "handwriting.png",
+      "selected_model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "quality_score": 1.0,
+      "request_latency_ms": 9667.57300007157,
+      "provider_latency_ms": 8179.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/qwen/qwen3.8-27b",
+        "@cf/google/gemma-4-26b-a4b-it",
+        "ollama"
+      ],
+      "deterministic_signal": "HANDWRITING or contains_handwriting"
+    },
+    {
+      "workload": "diagram",
+      "fixture": "printed.png",
+      "selected_model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "quality_score": 1.0,
+      "request_latency_ms": 23991.93420005031,
+      "provider_latency_ms": 23440.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/google/gemma-4-26b-a4b-it",
+        "ollama"
+      ],
+      "deterministic_signal": "DIAGRAM/FIGURE"
+    },
+    {
+      "workload": "flowchart",
+      "fixture": "flowchart.png",
+      "selected_model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": [
+        "@cf/google/gemma-4-26b-a4b-it",
+        "@cf/google/gemma-4-26b-a4b-it-external"
+      ],
+      "quality_score": 1.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/google/gemma-4-26b-a4b-it",
+        "@cf/qwen/qwen3.8-27b",
+        "ollama"
+      ],
+      "attempts": [
+        {
+          "status": "QUALITY_FAIL",
+          "review_status": "PASS",
+          "provider_latency_ms": 1574.0,
+          "request_latency_ms": 2222.891299985349,
+          "actual_model_used": "@cf/google/gemma-4-26b-a4b-it",
+          "error_category": null
+        },
+        {
+          "status": "QUALITY_FAIL",
+          "review_status": "PASS",
+          "provider_latency_ms": 4460.0,
+          "request_latency_ms": 5072.6237000199035,
+          "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+          "error_category": null
+        },
+        {
+          "status": "QUALITY_FAIL",
+          "review_status": "PASS",
+          "provider_latency_ms": 5139.0,
+          "request_latency_ms": 5573.152100085281,
+          "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+          "error_category": null
+        }
+      ],
+      "quality_passes": 3,
+      "operational_failures": 0,
+      "evidence": "phase7a3c reviewed exact fixture structure; original statuses retained",
+      "deterministic_signal": "FLOWCHART",
+      "completed_request_latencies_ms": [
+        2222.891299985349,
+        5072.6237000199035,
+        5573.152100085281
+      ],
+      "completed_provider_latencies_ms": [
+        1574.0,
+        4460.0,
+        5139.0
+      ]
+    },
+    {
+      "workload": "graph",
+      "fixture": "graph.png",
+      "selected_model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "quality_score": 1.0,
+      "request_latency_ms": 39572.203999967314,
+      "provider_latency_ms": 36778.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/qwen/qwen3.8-27b",
+        "ollama"
+      ],
+      "deterministic_signal": "GRAPH or contains_graph"
+    },
+    {
+      "workload": "table",
+      "fixture": "table.png",
+      "selected_model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "quality_score": 1.0,
+      "request_latency_ms": 17039.011199958622,
+      "provider_latency_ms": 16484.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/qwen/qwen3.8-27b",
+        "@cf/google/gemma-4-26b-a4b-it",
+        "ollama"
+      ],
+      "deterministic_signal": "TABLE or contains_table"
+    },
+    {
+      "workload": "equation",
+      "fixture": "equation.png",
+      "selected_model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "quality_score": 1.0,
+      "request_latency_ms": 15474.20110006351,
+      "provider_latency_ms": 13532.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/qwen/qwen3.8-27b",
+        "@cf/google/gemma-4-26b-a4b-it",
+        "ollama"
+      ],
+      "deterministic_signal": "EQUATION or contains_equations"
+    },
+    {
+      "workload": "complex_diagram",
+      "fixture": "complex-diagram.png",
+      "selected_model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": [
+        "@cf/qwen/qwen3.8-27b"
+      ],
+      "quality_score": 1.0,
+      "cold_latency": "UNKNOWN",
+      "warm_latency": "UNKNOWN",
+      "status": "QUALIFIED",
+      "operational_fallback_chain": [
+        "@cf/qwen/qwen3.8-27b",
+        "ollama"
+      ],
+      "attempts": [
+        {
+          "status": "QUALITY_FAIL",
+          "review_status": "PASS",
+          "provider_latency_ms": 38121.0,
+          "request_latency_ms": 38669.345700065605,
+          "actual_model_used": "@cf/qwen/qwen3.8-27b",
+          "error_category": null
+        },
+        {
+          "status": "FAILED",
+          "review_status": null,
+          "provider_latency_ms": null,
+          "request_latency_ms": 45304.344399948604,
+          "actual_model_used": null,
+          "error_category": "TIMEOUT"
+        },
+        {
+          "status": "QUALITY_FAIL",
+          "review_status": "PASS",
+          "provider_latency_ms": 40390.0,
+          "request_latency_ms": 40968.54610007722,
+          "actual_model_used": "@cf/qwen/qwen3.8-27b",
+          "error_category": null
+        },
+        {
+          "status": "QUALITY_FAIL",
+          "review_status": "PASS",
+          "provider_latency_ms": 37419.0,
+          "request_latency_ms": 38398.4740000451,
+          "actual_model_used": "@cf/qwen/qwen3.8-27b",
+          "error_category": null
+        }
+      ],
+      "quality_passes": 3,
+      "operational_failures": 1,
+      "evidence": "phase7a3c reviewed exact fixture structure; original statuses retained",
+      "deterministic_signal": "explicit COMPLEX structural metadata",
+      "completed_request_latencies_ms": [
+        38669.345700065605,
+        40968.54610007722,
+        38398.4740000451
+      ],
+      "completed_provider_latencies_ms": [
+        38121.0,
+        40390.0,
+        37419.0
+      ]
+    }
+  ],
+  "canonical_benchmark_sha256": "b203675d4ef7b6607a8ab7252a440449f5c9735c879f682b5758a58c3efbbc8b",
+  "notes": [
+    "One measured request per canonical fixture/model; thermal state unknown.",
+    "Diagram shares the simple printed fixture; no independent diagram corpus.",
+    "Graph fixture tests visible axes text, not plotted chart digitization.",
+    "Conservative vocabulary flags are rejection gates here, not proof of hallucination.",
+    "Unknown inputs use conservative printed/default Gemma selection, without claiming semantic classification.",
+    "Generic visual-v2 validation is not an exhaustive visual grounding verifier; unsupported formula labels passed schema but failed fixture gates. Phase 7B remains separate."
+  ],
+  "new_deployment_version": "5d9c8da7-c0ec-4de9-9e1d-829227e734dc",
+  "post_deploy_text_regression": "NONE_ALL_SEVEN_TASKS_PASSED",
+  "backend_restart_health": 200,
+  "vision_provider": "cloudflare",
+  "tests": {
+    "targeted": 106,
+    "worker": 59,
+    "frontend": 21,
+    "full_python_passed": 1010,
+    "full_python_skipped": 1,
+    "full_python_warnings": 4,
+    "full_python_seconds": 217.0,
+    "diff_check": "PASS"
+  },
+  "supabase_changes": false,
+  "qdrant_changes": false,
+  "migrations_created": 0,
+  "committed": false,
+  "pushed": false,
+  "policy_version": "benchmark-7a3c-v1",
+  "triage_used": false,
+  "quality_fallback": false,
+  "timeouts_increased": false,
+  "workload_metadata": "validated optional visual_workload query; does not authorize resource access",
+  "complex_latency_note": "3 completed quality passes, 1 timeout; operational fallback only; end-to-end performance unproven",
+  "canonical_e2e_accepted": false
+}

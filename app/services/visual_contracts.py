@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator, JsonValue
 
 VisualText = Annotated[str, Field(min_length=1, max_length=4096)]
 VisualLines = Annotated[list[VisualText], Field(max_length=128)]
@@ -71,3 +71,4 @@ class VisionExtractionData(BaseModel):
     )
     _actual_provider: str = PrivateAttr(default="")
     _actual_model: str = PrivateAttr(default="")
+    _routing_provenance: dict[str, JsonValue] = PrivateAttr(default_factory=dict)

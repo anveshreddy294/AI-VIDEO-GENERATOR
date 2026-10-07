@@ -185,35 +185,11 @@ class CloudflareProvider:
         self, request: ReasoningRequest, deadline: float
     ) -> ReasoningResult:
         policy = self.policy
-        parsed = urlsplit(policy.url)
-        if (
-            parsed.scheme != "https"
-            or not parsed.hostname
-            or parsed.username
-            or parsed.password
-            or parsed.query
-            or parsed.fragment
-            or parsed.path.rstrip("/") not in ("", "/v1/generate")
-            or not policy.secret.get_secret_value()
-        ):
-            raise ProviderFailure("CONFIGURATION")
-        url = policy.url.rstrip("/")
-        if not url.endswith("/v1/generate"):
-            url += "/v1/generate"
         started = self.clock()
-        payload = request.model_dump(mode="json", exclude_none=True)
-        remaining = deadline - self.clock()
-        if remaining <= 2 * policy.connect_timeout:
-            raise ProviderFailure("TIMEOUT", True)
-        read_budget = min(policy.read_timeout, remaining - 2 * policy.connect_timeout)
-        timeout = httpx.Timeout(
-            read_budget,
-            connect=policy.connect_timeout,
-            write=policy.connect_timeout,
-            pool=policy.connect_timeout,
-        )
         try:
-            body = asyncio.run(self._fetch(url, payload, timeout, remaining))
+            body = self.fetch_payload(
+                request.model_dump(mode="json", exclude_none=True), deadline
+            )
             if policy.secret.get_secret_value().encode() in body:
                 raise ProviderFailure("INVALID_RESPONSE")
             try:
@@ -257,6 +233,40 @@ class CloudflareProvider:
         except (httpx.NetworkError, httpx.RemoteProtocolError):
             raise ProviderFailure("NETWORK", True) from None
 
+    def fetch_payload(self, payload: dict[str, JsonValue], deadline: float) -> bytes:
+        """Reuse the authenticated bounded Worker transport for typed task families."""
+        policy = self.policy
+        parsed = urlsplit(policy.url)
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or parsed.query
+            or parsed.fragment
+            or parsed.path.rstrip("/") not in ("", "/v1/generate")
+            or not policy.secret.get_secret_value()
+        ):
+            raise ProviderFailure("CONFIGURATION")
+        url = policy.url.rstrip("/")
+        if not url.endswith("/v1/generate"):
+            url += "/v1/generate"
+        remaining = deadline - self.clock()
+        if remaining <= 2 * policy.connect_timeout:
+            raise ProviderFailure("TIMEOUT", True)
+        timeout = httpx.Timeout(
+            min(policy.read_timeout, remaining - 2 * policy.connect_timeout),
+            connect=policy.connect_timeout,
+            write=policy.connect_timeout,
+            pool=policy.connect_timeout,
+        )
+        try:
+            return asyncio.run(self._fetch(url, payload, timeout, remaining))
+        except (httpx.TimeoutException, TimeoutError):
+            raise ProviderFailure("TIMEOUT", True) from None
+        except (httpx.NetworkError, httpx.RemoteProtocolError):
+            raise ProviderFailure("NETWORK", True) from None
+
     async def _fetch(
         self,
         url: str,
@@ -287,6 +297,26 @@ class CloudflareProvider:
                     if response.status_code == 429:
                         raise ProviderFailure("RATE_LIMIT", True)
                     if 500 <= response.status_code <= 599:
+                        if (
+                            payload.get("task") == "vision_extract"
+                            and response.status_code == 502
+                        ):
+                            bounded = bytearray()
+                            async for chunk in response.aiter_bytes():
+                                bounded.extend(chunk)
+                                if len(bounded) > MAX_RESPONSE_BYTES:
+                                    raise ProviderFailure("INVALID_RESPONSE")
+                            try:
+                                failure = json.loads(bounded)
+                            except (ValueError, UnicodeDecodeError):
+                                raise ProviderFailure(
+                                    "PROVIDER_UNAVAILABLE", True
+                                ) from None
+                            if (
+                                isinstance(failure, dict)
+                                and failure.get("error") == "AI_PROVIDER_TIMEOUT"
+                            ):
+                                raise ProviderFailure("TIMEOUT", True)
                         raise ProviderFailure("PROVIDER_UNAVAILABLE", True)
                     if response.status_code != 200:
                         raise ProviderFailure("REQUEST_REJECTED")

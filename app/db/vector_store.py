@@ -387,6 +387,12 @@ def semantic_filter_conditions(model: str | None = None) -> list[qmodels.FieldCo
     return [qmodels.FieldCondition(key=key, match=qmodels.MatchValue(value=value))
             for key, value in expected.items()]
 
+_index_timings: contextvars.ContextVar[dict[str, float]] = contextvars.ContextVar("index_timings", default={})
+
+def get_index_timings() -> dict[str, float]:
+    """Inference/index timing only; no payloads, credentials or embedding changes."""
+    return dict(_index_timings.get())
+
 def upsert_chunks(chunks: list[LayerAChunk]) -> int:
     if not chunks:
         return 0
@@ -395,16 +401,21 @@ def upsert_chunks(chunks: list[LayerAChunk]) -> int:
             and c.metadata.get('chunking_policy_version') for c in chunks):
         raise ProcessingError('EMBEDDING_MODEL_UNAVAILABLE','Educational indexing requires semantic embeddings')
 
+    _index_timings.set({})
     client = get_client()
+    embedding_started = time.perf_counter()
     vectors = _embed([c.text for c in chunks])
+    embedding_ms = (time.perf_counter()-embedding_started)*1000
     ensure_collection(client, len(vectors[0]))
     if len(vectors) != len(chunks):
         raise RuntimeError("Embedding count mismatch")
     points = [qmodels.PointStruct(id=_point_id(c), vector=v, payload={**_payload(c), **embedding_provenance()}) for c, v in zip(chunks, vectors)]
+    qdrant_started = time.perf_counter()
     client.upsert(collection_name=settings.collection_name, points=points, wait=True)
     stored = client.retrieve(collection_name=settings.collection_name, ids=[p.id for p in points], with_payload=True)
     if {str(p.id) for p in stored} != {str(p.id) for p in points}:
         raise RuntimeError("Vector storage verification failed")
+    _index_timings.set({"embedding_ms":embedding_ms,"qdrant_index_ms":(time.perf_counter()-qdrant_started)*1000})
     return len(points)
 
 

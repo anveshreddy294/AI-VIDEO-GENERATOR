@@ -1,0 +1,44 @@
+[
+  {
+    "task": "content_understanding",
+    "status": 200,
+    "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "pass": true
+  },
+  {
+    "task": "structure_repair",
+    "status": 200,
+    "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "pass": true
+  },
+  {
+    "task": "assessment_structured",
+    "status": 200,
+    "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+    "pass": true
+  },
+  {
+    "task": "reasoning",
+    "status": 200,
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "pass": true
+  },
+  {
+    "task": "qa",
+    "status": 200,
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "pass": true
+  },
+  {
+    "task": "notes",
+    "status": 200,
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "pass": true
+  },
+  {
+    "task": "roadmap",
+    "status": 200,
+    "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "pass": true
+  }
+]

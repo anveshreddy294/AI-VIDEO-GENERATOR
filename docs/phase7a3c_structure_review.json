@@ -1,0 +1,934 @@
+{
+  "live": true,
+  "records": [
+    {
+      "tier": "general",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "attempt": 1,
+      "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 1574.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 556,
+        "completion_tokens": 161,
+        "total_tokens": 717,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 9.445454597473145
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Photosynthesis",
+          "Sunlight -> Leaf -> Chemical energy"
+        ],
+        "diagram_entities": [
+          "unlabeled box left",
+          "unlabeled box right"
+        ],
+        "labels": [],
+        "arrows": [
+          "unlabeled box left -> unlabeled box right"
+        ],
+        "relationships": [
+          "unlabeled box left -> unlabeled box right"
+        ],
+        "uncertain_elements": [],
+        "visual_structure": "Text at top, two empty boxes at bottom connected by a horizontal arrow from left to right.",
+        "confidence": 1,
+        "content_kind": "DIAGRAM"
+      },
+      "checks": {
+        "photosynthesis": true,
+        "sunlight": true,
+        "leaf": true,
+        "chemical energy": true,
+        "text_recovery": true,
+        "node_recovery": false,
+        "edge_recovery": false,
+        "direction_recovery": false,
+        "no_invented_nodes": false,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.6153846153846154,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 0,
+      "unsupported_claims_flagged": false,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 461,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 2222.891299985349,
+      "review": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 461,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "general",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "attempt": 2,
+      "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 4460.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 555,
+        "completion_tokens": 161,
+        "total_tokens": 716,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 9.436363220214844
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Photosynthesis",
+          "Sunlight -> Leaf -> Chemical energy"
+        ],
+        "diagram_entities": [
+          "unlabeled box left",
+          "unlabeled box right"
+        ],
+        "labels": [],
+        "arrows": [
+          "unlabeled box left -> unlabeled box right"
+        ],
+        "relationships": [
+          "unlabeled box left -> unlabeled box right"
+        ],
+        "uncertain_elements": [],
+        "visual_structure": "Text at top, two rectangular boxes at bottom connected by a horizontal arrow from left to right.",
+        "confidence": 1,
+        "content_kind": "DIAGRAM"
+      },
+      "checks": {
+        "photosynthesis": true,
+        "sunlight": true,
+        "leaf": true,
+        "chemical energy": true,
+        "text_recovery": true,
+        "node_recovery": false,
+        "edge_recovery": false,
+        "direction_recovery": false,
+        "no_invented_nodes": false,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.6153846153846154,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 0,
+      "unsupported_claims_flagged": false,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 467,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 5072.6237000199035,
+      "review": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 467,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "general",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "attempt": 3,
+      "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 5139.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 555,
+        "completion_tokens": 161,
+        "total_tokens": 716,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 9.436363220214844
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Photosynthesis",
+          "Sunlight -> Leaf -> Chemical energy"
+        ],
+        "diagram_entities": [
+          "unlabeled box left",
+          "unlabeled box right"
+        ],
+        "labels": [],
+        "arrows": [
+          "unlabeled box left -> unlabeled box right"
+        ],
+        "relationships": [
+          "unlabeled box left -> unlabeled box right"
+        ],
+        "uncertain_elements": [],
+        "visual_structure": "Text at top, two rectangular boxes at bottom connected by a horizontal arrow from left to right.",
+        "confidence": 1,
+        "content_kind": "DIAGRAM"
+      },
+      "checks": {
+        "photosynthesis": true,
+        "sunlight": true,
+        "leaf": true,
+        "chemical energy": true,
+        "text_recovery": true,
+        "node_recovery": false,
+        "edge_recovery": false,
+        "direction_recovery": false,
+        "no_invented_nodes": false,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.6153846153846154,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 0,
+      "unsupported_claims_flagged": false,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 467,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 5573.152100085281,
+      "review": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 467,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "general",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 1,
+      "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 8498.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 567,
+        "completion_tokens": 301,
+        "total_tokens": 868,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 13.363636016845703
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "box_Sensor",
+          "box_Filter",
+          "box_Controller",
+          "box_Alarm",
+          "box_Motor"
+        ],
+        "labels": [],
+        "arrows": [
+          "arrow_Sensor_to_Filter",
+          "arrow_Filter_to_Controller",
+          "arrow_Filter_to_Alarm",
+          "arrow_Controller_to_Motor",
+          "arrow_Sensor_to_Motor"
+        ],
+        "relationships": [
+          "box_Sensor -> box_Filter",
+          "box_Filter -> box_Controller",
+          "box_Filter -> box_Alarm",
+          "box_Controller -> box_Motor",
+          "box_Sensor -> box_Motor"
+        ],
+        "uncertain_elements": [],
+        "visual_structure": "Top row: Sensor, Filter, Controller. Bottom row: Alarm, Motor. Sensor connects to Filter, Controller, and Motor. Filter connects to Controller and Alarm. Controller connects to Motor.",
+        "confidence": 1,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": false,
+        "edge_recovery": false,
+        "direction_recovery": false,
+        "no_invented_nodes": false,
+        "no_invented_relationships": false,
+        "branch_recovery": false,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.5714285714285714,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 1,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 791,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 9963.62609998323,
+      "review": {
+        "checks": {
+          "sensor": true,
+          "filter": true,
+          "controller": true,
+          "alarm": true,
+          "motor": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": false,
+          "direction_recovery": false,
+          "no_invented_nodes": true,
+          "no_invented_relationships": false,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 0.7857142857142857,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 791,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "QUALITY_FAIL"
+    },
+    {
+      "tier": "general",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 2,
+      "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 2480.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 568,
+        "completion_tokens": 281,
+        "total_tokens": 849,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 12.827272415161133
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Box containing 'Sensor'",
+          "Box containing 'Filter'",
+          "Box containing 'Controller'",
+          "Box containing 'Alarm'",
+          "Box containing 'Motor'"
+        ],
+        "labels": [],
+        "arrows": [
+          "Arrow from Sensor box to Filter box",
+          "Arrow from Filter box to Controller box",
+          "Arrow from Filter box to Alarm box",
+          "Arrow from Controller box to Motor box",
+          "Arrow from Sensor box to Motor box"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Sensor -> Motor"
+        ],
+        "uncertain_elements": [],
+        "visual_structure": "Top row: Sensor, Filter, Controller. Bottom row: Alarm, Motor. Filter connects to Alarm. Controller connects to Motor. Sensor connects to Filter and Motor.",
+        "confidence": 1,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": false,
+        "edge_recovery": false,
+        "direction_recovery": false,
+        "no_invented_nodes": false,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.6428571428571429,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 2,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 853,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 2954.1623999830335,
+      "review": {
+        "checks": {
+          "sensor": true,
+          "filter": true,
+          "controller": true,
+          "alarm": true,
+          "motor": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": false,
+          "direction_recovery": false,
+          "no_invented_nodes": true,
+          "no_invented_relationships": false,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 0.7857142857142857,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 853,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "QUALITY_FAIL"
+    },
+    {
+      "tier": "deep",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "attempt": 1,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 9402.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 498,
+        "completion_tokens": 378,
+        "total_tokens": 876,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 130.33636474609375
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Photosynthesis",
+          "Sunlight -> Leaf -> Chemical energy"
+        ],
+        "diagram_entities": [
+          "left_box",
+          "right_box",
+          "arrow_between_boxes"
+        ],
+        "labels": [
+          "Photosynthesis"
+        ],
+        "arrows": [
+          "left_box -> right_box"
+        ],
+        "relationships": [
+          "Sunlight -> Leaf",
+          "Leaf -> Chemical energy",
+          "left_box -> right_box"
+        ],
+        "uncertain_elements": [
+          "left_box is empty; no visible label",
+          "right_box is empty; no visible label",
+          "No visible connection between the text sequence (Sunlight -> Leaf -> Chemical energy) and the two empty boxes"
+        ],
+        "visual_structure": "Title at top-left; a text line with a written arrow sequence below it; two empty rectangular boxes side by side at the bottom connected by a single right-pointing horizontal arrow.",
+        "confidence": 0.9,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "photosynthesis": true,
+        "sunlight": true,
+        "leaf": true,
+        "chemical energy": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": false,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.9230769230769231,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 1,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 771,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 9887.599400011823,
+      "review": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 771,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "deep",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "attempt": 2,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 10172.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 498,
+        "completion_tokens": 369,
+        "total_tokens": 867,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 127.71817779541016
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Photosynthesis",
+          "Sunlight -> Leaf -> Chemical energy"
+        ],
+        "diagram_entities": [
+          "left_box",
+          "right_box",
+          "arrow_between_boxes"
+        ],
+        "labels": [
+          "Photosynthesis"
+        ],
+        "arrows": [
+          "left_box -> right_box"
+        ],
+        "relationships": [
+          "Sunlight -> Leaf",
+          "Leaf -> Chemical energy",
+          "left_box -> right_box"
+        ],
+        "uncertain_elements": [
+          "left_box is empty; no visible label",
+          "right_box is empty; no visible label",
+          "No visible connection between the text sequence (Sunlight -> Leaf -> Chemical energy) and the two boxes"
+        ],
+        "visual_structure": "Title top-left; text line below title; two empty rectangular boxes side by side at bottom connected by a single right-pointing horizontal arrow",
+        "confidence": 0.9,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "photosynthesis": true,
+        "sunlight": true,
+        "leaf": true,
+        "chemical energy": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": false,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.9230769230769231,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 0,
+      "unsupported_claims_flagged": false,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 728,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 10550.184500054456,
+      "review": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 728,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "deep",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "attempt": 3,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 8363.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 498,
+        "completion_tokens": 359,
+        "total_tokens": 857,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 124.80908966064453
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Photosynthesis",
+          "Sunlight -> Leaf -> Chemical energy"
+        ],
+        "diagram_entities": [
+          "left_box",
+          "right_box"
+        ],
+        "labels": [
+          "Photosynthesis",
+          "Sunlight",
+          "Leaf",
+          "Chemical energy"
+        ],
+        "arrows": [
+          "left_box -> right_box"
+        ],
+        "relationships": [
+          "Sunlight -> Leaf",
+          "Leaf -> Chemical energy",
+          "left_box -> right_box"
+        ],
+        "uncertain_elements": [
+          "The two boxes are empty; their intended content is not visible and is not assigned from the nearby text line."
+        ],
+        "visual_structure": "Title at top-left, a text flow line below it, and a horizontal two-box flow with a single rightward arrow between the boxes at the bottom.",
+        "confidence": 0.9,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "photosynthesis": true,
+        "sunlight": true,
+        "leaf": true,
+        "chemical energy": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 1.0,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 1,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 666,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 9021.903699962422,
+      "review": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 666,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 1,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 38121.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 1792,
+        "total_tokens": 2464,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 548.7999877929688
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "Direction of the long diagonal line linking the top of the Sensor box to the bottom of the Motor box; the arrowhead is drawn at the top edge of Sensor, which would imply Motor -> Sensor, but the line is ambiguous."
+        ],
+        "visual_structure": "Title at top-left. Two horizontal rows of rectangular boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Vertical arrows drop from Filter to Alarm and from Controller to Motor. Diagonal arrows run Sensor->Filter, Filter->Controller, and a long diagonal between Sensor and Motor.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 1.0,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 15,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1131,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 38669.345700065605,
+      "review": {
+        "checks": {
+          "sensor": true,
+          "filter": true,
+          "controller": true,
+          "alarm": true,
+          "motor": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 1131,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 2,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": null,
+      "thermal_state": "UNKNOWN",
+      "status": "FAILED",
+      "provider_latency_ms": null,
+      "ollama_calls": 0,
+      "error_category": "TIMEOUT",
+      "timeout_context_type": "ReadTimeout",
+      "request_latency_ms": 45304.344399948604
+    }
+  ]
+}

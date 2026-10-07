@@ -1,0 +1,22 @@
+{
+  "http_status": 200,
+  "answer_type": "str",
+  "answer_length": 5289,
+  "markdown_fences": false,
+  "prompt_characters": 3815,
+  "provider_ms": 16333,
+  "request_ms": 23147,
+  "json_parse": "PASS",
+  "top_level_keys": [
+    "VISIBLE_EVIDENCE"
+  ],
+  "failure_class": "SCHEMA_MISMATCH",
+  "schema_errors": [
+    {
+      "location": [
+        "VISIBLE_EVIDENCE"
+      ],
+      "type": "extra_forbidden"
+    }
+  ]
+}

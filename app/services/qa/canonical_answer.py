@@ -116,7 +116,9 @@ def generate_canonical_answer(
     """No model invocation for absent evidence; at most one bounded semantic repair."""
     started = time.perf_counter()
     _trace.set(None)
+    retrieval_started = time.perf_counter()
     bundle = (retrieval or RetrievalService()).retrieve(context, request)
+    retrieval_ms = (time.perf_counter()-retrieval_started)*1000
     if bundle.outcome != "READY":
         return QAResponse(
             answer=REFUSAL,
@@ -145,7 +147,10 @@ def generate_canonical_answer(
     router = get_reasoning_router()
     proposal: AnswerProposal | None = None
     citations: list[Citation] = []
+    generation_ms = 0.0
+    answer_validation_ms = 0.0
     for attempt in range(2):
+        generation_started = time.perf_counter()
         result = router.generate(
             ReasoningRequest(
                 task="qa",
@@ -157,6 +162,8 @@ def generate_canonical_answer(
                 response_schema=AnswerProposal.model_json_schema(),
             )
         )
+        generation_ms += (time.perf_counter()-generation_started)*1000
+        validation_started = time.perf_counter()
         try:
             proposal = AnswerProposal.model_validate_json(result.response)
             citations = validate_proposal(proposal, bundle)
@@ -165,6 +172,8 @@ def generate_canonical_answer(
             proposal = None
             if attempt == 0:
                 prompt += "\nREPAIR: Prior output failed strict evidence validation. Use exact source quotes and supplied IDs only."
+        finally:
+            answer_validation_ms += (time.perf_counter()-validation_started)*1000
     refusal = proposal is None or proposal.refusal
     trace: dict[str, object] = {
         "bundle_id": bundle.evidence_bundle_id,
@@ -180,6 +189,10 @@ def generate_canonical_answer(
         "provider_transport_seconds": result.telemetry.transport_latency_seconds,
         "total_seconds": time.perf_counter() - started,
         "validation_outcome": "REFUSED" if refusal else "VALIDATED",
+        "retrieval_ms": retrieval_ms,
+        "generation_provider_ms": generation_ms,
+        "answer_validation_ms": answer_validation_ms,
+        "total_qa_ms": (time.perf_counter()-started)*1000,
     }
     _trace.set(trace)
     logger.info("canonical_qa", extra=trace)

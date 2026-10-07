@@ -1,0 +1,240 @@
+{
+  "live": true,
+  "records": [
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 1,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 40390.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 1576,
+        "total_tokens": 2248,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 485.963623046875
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "diagonal line from top of Sensor to bottom of Motor with arrowhead at top of Sensor",
+          "diagonal line from bottom of Sensor to top of Filter with arrowhead at top of Filter",
+          "diagonal line from bottom of Filter to top of Controller with arrowhead at top of Controller",
+          "vertical line from bottom of Filter to top of Alarm with arrowhead at top of Alarm",
+          "vertical line from bottom of Controller to top of Motor with arrowhead at top of Motor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "Direction of the diagonal line connecting Sensor and Motor is ambiguous; arrowhead appears at the top of Sensor suggesting Motor -> Sensor, but the line could be intended as Sensor -> Motor"
+        ],
+        "visual_structure": "Title at top-left. Two rows of boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Vertical arrows drop from Filter to Alarm and from Controller to Motor; diagonal arrows cross between the rows.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.9285714285714286,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 6,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1364,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 40968.54610007722,
+      "review": {
+        "checks": {
+          "sensor": true,
+          "filter": true,
+          "controller": true,
+          "alarm": true,
+          "motor": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 1364,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 2,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 37419.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 1390,
+        "total_tokens": 2062,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 431.8545227050781
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "The long diagonal line connecting the top of 'Sensor' and the bottom of 'Motor' has its arrowhead at the top of 'Sensor', suggesting direction Motor -> Sensor, but the crossing of multiple diagonal lines makes the exact endpoints and direction uncertain.",
+          "The diagonal line into the top of 'Filter' appears to originate from the bottom of 'Sensor' (Sensor -> Filter), but line crossings introduce uncertainty."
+        ],
+        "visual_structure": "Title at top-left. Two horizontal rows of rectangular boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Vertical arrows drop from Filter to Alarm and from Controller to Motor. Diagonal arrows cross between the rows linking Sensor, Filter, Controller and a long diagonal from Motor back to Sensor.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 1.0,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 14,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1348,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 38398.4740000451,
+      "review": {
+        "checks": {
+          "sensor": true,
+          "filter": true,
+          "controller": true,
+          "alarm": true,
+          "motor": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 1348,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "review_status": "PASS"
+    }
+  ]
+}

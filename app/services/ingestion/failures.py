@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from ...core.supabase import SupabaseResponseError
 from ...core.processing_errors import ProcessingCode, ProcessingError
 
-Stage = Literal['EXTRACTION', 'NORMALIZATION', 'STRUCTURING', 'CHUNKING', 'PERSISTENCE', 'INDEXING']
+Stage = Literal['EXTRACTION', 'VERIFICATION', 'NORMALIZATION', 'STRUCTURING', 'CHUNKING', 'PERSISTENCE', 'INDEXING']
 
 
 class SourceFailure(BaseModel):
@@ -44,6 +44,10 @@ def ingestion_stage(stage: Stage) -> Iterator[None]:
         raise
     except Exception as error:
         from ..vision import VisionExtractionFailed
+        from ..visual_verifier import VisualVerificationFailed
+        if isinstance(error, VisualVerificationFailed):
+            raise SourceIngestionFailed(SourceFailure(stage="VERIFICATION", code=error.code, retryable=False,
+                message="Independent visual verification required." if error.result.status == "UNCERTAIN" else "Visual evidence rejected; publication blocked.")) from None
         if isinstance(error, VisionExtractionFailed):
             code = 'VISION_EXTRACTION_FAILED'
             message = 'Visual evidence extraction failed; no fabricated content was accepted.'

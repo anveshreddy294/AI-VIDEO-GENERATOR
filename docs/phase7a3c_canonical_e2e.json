@@ -1,0 +1,169 @@
+{
+  "records": [
+    {
+      "case": "SIMPLE",
+      "fixture": "printed.png",
+      "workload": "printed",
+      "status": "FAIL",
+      "job_id": "JOB_2a0aafd9bcef",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "STRUCTURING",
+        "code": "UNSUPPORTED_EVIDENCE",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Canonical source saved; knowledge preparation failed. Retry this source."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "time_to_failure_ms": 50256.816199980676,
+      "upload_to_ready_ms": null,
+      "canonical_sources_found": 1,
+      "source_id": "SRC_241fd6ad54315ad38d30f51e344d4df2",
+      "source_version": 1,
+      "canonical_source_status": "FAILED",
+      "persisted_content_units": 1,
+      "routing": {
+        "workload": "printed",
+        "cache_hit": false,
+        "request_id": "375b886e-12e1-4512-8b87-2ff0cf2a7eac",
+        "routing_ms": 3.74069984536618,
+        "attempt_count": 1,
+        "fallback_used": false,
+        "provider_used": "cloudflare",
+        "selected_tier": "general",
+        "policy_version": "benchmark-7a3c-v1",
+        "fallback_reason": null,
+        "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+        "routing_reasons": [
+          "measured_quality_gate_then_request_latency"
+        ],
+        "route_complexity": "SIMPLE",
+        "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+        "triage_latency_ms": 0.0,
+        "provider_requested": "cloudflare",
+        "provider_latency_ms": 24400.933400029317,
+        "validation_latency_ms": 0.3963999915868044,
+        "image_preprocessing_ms": 31.292200088500977
+      },
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+      "cloud_vision": true,
+      "fixture_quality": {
+        "checks": {
+          "osmosis": true,
+          "water": true,
+          "membrane": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 672,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "ollama_vision_calls": 0,
+      "knowledge_state": "LEGACY_UNMAPPED",
+      "foreign": "DENIED"
+    },
+    {
+      "case": "STANDARD",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "status": "FAIL",
+      "job_id": "JOB_cfae192f834e",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "STRUCTURING",
+        "code": "INVALID_HIERARCHY",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Canonical source saved; knowledge preparation failed. Retry this source."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "time_to_failure_ms": 30158.96689996589,
+      "upload_to_ready_ms": null,
+      "canonical_sources_found": 1,
+      "source_id": "SRC_65d4cf53ad8e51ecb2bbd0263e6077b3",
+      "source_version": 1,
+      "canonical_source_status": "FAILED",
+      "persisted_content_units": 1,
+      "routing": {
+        "workload": "flowchart",
+        "cache_hit": false,
+        "request_id": "400939be-9937-4b35-864c-7b8254a2e797",
+        "routing_ms": 2.0230000372976065,
+        "attempt_count": 1,
+        "fallback_used": false,
+        "provider_used": "cloudflare",
+        "selected_tier": "general",
+        "policy_version": "benchmark-7a3c-v1",
+        "fallback_reason": null,
+        "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+        "routing_reasons": [
+          "measured_quality_gate_then_request_latency"
+        ],
+        "route_complexity": "STANDARD",
+        "actual_model_used": "@cf/google/gemma-4-26b-a4b-it",
+        "triage_latency_ms": 0.0,
+        "provider_requested": "cloudflare",
+        "provider_latency_ms": 3416.2440999643877,
+        "validation_latency_ms": 0.15209999401122332,
+        "image_preprocessing_ms": 5.332099972292781
+      },
+      "actual_model_used": "@cf/google/gemma-4-26b-a4b-it",
+      "cloud_vision": true,
+      "fixture_quality": {
+        "checks": {
+          "photosynthesis": true,
+          "sunlight": true,
+          "leaf": true,
+          "chemical energy": true,
+          "text_recovery": true,
+          "node_recovery": true,
+          "edge_recovery": true,
+          "direction_recovery": true,
+          "no_invented_nodes": true,
+          "no_invented_relationships": true,
+          "branch_recovery": true,
+          "no_absent_structured_content": true,
+          "no_unsupported_equations": true
+        },
+        "fixture_score": 1.0,
+        "unsupported_equations_detected": false,
+        "unsupported_vocabulary_count": 0,
+        "unsupported_claims_flagged": false,
+        "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+        "output_bytes": 599,
+        "validation_status": "PASS",
+        "schema_valid": true
+      },
+      "ollama_vision_calls": 0,
+      "knowledge_state": "LEGACY_UNMAPPED",
+      "foreign": "DENIED"
+    },
+    {
+      "case": "COMPLEX",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "status": "FAIL",
+      "job_id": "JOB_e92ec11d3d8d",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "EXTRACTION",
+        "code": "VISION_EXTRACTION_FAILED",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Visual evidence extraction failed; no fabricated content was accepted."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "time_to_failure_ms": 93523.36069999728,
+      "upload_to_ready_ms": null,
+      "canonical_sources_found": 0
+    }
+  ]
+}

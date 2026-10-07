@@ -1,0 +1,11 @@
+{
+  "http_status": 401,
+  "success": false,
+  "errors": [
+    {
+      "code": 10000,
+      "daily_neuron_limit": false,
+      "capacity": false
+    }
+  ]
+}

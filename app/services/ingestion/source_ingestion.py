@@ -16,6 +16,7 @@ from ...core.supabase import SupabaseResponseError
 from ...core.processing_errors import ProcessingError, ProcessingCode
 from ..chunker import create_rich_chunks
 from ..dispatcher import dispatch
+from ..visual_router import VisualSignals
 from ..registry import calculate_sha256, validate_file
 from ..repositories.source_repository import SourceVersion, SupabaseSourceRepository
 from ..schemas import ContentUnit, RichChunk, SourceRecord
@@ -118,7 +119,8 @@ def index_committed_source(
             "duration": time.monotonic() - started,
         },
     )
-    metrics.update(indexing_latency_seconds=time.monotonic() - started, qdrant_writes=1)
+    from ...db.vector_store import get_index_timings
+    metrics.update(indexing_latency_seconds=time.monotonic() - started, qdrant_writes=1, **get_index_timings())
     from ...db.vector_store import get_last_embed_diagnostics
 
     diagnostics = get_last_embed_diagnostics()
@@ -150,9 +152,11 @@ def index_committed_source(
 
 
 def ingest_source(
-    repo: SupabaseSourceRepository, temp_path: Path, filename: str
+    repo: SupabaseSourceRepository, temp_path: Path, filename: str,
+    *, routing_signals: VisualSignals | None = None,
 ) -> dict[str, JsonValue]:
     """Binary files stay on disk; source/version/content state exists only in Supabase."""
+    total_started = time.perf_counter()
     if repo.runtime.verify_user(repo._token).user_id != repo.user.user_id:
         raise KnowledgeError("NOT_FOUND")
     source_type, mime_type = validate_file(temp_path, filename)
@@ -190,9 +194,12 @@ def ingest_source(
     persistent_file.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(temp_path, persistent_file)
     with ingestion_stage("EXTRACTION"):
-        extraction = dispatch(
-            persistent_file, source_id=record.source_id, asset_id=record.asset_id
-        )
+        from ..visual_router import VisualScope, visual_scope
+        with visual_scope(VisualScope(user_id=repo.owner_id, source_id=record.source_id, source_version=record.version)):
+            if routing_signals is None:
+                extraction = dispatch(persistent_file, source_id=record.source_id, asset_id=record.asset_id)
+            else:
+                extraction = dispatch(persistent_file, source_id=record.source_id, asset_id=record.asset_id, routing_signals=routing_signals)
         raw_units = extraction.units
         if not raw_units:
             raise ValidationFailed("No extractable content")
@@ -207,6 +214,7 @@ def ingest_source(
                 unit.parent_content_id = old_to_new.get(
                     unit.parent_content_id, unit.parent_content_id
                 )
+    normalization_started = time.perf_counter()
     with ingestion_stage("NORMALIZATION"):
         normalized = normalize_content_units(
             raw_units, source_version=record.source_version
@@ -224,6 +232,7 @@ def ingest_source(
                 units.append(unit)
         if not units:
             raise ValidationFailed("No safe retrievable content")
+    normalization_ms = (time.perf_counter() - normalization_started) * 1000
     enriched = units
     # The deployed immutable source RPC requires nonempty retrieval chunks. These bounded
     # bootstrap chunks are never indexed for this policy; READY canonical knowledge owns indexing.
@@ -272,5 +281,13 @@ def ingest_source(
             "chunk_policy": ChunkPolicy().model_dump(mode="json"),
         },
     )
+    commit_started = time.perf_counter()
     committed = repo.commit_ingestion(record, version, enriched)
-    return index_committed_source(repo, committed)
+    commit_ms = (time.perf_counter()-commit_started)*1000
+    result = index_committed_source(repo, committed)
+    result["source_commit_ms"] = commit_ms
+    result["ingestion_content_unit_normalization_ms"] = normalization_ms
+    routing_metrics: list[JsonValue] = [unit.provenance["routing"] for unit in enriched if unit.provenance.get("routing")]
+    result["visual_inference_metrics"] = routing_metrics
+    result["total_upload_to_ready_ms"] = (time.perf_counter()-total_started)*1000
+    return result

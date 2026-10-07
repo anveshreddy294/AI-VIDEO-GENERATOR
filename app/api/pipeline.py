@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from ..core.config import settings
 from .sources import SourceDependency
+from ..services.visual_router import Workload, signals_for_workload
 from ..services.chunker import create_rich_chunks
 from ..services.dispatcher import IMAGE_EXTENSIONS, UnsupportedFileType, VisionExtractionFailed, dispatch, dispatch_async
 from ..services.ingestion.normalizer import normalize_content_units
@@ -866,6 +867,7 @@ async def create_upload_job(
     student_id: str = "student_default",
     max_questions: int = 5,
     repository: SourceDependency = None,
+    visual_workload: Workload | None = None,
 ) -> JobCreationResponse:
     """Create background ingestion + assessment job and return job_id for SSE progress tracking."""
     if not job_manager.can_accept_job():
@@ -898,7 +900,10 @@ async def create_upload_job(
 
     if repository is not None:
         from .source_jobs import queue_source_job
-        return await queue_source_job(background_tasks, repository, temp_path, filename)
+        return await queue_source_job(
+            background_tasks, repository, temp_path, filename,
+            routing_signals=signals_for_workload(visual_workload) if visual_workload else None,
+        )
 
     file_sha256 = hasher.hexdigest()
     pipeline_version = getattr(settings, "pipeline_config_version", "v1")

@@ -13,12 +13,13 @@ from ..services.pipeline_tracker import job_manager
 from ..services.registry import calculate_sha256
 from ..services.repositories.source_repository import SupabaseSourceRepository
 from ..services.schemas import SourceRecord
+from ..services.visual_router import VisualSignals
 from pydantic import JsonValue
 from ..services.ingestion.failures import SourceFailure, SourceIngestionFailed, SourceIndexFailed
 
 
 async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: Path | None,
-                             filename: str, record: SourceRecord | None = None) -> None:
+                             filename: str, record: SourceRecord | None = None, *, routing_signals: VisualSignals | None = None) -> None:
     task = asyncio.current_task()
     if task:
         job_manager.attach_task(job_id, task)
@@ -30,7 +31,10 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
             if record is not None:
                 worker = asyncio.create_task(asyncio.to_thread(index_committed_source, repo, record))
             elif path is not None:
-                worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename))
+                if routing_signals is None:
+                    worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename))
+                else:
+                    worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename, routing_signals=routing_signals))
             else:
                 raise ValueError('Source job has no input')
             result = await asyncio.shield(worker)
@@ -74,7 +78,7 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
 
 
 async def queue_source_job(background: BackgroundTasks, repo: SupabaseSourceRepository,
-                            path: Path, filename: str) -> JobCreationResponse:
+                            path: Path, filename: str, *, routing_signals: VisualSignals | None = None) -> JobCreationResponse:
     from .pipeline import JobCreationResponse
     digest = calculate_sha256(path)
     key = f'source:{repo.owner_id}:{filename}:{digest}'
@@ -82,7 +86,7 @@ async def queue_source_job(background: BackgroundTasks, repo: SupabaseSourceRepo
     if created:
         job.metadata.update(source_owner=repo.owner_id, filename=filename,
             source_id="SRC_" + uuid5(NAMESPACE_URL, f"visualai:{repo.owner_id}:{filename}:{digest}").hex)
-        background.add_task(execute_source_job, job.job_id, repo, path, filename)
+        background.add_task(execute_source_job, job.job_id, repo, path, filename, routing_signals=routing_signals)
     else:
         path.unlink(missing_ok=True)
     return JobCreationResponse(job_id=job.job_id, status=job.status, message='Source-only ingestion queued')

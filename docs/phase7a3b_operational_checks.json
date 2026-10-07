@@ -1,0 +1,49 @@
+{
+  "controlled_injection": true,
+  "records": [
+    {
+      "category": "TIMEOUT",
+      "cloud_tiers": [
+        "deep",
+        "general"
+      ],
+      "local_calls": 1,
+      "attempts": 3,
+      "status": "PASS",
+      "real_provider_calls": 0
+    },
+    {
+      "category": "RATE_LIMIT",
+      "cloud_tiers": [
+        "deep",
+        "general"
+      ],
+      "local_calls": 1,
+      "attempts": 3,
+      "status": "PASS",
+      "real_provider_calls": 0
+    },
+    {
+      "category": "UNAVAILABLE",
+      "cloud_tiers": [
+        "deep",
+        "general"
+      ],
+      "local_calls": 1,
+      "attempts": 3,
+      "status": "PASS",
+      "real_provider_calls": 0
+    },
+    {
+      "category": "NETWORK",
+      "cloud_tiers": [
+        "deep",
+        "general"
+      ],
+      "local_calls": 1,
+      "attempts": 3,
+      "status": "PASS",
+      "real_provider_calls": 0
+    }
+  ]
+}

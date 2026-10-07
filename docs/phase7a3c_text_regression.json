@@ -1,0 +1,47 @@
+{
+  "deployment": "0c0804b8-6d98-41dc-8c35-3b0bafa4973b",
+  "records": [
+    {
+      "task": "content_understanding",
+      "http_status": 200,
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "pass": true
+    },
+    {
+      "task": "structure_repair",
+      "http_status": 200,
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "pass": true
+    },
+    {
+      "task": "assessment_structured",
+      "http_status": 200,
+      "model": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      "pass": true
+    },
+    {
+      "task": "reasoning",
+      "http_status": 200,
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "pass": true
+    },
+    {
+      "task": "qa",
+      "http_status": 200,
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "pass": true
+    },
+    {
+      "task": "notes",
+      "http_status": 200,
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "pass": true
+    },
+    {
+      "task": "roadmap",
+      "http_status": 200,
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "pass": true
+    }
+  ]
+}

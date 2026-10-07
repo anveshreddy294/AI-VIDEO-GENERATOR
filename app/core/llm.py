@@ -17,6 +17,7 @@ import time
 import urllib.error
 import urllib.request
 from typing import Any, Protocol, runtime_checkable
+from pydantic import JsonValue
 
 from .config import settings
 
@@ -57,7 +58,7 @@ class OllamaProvider:
         )
         self.timeout = timeout if timeout is not None else float(getattr(settings, "ollama_timeout", 120.0))
 
-    def generate(self, prompt: str, response_schema: type | None = None) -> str:
+    def generate(self, prompt: str, response_schema: type | None = None, *, images: tuple[str, ...] = (), json_schema: dict[str, JsonValue] | None = None, max_response_bytes: int | None = None, strict_json: bool = False, max_output_tokens: int | None = None) -> str:
         """Generate content via Ollama /api/generate endpoint."""
         url = f"{self.base_url}/api/generate"
         is_json = (
@@ -74,6 +75,12 @@ class OllamaProvider:
         }
         if is_json:
             req_data["format"] = "json"
+        if images:
+            req_data["images"] = list(images)
+        if json_schema is not None:
+            req_data["format"] = json_schema
+        if max_output_tokens is not None:
+            req_data["options"] = {"num_predict": max_output_tokens, "temperature": 0}
 
         payload = json.dumps(req_data).encode("utf-8")
         req = urllib.request.Request(
@@ -84,7 +91,10 @@ class OllamaProvider:
         )
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+                body = resp.read(max_response_bytes + 1) if max_response_bytes is not None else resp.read()
+                if max_response_bytes is not None and len(body) > max_response_bytes:
+                    raise RuntimeError("Ollama response budget exceeded")
+                data = json.loads(body.decode("utf-8"))
                 if data.get("error") or data.get("done") is False:
                     raise RuntimeError(data.get("error") or "Incomplete Ollama response")
                 raw = data.get("response", "")
@@ -93,7 +103,7 @@ class OllamaProvider:
 
                 # Strip markdown code fences if the model wraps output in ```json ... ```
                 cleaned = raw.strip()
-                if cleaned.startswith("```"):
+                if cleaned.startswith("```") and not strict_json:
                     lines = cleaned.splitlines()
                     if lines and lines[0].startswith("```"):
                         lines = lines[1:]

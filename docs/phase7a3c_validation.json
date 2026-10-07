@@ -1,0 +1,26 @@
+{
+  "worker_tests": {
+    "passed": 70
+  },
+  "frontend_tests": {
+    "passed": 21
+  },
+  "targeted_tests": {
+    "passed": 254,
+    "skipped": 1
+  },
+  "full_python_suite": {
+    "passed": 1035,
+    "skipped": 1,
+    "warnings": 4,
+    "seconds": 287.97
+  },
+  "worker_strict_types": "PASS",
+  "git_diff_check": "PASS",
+  "text_live_tasks_passed": 7,
+  "migration_changes": "NONE",
+  "commit": "NOT_CREATED",
+  "push": "NOT_RUN",
+  "worker_version": "1eea3c77-f1e9-462e-9fc9-785071370040",
+  "phase_ready": false
+}

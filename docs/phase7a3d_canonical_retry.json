@@ -1,0 +1,41 @@
+{
+  "records": [
+    {
+      "case": "SIMPLE",
+      "fixture": "printed.png",
+      "workload": "printed",
+      "status": "FAIL",
+      "job_id": "JOB_bb21e2fda821",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "STRUCTURING",
+        "code": "UNSUPPORTED_EVIDENCE",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Canonical source saved; knowledge preparation failed. Retry this source."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "elapsed_until_failure_ms": 73127.81430000905
+    },
+    {
+      "case": "STANDARD",
+      "fixture": "flowchart.png",
+      "workload": "flowchart",
+      "status": "FAIL",
+      "job_id": "JOB_ae0ef857950a",
+      "job_status": "failed",
+      "source_failure": {
+        "stage": "STRUCTURING",
+        "code": "UNSUPPORTED_EVIDENCE",
+        "reason_code": null,
+        "retryable": true,
+        "message": "Canonical source saved; knowledge preparation failed. Retry this source."
+      },
+      "failure_stage": "INGESTION",
+      "failure_type": "AssertionError",
+      "elapsed_until_failure_ms": 72396.33709995542
+    }
+  ],
+  "timing_note": "Failed attempts have elapsed_until_failure_ms; no upload-to-READY measurement exists."
+}

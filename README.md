@@ -553,3 +553,8 @@ make audit        # Dependency security audit
 - [ ] **Enterprise Features**
   - Multi-tenant student/organization isolation
   - LMS integration (LTI 1.3, Canvas, Moodle)
+## Development verification
+
+DEVELOPMENT: `python scripts/verify_changed.py` selects offline checks from staged, unstaged and untracked files. Use `--plan` to preview. Python and Node network access is blocked; Worker checks require locally installed Node and TypeScript (`VISUALAI_TSC_PATH` may point to its `bin/tsc`). Missing tools fail explicitly without downloads.
+
+PHASE CLOSE: run `.venv\Scripts\python.exe -m pytest -q` separately with the phase-required isolated database configuration. `FULL_PHASE_GATE_REQUIRED: YES` is advisory; the fast verifier never runs the full suite.

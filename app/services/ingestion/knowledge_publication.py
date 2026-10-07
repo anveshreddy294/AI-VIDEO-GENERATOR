@@ -77,8 +77,12 @@ def prepare_knowledge_index(
             NAMESPACE_URL,
             f"{scope.user_id}:{scope.source_id}:{scope.source_version}:{UNDERSTANDING_VERSION}",
         )
+        commit_started = time.perf_counter()
         service.commit_snapshot(scope, operation, result.snapshot)
+        metrics["knowledge_supabase_commit_ms"] = (time.perf_counter()-commit_started)*1000
         metrics.update(
+            stage_timings=result.stage_timings,
+            deterministic_repairs=result.deterministic_repairs,
             quality=result.quality.model_dump(mode="json"),
             provider_telemetry=result.provider_telemetry,
             validation_latency_seconds=result.validation_latency_seconds,

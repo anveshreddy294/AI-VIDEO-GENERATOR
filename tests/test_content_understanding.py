@@ -249,7 +249,7 @@ def test_reject_and_exhaust_bounded_repair(bad: str) -> None:
 
     with pytest.raises(UnderstandingError):
         understand_content(SCOPE, units, generate)
-    assert len(calls) == 2
+    assert len(calls) == (2 if bad in {"malformed", "empty", "owner"} else 1)
 
 
 def test_repair_success_and_no_fallback() -> None:

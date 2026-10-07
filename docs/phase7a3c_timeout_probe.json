@@ -1,0 +1,14 @@
+{
+  "diagnostic_only_http_timeout_s": 60,
+  "production_timeout_unchanged": true,
+  "http_status": 502,
+  "worker_error": "AI_PROVIDER_TIMEOUT",
+  "worker_latency_ms": 45000,
+  "request_latency_ms": 45465,
+  "prompt_characters": 3842,
+  "max_completion_tokens": 2048,
+  "worker_request_started": true,
+  "workers_ai_returned_output": false,
+  "backend_cancelled_first": false,
+  "timeout_layer": "WORKERS_AI"
+}

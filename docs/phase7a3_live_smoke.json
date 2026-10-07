@@ -1,0 +1,64 @@
+{
+  "records": [
+    {
+      "tier": "fast",
+      "model": "@cf/moondream/moondream3.1-9B-A2B",
+      "status": "FAIL",
+      "ollama_calls": 0,
+      "http_status": 422,
+      "error_category": "INVALID_VISUAL_RESPONSE",
+      "request_latency_ms": 13298
+    },
+    {
+      "tier": "general",
+      "model": "@cf/google/gemma-4-26b-a4b-it",
+      "status": "FAIL",
+      "ollama_calls": 0,
+      "http_status": 422,
+      "error_category": "INVALID_VISUAL_RESPONSE",
+      "request_latency_ms": 19932
+    },
+    {
+      "tier": "deep",
+      "model": "@cf/qwen/qwen3.8-27b",
+      "status": "PASS",
+      "ollama_calls": 0,
+      "http_status": 200,
+      "actual_model": "@cf/qwen/qwen3.8-27b",
+      "worker_latency_ms": 9280.0,
+      "request_latency_ms": 9429
+    }
+  ],
+  "benchmark_blocked": true,
+  "deployment_version": "da6b3c6f-c633-450b-a773-376f2263bf2d",
+  "worker_name": "speedrun",
+  "worker_hostname": "speedrun.romeoragnorak.workers.dev",
+  "account_verified": true,
+  "required_secret_name_present": true,
+  "ai_binding_present": true,
+  "preview_urls": false,
+  "text_regression": "NONE_ALL_SEVEN_TASKS_PASSED",
+  "contract_diagnostics": {
+    "fast": "Actual provider response nests answer under result.answer; adapter expects top-level answer.",
+    "general": "Provider reports @cf/google/gemma-4-26b-a4b-it-external; strict model correlation expects @cf/google/gemma-4-26b-a4b-it.",
+    "deep": "Real Worker envelope and backend visual-v2 validation passed."
+  },
+  "benchmark_status": "BLOCKED_BY_BASE_CONTRACT_FAILURES",
+  "calibrated": false,
+  "canonical_e2e": "NOT_RUN",
+  "supabase_changes": false,
+  "qdrant_changes": false,
+  "tests": {
+    "worker_passed": 43,
+    "targeted_python_passed": 101,
+    "frontend_passed": 21,
+    "full_python_passed": 1005,
+    "full_python_skipped": 1,
+    "full_python_warnings": 4,
+    "full_python_seconds": 274.07,
+    "dry_run": "PASS",
+    "diff_check": "PASS"
+  },
+  "benchmark_cases_completed": 0,
+  "credentials_stored": false
+}

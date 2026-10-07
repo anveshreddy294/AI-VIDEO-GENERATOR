@@ -1,0 +1,27 @@
+{
+  "http_status": 200,
+  "success": true,
+  "model": "@cf/google/gemma-4-26b-a4b-it",
+  "finish_reason": "length",
+  "content_type": "NoneType",
+  "content_length": 0,
+  "message_field_types": {
+    "annotations": "NoneType",
+    "audio": "NoneType",
+    "content": "NoneType",
+    "function_call": "NoneType",
+    "reasoning": "str",
+    "refusal": "NoneType",
+    "role": "str"
+  },
+  "usage": {
+    "prompt_tokens": 557,
+    "completion_tokens": 1024,
+    "total_tokens": 1581,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "neurons": 32.990909576416016
+  },
+  "latency_ms": 18573
+}

@@ -1,0 +1,625 @@
+{
+  "records": [
+    {
+      "case": "SIMPLE",
+      "canonical_evidence": [
+        {
+          "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+          "source_id": "SRC_241fd6ad54315ad38d30f51e344d4df2",
+          "asset_id": "AST_241fd6ad54315ad38d30f51e344d4df2",
+          "layer": "A",
+          "modality": "image",
+          "text": "### Headings & Key Topics\n- **Osmosis**\n\n### Visible Content & Transcription\n- Osmosis\n- Osmosis is water movement through a selectively permeable membrane.\n- Water -> Cell membrane -> Cell\n- Water\n- Cell membrane\n\n### Diagram Entities & Conceptual Flow\n*Entities / Components:* Water box, Cell membrane box\n*Labels:* Water, Cell membrane\n*Relationships & Flow:*\n * Water -> Cell membrane -> Cell\nArrow from Water box to Cell membrane box",
+          "provenance": {
+            "model": "@cf/google/gemma-4-26b-a4b-it-external",
+            "routing": {
+              "workload": "printed",
+              "cache_hit": false,
+              "request_id": "375b886e-12e1-4512-8b87-2ff0cf2a7eac",
+              "routing_ms": 3.74069984536618,
+              "attempt_count": 1,
+              "fallback_used": false,
+              "provider_used": "cloudflare",
+              "selected_tier": "general",
+              "policy_version": "benchmark-7a3c-v1",
+              "fallback_reason": null,
+              "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+              "routing_reasons": [
+                "measured_quality_gate_then_request_latency"
+              ],
+              "route_complexity": "SIMPLE",
+              "actual_model_used": "@cf/google/gemma-4-26b-a4b-it-external",
+              "triage_latency_ms": 0.0,
+              "provider_requested": "cloudflare",
+              "provider_latency_ms": 24400.933400029317,
+              "validation_latency_ms": 0.3963999915868044,
+              "image_preprocessing_ms": 31.292200088500977
+            },
+            "provider": "cloudflare",
+            "extraction": {
+              "units": [],
+              "arrows": [
+                "Arrow from Water box to Cell membrane box"
+              ],
+              "graphs": [],
+              "labels": [
+                "Water",
+                "Cell membrane"
+              ],
+              "tables": [],
+              "formulas": [],
+              "headings": [
+                "Osmosis"
+              ],
+              "confidence": 1.0,
+              "paragraphs": [
+                "Osmosis is water movement through a selectively permeable membrane."
+              ],
+              "content_kind": "MIXED",
+              "visible_text": [
+                "Osmosis",
+                "Osmosis is water movement through a selectively permeable membrane.",
+                "Water -> Cell membrane -> Cell",
+                "Water",
+                "Cell membrane"
+              ],
+              "bullet_points": [],
+              "relationships": [
+                "Water -> Cell membrane -> Cell"
+              ],
+              "diagram_entities": [
+                "Water box",
+                "Cell membrane box"
+              ],
+              "handwriting_text": [],
+              "visual_structure": "",
+              "uncertain_elements": []
+            },
+            "source_type": "image",
+            "image_sha256": "6fa3f9f8c1c5568a2b12ef84cf3fb3ce8f9b3ed1134ded8345739c46c50276da",
+            "visual_index": 0,
+            "semantic_kind": "MIXED",
+            "validation_state": "VALIDATED",
+            "visual_schema_version": "visual-v2"
+          },
+          "visual_description": "### Headings & Key Topics\n- **Osmosis**\n\n### Visible Content & Transcription\n- Osmosis\n- Osmosis is water movement through a selectively permeable membrane.\n- Water -> Cell membrane -> Cell\n- Water\n- Cell membrane\n\n### Diagram Entities & Conceptual Flow\n*Entities / Components:* Water box, Cell membrane box\n*Labels:* Water, Cell membrane\n*Relationships & Flow:*\n  * Water -> Cell membrane -> Cell\nArrow from Water box to Cell membrane box",
+          "page_number": null,
+          "page_start": null,
+          "page_end": null,
+          "slide_number": null,
+          "timestamp_start": null,
+          "timestamp_end": null,
+          "speaker": null,
+          "heading_path": [
+            "Osmosis"
+          ],
+          "frame_id": null,
+          "sequence_index": 0,
+          "chapter": null,
+          "section": null,
+          "parent_content_id": null,
+          "char_start": null,
+          "char_end": null,
+          "line_start": null,
+          "line_end": null,
+          "bbox": null,
+          "region_id": null,
+          "image_id": "IMG_0",
+          "image_path": "C:\\Users\\ANVESH\\Desktop\\AI-VIDEO-GENERATOR\\storage\\runtime\\uploads\\29f27a6d-5d51-4887-b756-77e2b744391f\\SRC_241fd6ad54315ad38d30f51e344d4df2\\original.png",
+          "extraction_method": "vision_cloudflare",
+          "confidence_score": 1.0
+        }
+      ],
+      "responses": [
+        {
+          "source_anchors": [
+            {
+              "anchor_id": "EA_b51128bd687a585a81c80a4cf9d4f6fb",
+              "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+              "text": "### Headings & Key Topics\n- **Osmosis**\n\n### Visible Content & Transcription\n- Osmosis\n- Osmosis is water movement through a selectively permeable membrane."
+            },
+            {
+              "anchor_id": "EA_d44f044db61b5985bac8a08ae35c9139",
+              "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+              "text": "- Water -> Cell membrane -> Cell\n- Water\n- Cell membrane\n\n### Diagram Entities & Conceptual Flow\n*Entities / Components:* Water box, Cell membrane box\n*Labels:* Water, Cell membrane\n*Relationships & Flow:*\n * Water -> Cell membrane -> Cell\nArrow from Water box to Cell membrane box"
+            }
+          ],
+          "output": {
+            "topics": [
+              {
+                "key": "Osmosis",
+                "title": "Osmosis",
+                "evidence": [
+                  {
+                    "anchor_id": "EA_b51128bd687a585a81c80a4cf9d4f6fb"
+                  },
+                  {
+                    "anchor_id": "EA_d44f044db61b5985bac8a08ae35c9139"
+                  }
+                ]
+              }
+            ],
+            "subtopics": [
+              {
+                "key": "Osmosis",
+                "title": "Osmosis",
+                "evidence": [
+                  {
+                    "anchor_id": "EA_b51128bd687a585a81c80a4cf9d4f6fb"
+                  },
+                  {
+                    "anchor_id": "EA_d44f044db61b5985bac8a08ae35c9139"
+                  }
+                ],
+                "topic_key": "Osmosis"
+              }
+            ],
+            "concepts": [
+              {
+                "key": "Osmosis",
+                "subtopic_key": "Osmosis",
+                "name": "Osmosis",
+                "evidence": [
+                  {
+                    "anchor_id": "EA_b51128bd687a585a81c80a4cf9d4f6fb"
+                  },
+                  {
+                    "anchor_id": "EA_d44f044db61b5985bac8a08ae35c9139"
+                  }
+                ]
+              }
+            ],
+            "prerequisites": []
+          }
+        }
+      ],
+      "rejections": [],
+      "status": "PASS",
+      "result": {
+        "snapshot": {
+          "schema_version": 1,
+          "topics": [
+            {
+              "topic_id": "TOPIC_e2a99169f3f55d3e9c6d4afd9a0854ba",
+              "title": "Osmosis",
+              "description": null,
+              "sequence": 0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "evidence": [
+                  {
+                    "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+                    "char_start": 0,
+                    "char_end": 156
+                  },
+                  {
+                    "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+                    "char_start": 157,
+                    "char_end": 438
+                  }
+                ]
+              }
+            }
+          ],
+          "subtopics": [
+            {
+              "topic_id": "TOPIC_e2a99169f3f55d3e9c6d4afd9a0854ba",
+              "title": "Osmosis",
+              "description": null,
+              "sequence": 0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "evidence": [
+                  {
+                    "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+                    "char_start": 0,
+                    "char_end": 156
+                  },
+                  {
+                    "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+                    "char_start": 157,
+                    "char_end": 438
+                  }
+                ]
+              },
+              "subtopic_id": "SUBTOPIC_1ed50a738dc9565c903633c43b341a5e"
+            }
+          ],
+          "concepts": [
+            {
+              "concept_id": "CONCEPT_dd9894668f9e50f2a4b047a8d579bb39",
+              "subtopic_id": "SUBTOPIC_1ed50a738dc9565c903633c43b341a5e",
+              "name": "Osmosis",
+              "definition": null,
+              "sequence": 0,
+              "provenance": {
+                "understanding_version": "educational-v1"
+              }
+            }
+          ],
+          "content_concepts": [
+            {
+              "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+              "concept_id": "CONCEPT_dd9894668f9e50f2a4b047a8d579bb39",
+              "support_kind": "definition",
+              "char_start": 0,
+              "char_end": 156,
+              "extraction_confidence": 1.0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "content_role": "DEFINITION"
+              }
+            },
+            {
+              "content_id": "CU_0bb95165883b58fb8f033521097e5cf3",
+              "concept_id": "CONCEPT_dd9894668f9e50f2a4b047a8d579bb39",
+              "support_kind": "explanation",
+              "char_start": 157,
+              "char_end": 438,
+              "extraction_confidence": 1.0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "content_role": "DIAGRAM_DESCRIPTION"
+              }
+            }
+          ],
+          "relationships": []
+        },
+        "quality": {
+          "content_units": 1,
+          "topics": 1,
+          "subtopics": 1,
+          "concepts": 1,
+          "evidence_associations": 2,
+          "prerequisites": 0,
+          "topic_evidence_coverage": 1.0,
+          "subtopic_evidence_coverage": 1.0,
+          "concept_evidence_coverage": 1.0,
+          "unassigned_content_ids": [],
+          "duplicate_concepts": 0,
+          "orphan_topics": 0,
+          "orphan_subtopics": 0,
+          "invalid_references": 0,
+          "prerequisite_cycles": 0,
+          "unsupported_prerequisites": 0
+        },
+        "provider_telemetry": [
+          {
+            "provider": "cloudflare",
+            "task": "content_understanding",
+            "outcome": "RETRYABLE_FAILURE",
+            "request_id": null,
+            "model": null,
+            "usage": null,
+            "worker_latency_ms": null,
+            "transport_latency_seconds": 1.25,
+            "reason": "PROVIDER_UNAVAILABLE"
+          },
+          {
+            "provider": "cloudflare",
+            "task": "content_understanding",
+            "outcome": "RETRYABLE_FAILURE",
+            "request_id": null,
+            "model": null,
+            "usage": null,
+            "worker_latency_ms": null,
+            "transport_latency_seconds": 0.5470000000204891,
+            "reason": "PROVIDER_UNAVAILABLE"
+          },
+          {
+            "provider": "ollama",
+            "task": "content_understanding",
+            "outcome": "SUCCESS",
+            "request_id": null,
+            "model": "llama3.2:3b",
+            "usage": null,
+            "worker_latency_ms": null,
+            "transport_latency_seconds": 25.42200000002049,
+            "reason": null
+          }
+        ],
+        "validation_latency_seconds": 0.015999999945051968,
+        "stage_timings": {
+          "content_unit_normalization_ms": 5.3675000090152025,
+          "structurer_provider_ms": 27233.684899983928,
+          "structurer_parse_ms": 7.916499977000058,
+          "evidence_validation_ms": 0.3097002627328038,
+          "hierarchy_validation_ms": 0.26539992541074753,
+          "structure_repair_ms": 0.0950000248849392,
+          "knowledge_persist_prep_ms": 0.6434000097215176
+        },
+        "deterministic_repairs": [],
+        "structuring_model_calls": 1,
+        "repair_model_calls": 0,
+        "structuring_latency_seconds": 27.25
+      }
+    },
+    {
+      "case": "STANDARD",
+      "canonical_evidence": [
+        {
+          "content_id": "CU_abdf9cc7f8735df584134f1f4b39fecc",
+          "source_id": "SRC_65d4cf53ad8e51ecb2bbd0263e6077b3",
+          "asset_id": "AST_65d4cf53ad8e51ecb2bbd0263e6077b3",
+          "layer": "A",
+          "modality": "image",
+          "text": "### Visible Content & Transcription\n- Photosynthesis\n- Sunlight -> Leaf -> Chemical energy\n\n### Diagram Entities & Conceptual Flow\n*Entities / Components:* unlabeled box left, unlabeled box right\n*Relationships & Flow:*\n * unlabeled box left -> unlabeled box right\nunlabeled box left -> unlabeled box right\n\n### Visual Organization\nText at top, two empty boxes at bottom connected by a horizontal arrow from left to right.",
+          "provenance": {
+            "model": "@cf/google/gemma-4-26b-a4b-it",
+            "routing": {
+              "workload": "flowchart",
+              "cache_hit": false,
+              "request_id": "400939be-9937-4b35-864c-7b8254a2e797",
+              "routing_ms": 2.0230000372976065,
+              "attempt_count": 1,
+              "fallback_used": false,
+              "provider_used": "cloudflare",
+              "selected_tier": "general",
+              "policy_version": "benchmark-7a3c-v1",
+              "fallback_reason": null,
+              "model_requested": "@cf/google/gemma-4-26b-a4b-it",
+              "routing_reasons": [
+                "measured_quality_gate_then_request_latency"
+              ],
+              "route_complexity": "STANDARD",
+              "actual_model_used": "@cf/google/gemma-4-26b-a4b-it",
+              "triage_latency_ms": 0.0,
+              "provider_requested": "cloudflare",
+              "provider_latency_ms": 3416.2440999643877,
+              "validation_latency_ms": 0.15209999401122332,
+              "image_preprocessing_ms": 5.332099972292781
+            },
+            "provider": "cloudflare",
+            "extraction": {
+              "units": [],
+              "arrows": [
+                "unlabeled box left -> unlabeled box right"
+              ],
+              "graphs": [],
+              "labels": [],
+              "tables": [],
+              "formulas": [],
+              "headings": [],
+              "confidence": 1.0,
+              "paragraphs": [],
+              "content_kind": "DIAGRAM",
+              "visible_text": [
+                "Photosynthesis",
+                "Sunlight -> Leaf -> Chemical energy"
+              ],
+              "bullet_points": [],
+              "relationships": [
+                "unlabeled box left -> unlabeled box right"
+              ],
+              "diagram_entities": [
+                "unlabeled box left",
+                "unlabeled box right"
+              ],
+              "handwriting_text": [],
+              "visual_structure": "Text at top, two empty boxes at bottom connected by a horizontal arrow from left to right.",
+              "uncertain_elements": []
+            },
+            "source_type": "image",
+            "image_sha256": "9f5adfacbe020cf1f2fe3e6d917b91c12986d207b0948c23812efa064abeaa13",
+            "visual_index": 0,
+            "semantic_kind": "DIAGRAM",
+            "validation_state": "VALIDATED",
+            "visual_schema_version": "visual-v2"
+          },
+          "visual_description": "### Visible Content & Transcription\n- Photosynthesis\n- Sunlight -> Leaf -> Chemical energy\n\n### Diagram Entities & Conceptual Flow\n*Entities / Components:* unlabeled box left, unlabeled box right\n*Relationships & Flow:*\n  * unlabeled box left -> unlabeled box right\nunlabeled box left -> unlabeled box right\n\n### Visual Organization\nText at top, two empty boxes at bottom connected by a horizontal arrow from left to right.",
+          "page_number": null,
+          "page_start": null,
+          "page_end": null,
+          "slide_number": null,
+          "timestamp_start": null,
+          "timestamp_end": null,
+          "speaker": null,
+          "heading_path": [],
+          "frame_id": null,
+          "sequence_index": 0,
+          "chapter": null,
+          "section": null,
+          "parent_content_id": null,
+          "char_start": null,
+          "char_end": null,
+          "line_start": null,
+          "line_end": null,
+          "bbox": null,
+          "region_id": null,
+          "image_id": "IMG_0",
+          "image_path": "C:\\Users\\ANVESH\\Desktop\\AI-VIDEO-GENERATOR\\storage\\runtime\\uploads\\29f27a6d-5d51-4887-b756-77e2b744391f\\SRC_65d4cf53ad8e51ecb2bbd0263e6077b3\\original.png",
+          "extraction_method": "vision_cloudflare",
+          "confidence_score": 1.0
+        }
+      ],
+      "responses": [
+        {
+          "source_anchors": [
+            {
+              "anchor_id": "EA_0a743ac9693e588ea787d78ba746ad44",
+              "content_id": "CU_abdf9cc7f8735df584134f1f4b39fecc",
+              "text": "### Visible Content & Transcription\n- Photosynthesis\n- Sunlight -> Leaf -> Chemical energy\n\n### Diagram Entities & Conceptual Flow\n*Entities / Components:* unlabeled box left, unlabeled box right\n*Relationships & Flow:*\n * unlabeled box left -> unlabeled box right\nunlabeled box left -> unlabeled box right\n\n### Visual Organization\nText at top, two empty boxes at bottom connected by a horizontal arrow from left to right."
+            }
+          ],
+          "output": {
+            "topics": [
+              {
+                "key": "Photosynthesis",
+                "title": "Photosynthesis",
+                "evidence": [
+                  {
+                    "anchor_id": "EA_0a743ac9693e588ea787d78ba746ad44"
+                  }
+                ]
+              }
+            ],
+            "subtopics": [
+              {
+                "key": "Photosynthesis",
+                "title": "Photosynthesis",
+                "evidence": [
+                  {
+                    "anchor_id": "EA_0a743ac9693e588ea787d78ba746ad44"
+                  }
+                ],
+                "topic_key": "Photosynthesis"
+              }
+            ],
+            "concepts": [
+              {
+                "key": "Photosynthesis",
+                "subtopic_key": "Photosynthesis",
+                "name": "Photosynthesis",
+                "evidence": [
+                  {
+                    "anchor_id": "EA_0a743ac9693e588ea787d78ba746ad44"
+                  }
+                ]
+              }
+            ],
+            "prerequisites": []
+          }
+        }
+      ],
+      "rejections": [],
+      "status": "PASS",
+      "result": {
+        "snapshot": {
+          "schema_version": 1,
+          "topics": [
+            {
+              "topic_id": "TOPIC_4a88efa6f76f5985902d4ec996e89509",
+              "title": "Photosynthesis",
+              "description": null,
+              "sequence": 0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "evidence": [
+                  {
+                    "content_id": "CU_abdf9cc7f8735df584134f1f4b39fecc",
+                    "char_start": 0,
+                    "char_end": 422
+                  }
+                ]
+              }
+            }
+          ],
+          "subtopics": [
+            {
+              "topic_id": "TOPIC_4a88efa6f76f5985902d4ec996e89509",
+              "title": "Photosynthesis",
+              "description": null,
+              "sequence": 0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "evidence": [
+                  {
+                    "content_id": "CU_abdf9cc7f8735df584134f1f4b39fecc",
+                    "char_start": 0,
+                    "char_end": 422
+                  }
+                ]
+              },
+              "subtopic_id": "SUBTOPIC_db3cede8ca955c6686d97f50cdc464df"
+            }
+          ],
+          "concepts": [
+            {
+              "concept_id": "CONCEPT_7cdaed8beaa55ecbb8ad13d0a47ceb73",
+              "subtopic_id": "SUBTOPIC_db3cede8ca955c6686d97f50cdc464df",
+              "name": "Photosynthesis",
+              "definition": null,
+              "sequence": 0,
+              "provenance": {
+                "understanding_version": "educational-v1"
+              }
+            }
+          ],
+          "content_concepts": [
+            {
+              "content_id": "CU_abdf9cc7f8735df584134f1f4b39fecc",
+              "concept_id": "CONCEPT_7cdaed8beaa55ecbb8ad13d0a47ceb73",
+              "support_kind": "explanation",
+              "char_start": 0,
+              "char_end": 422,
+              "extraction_confidence": 1.0,
+              "provenance": {
+                "understanding_version": "educational-v1",
+                "content_role": "DIAGRAM_DESCRIPTION"
+              }
+            }
+          ],
+          "relationships": []
+        },
+        "quality": {
+          "content_units": 1,
+          "topics": 1,
+          "subtopics": 1,
+          "concepts": 1,
+          "evidence_associations": 1,
+          "prerequisites": 0,
+          "topic_evidence_coverage": 1.0,
+          "subtopic_evidence_coverage": 1.0,
+          "concept_evidence_coverage": 1.0,
+          "unassigned_content_ids": [],
+          "duplicate_concepts": 0,
+          "orphan_topics": 0,
+          "orphan_subtopics": 0,
+          "invalid_references": 0,
+          "prerequisite_cycles": 0,
+          "unsupported_prerequisites": 0
+        },
+        "provider_telemetry": [
+          {
+            "provider": "cloudflare",
+            "task": "content_understanding",
+            "outcome": "RETRYABLE_FAILURE",
+            "request_id": null,
+            "model": null,
+            "usage": null,
+            "worker_latency_ms": null,
+            "transport_latency_seconds": 0.7660000000614673,
+            "reason": "PROVIDER_UNAVAILABLE"
+          },
+          {
+            "provider": "cloudflare",
+            "task": "content_understanding",
+            "outcome": "RETRYABLE_FAILURE",
+            "request_id": null,
+            "model": null,
+            "usage": null,
+            "worker_latency_ms": null,
+            "transport_latency_seconds": 0.7189999999245629,
+            "reason": "PROVIDER_UNAVAILABLE"
+          },
+          {
+            "provider": "ollama",
+            "task": "content_understanding",
+            "outcome": "SUCCESS",
+            "request_id": null,
+            "model": "llama3.2:3b",
+            "usage": null,
+            "worker_latency_ms": null,
+            "transport_latency_seconds": 18.484000000054948,
+            "reason": null
+          }
+        ],
+        "validation_latency_seconds": 0.0,
+        "stage_timings": {
+          "content_unit_normalization_ms": 0.6269000004976988,
+          "structurer_provider_ms": 19967.948899953626,
+          "structurer_parse_ms": 0.4453000146895647,
+          "evidence_validation_ms": 0.14500005636364222,
+          "hierarchy_validation_ms": 0.13399997260421515,
+          "structure_repair_ms": 0.12360000982880592,
+          "knowledge_persist_prep_ms": 0.1946000847965479
+        },
+        "deterministic_repairs": [],
+        "structuring_model_calls": 1,
+        "repair_model_calls": 0,
+        "structuring_latency_seconds": 19.969000000040978
+      }
+    }
+  ],
+  "original_failed_raw_responses": "NOT_RETAINED; this is an exact accepted-evidence replay"
+}

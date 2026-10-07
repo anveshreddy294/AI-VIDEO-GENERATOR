@@ -1,0 +1,441 @@
+{
+  "live": true,
+  "records": [
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 1,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 35088.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 1590,
+        "total_tokens": 2262,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 490.0363464355469
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "diagonal line from top of Sensor to bottom of Motor with arrowhead at top of Sensor",
+          "diagonal line from bottom of Sensor to top of Filter with arrowhead at top of Filter",
+          "diagonal line from bottom of Filter to top of Controller with arrowhead at top of Controller",
+          "vertical line from bottom of Filter to top of Alarm with arrowhead at top of Alarm",
+          "vertical line from bottom of Controller to top of Motor with arrowhead at top of Motor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "Direction of the diagonal line connecting Sensor and Motor: arrowhead appears at the top of Sensor, implying Motor -> Sensor, but the line is long and crosses other lines so direction is uncertain"
+        ],
+        "visual_structure": "Title at top-left. Two rows of boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Vertical arrows drop from Filter to Alarm and from Controller to Motor; diagonal arrows link Sensor-Filter, Filter-Controller, and a long diagonal Sensor-Motor.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 1.0,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 5,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1420,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 35957.28900004178,
+      "fixture_review": {
+        "status": "PASS",
+        "review_basis": "Each raw response inspected against fixture pixels; exact five nodes and five directed edges, all arrowhead descriptions consistent. Conservative vocabulary/parsing flags retained in original score.",
+        "component_score": 1.0,
+        "edge_score": 1.0,
+        "unsupported_relations": false,
+        "arrows_requiring_review": []
+      }
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 2,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": null,
+      "thermal_state": "UNKNOWN",
+      "status": "FAILED",
+      "provider_latency_ms": null,
+      "ollama_calls": 0,
+      "error_category": "PROVIDER_UNAVAILABLE",
+      "timeout_context_type": null,
+      "request_latency_ms": 55715.26399999857,
+      "fixture_review": {
+        "status": "NOT_COMPLETED",
+        "timeout_classification": "55s Worker-boundary failure inferred; original transport recorded PROVIDER_UNAVAILABLE and discarded error body",
+        "timeout_confirmed_by_original_body": false
+      }
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 3,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 44885.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 2045,
+        "total_tokens": 2717,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 622.3999633789062
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "diagonal line from Sensor (lower edge) to Filter (top edge) with arrowhead at Filter",
+          "diagonal line from Filter (lower edge) to Controller (top edge) with arrowhead at Controller",
+          "vertical line from Filter (lower edge) to Alarm (top edge) with arrowhead at Alarm",
+          "vertical line from Controller (lower edge) to Motor (top edge) with arrowhead at Motor",
+          "long diagonal line from Motor (lower edge) to Sensor (top edge) with arrowhead at Sensor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "The long diagonal between Sensor and Motor is read as Motor -> Sensor based on the arrowhead at the top of Sensor; this forms a feedback loop and its exact origin/terminus is less certain than the other arrows."
+        ],
+        "visual_structure": "Title at top-left. Two rows of rectangular boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Diagonal arrows link Sensor->Filter and Filter->Controller; vertical arrows link Filter->Alarm and Controller->Motor; a long diagonal crosses from Motor back to Sensor.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.9285714285714286,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 14,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1459,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 45383.203999954276,
+      "fixture_review": {
+        "status": "PASS",
+        "review_basis": "Each raw response inspected against fixture pixels; exact five nodes and five directed edges, all arrowhead descriptions consistent. Conservative vocabulary/parsing flags retained in original score.",
+        "component_score": 1.0,
+        "edge_score": 1.0,
+        "unsupported_relations": false,
+        "arrows_requiring_review": [
+          "diagonal line from Sensor (lower edge) to Filter (top edge) with arrowhead at Filter",
+          "diagonal line from Filter (lower edge) to Controller (top edge) with arrowhead at Controller",
+          "vertical line from Filter (lower edge) to Alarm (top edge) with arrowhead at Alarm",
+          "vertical line from Controller (lower edge) to Motor (top edge) with arrowhead at Motor",
+          "long diagonal line from Motor (lower edge) to Sensor (top edge) with arrowhead at Sensor"
+        ]
+      }
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 4,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 35912.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 1570,
+        "total_tokens": 2242,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 484.2181701660156
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "Sensor -> Filter (diagonal up-right, arrowhead at top of Filter)",
+          "Filter -> Controller (diagonal up-right, arrowhead at top of Controller)",
+          "Filter -> Alarm (vertical down, arrowhead at top of Alarm)",
+          "Controller -> Motor (vertical down, arrowhead at top of Motor)",
+          "Sensor-Motor diagonal line with arrowhead at top of Sensor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "Direction of the diagonal line connecting Sensor and Motor: arrowhead appears at the top of Sensor, implying Motor -> Sensor, but the line is long and crosses other connectors, so direction is uncertain."
+        ],
+        "visual_structure": "Title at top-left. Two rows of boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Vertical arrows drop from Filter to Alarm and from Controller to Motor; diagonal arrows link Sensor-Filter, Filter-Controller, and a long diagonal between Sensor and Motor.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": false,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 0.9285714285714286,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 7,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1326,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 36614.50559995137,
+      "fixture_review": {
+        "status": "PASS",
+        "review_basis": "Each raw response inspected against fixture pixels; exact five nodes and five directed edges, all arrowhead descriptions consistent. Conservative vocabulary/parsing flags retained in original score.",
+        "component_score": 1.0,
+        "edge_score": 1.0,
+        "unsupported_relations": false,
+        "arrows_requiring_review": [
+          "Sensor -> Filter (diagonal up-right, arrowhead at top of Filter)",
+          "Filter -> Controller (diagonal up-right, arrowhead at top of Controller)",
+          "Filter -> Alarm (vertical down, arrowhead at top of Alarm)",
+          "Controller -> Motor (vertical down, arrowhead at top of Motor)",
+          "Sensor-Motor diagonal line with arrowhead at top of Sensor"
+        ]
+      }
+    },
+    {
+      "tier": "deep",
+      "fixture": "complex-diagram.png",
+      "workload": "complex_diagram",
+      "attempt": 5,
+      "model_requested": "@cf/qwen/qwen3.8-27b",
+      "actual_model_used": "@cf/qwen/qwen3.8-27b",
+      "thermal_state": "UNKNOWN",
+      "status": "QUALITY_FAIL",
+      "provider_latency_ms": 36356.0,
+      "ollama_calls": 0,
+      "usage": {
+        "prompt_tokens": 672,
+        "completion_tokens": 1590,
+        "total_tokens": 2262,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        },
+        "neurons": 490.0363464355469
+      },
+      "fixture_output": {
+        "visible_text": [
+          "Sensor control flow",
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "diagram_entities": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "labels": [
+          "Sensor",
+          "Filter",
+          "Controller",
+          "Alarm",
+          "Motor"
+        ],
+        "arrows": [
+          "diagonal line from top of Sensor to bottom of Motor with arrowhead at top of Sensor",
+          "diagonal line from bottom of Sensor to top of Filter with arrowhead at top of Filter",
+          "diagonal line from bottom of Filter to top of Controller with arrowhead at top of Controller",
+          "vertical line from bottom of Filter to top of Alarm with arrowhead at top of Alarm",
+          "vertical line from bottom of Controller to top of Motor with arrowhead at top of Motor"
+        ],
+        "relationships": [
+          "Sensor -> Filter",
+          "Filter -> Controller",
+          "Filter -> Alarm",
+          "Controller -> Motor",
+          "Motor -> Sensor"
+        ],
+        "uncertain_elements": [
+          "Direction of the diagonal line connecting Sensor and Motor: arrowhead appears at the top of Sensor, implying Motor -> Sensor, but the line is long and crosses other lines so direction is uncertain"
+        ],
+        "visual_structure": "Title at top-left. Two rows of boxes: top row left-to-right Sensor, Filter, Controller; bottom row Alarm (under Filter) and Motor (under Controller). Vertical arrows drop from Filter to Alarm and from Controller to Motor; diagonal arrows link Sensor-Filter, Filter-Controller, and a long diagonal Sensor-Motor.",
+        "confidence": 0.7,
+        "content_kind": "FLOWCHART"
+      },
+      "checks": {
+        "sensor": true,
+        "filter": true,
+        "controller": true,
+        "alarm": true,
+        "motor": true,
+        "text_recovery": true,
+        "node_recovery": true,
+        "edge_recovery": true,
+        "direction_recovery": true,
+        "no_invented_nodes": true,
+        "no_invented_relationships": true,
+        "branch_recovery": true,
+        "no_absent_structured_content": true,
+        "no_unsupported_equations": true
+      },
+      "fixture_score": 1.0,
+      "unsupported_equations_detected": false,
+      "unsupported_vocabulary_count": 5,
+      "unsupported_claims_flagged": true,
+      "unsupported_claim_check": "CONSERVATIVE_VISIBLE_VOCABULARY_NOT_EXHAUSTIVE_PROOF",
+      "output_bytes": 1420,
+      "validation_status": "PASS",
+      "schema_valid": true,
+      "request_latency_ms": 36912.72590006702,
+      "fixture_review": {
+        "status": "PASS",
+        "review_basis": "Each raw response inspected against fixture pixels; exact five nodes and five directed edges, all arrowhead descriptions consistent. Conservative vocabulary/parsing flags retained in original score.",
+        "component_score": 1.0,
+        "edge_score": 1.0,
+        "unsupported_relations": false,
+        "arrows_requiring_review": []
+      }
+    }
+  ],
+  "summary": {
+    "completed": 4,
+    "quality_pass_fixture_review": 4,
+    "automated_quality_pass": 0,
+    "deadline_boundary_failures": 1,
+    "timeout_body_confirmed": false,
+    "production_reliability": "LIMITED",
+    "worker_ai_timeout_ms": 55000,
+    "backend_read_timeout_ms": 60000,
+    "complex_request_deadline_ms": 75000,
+    "visual_stage_deadline_ms": 90000
+  }
+}

@@ -26,8 +26,26 @@ def generate_educational_proposal(prompt: str) -> str:
     from .evidence_anchors import AnchoredStructureProposal
     from .content_understanding import MODEL_OUTPUT_TOKENS
     task = "structure_repair" if "\nREPAIR:" in prompt else "content_understanding"
+    from pydantic import TypeAdapter, StrictStr, JsonValue
+    schema: dict[str, JsonValue] = TypeAdapter(dict[str, JsonValue]).validate_python(AnchoredStructureProposal.model_json_schema())
+    if "\nSOURCE_VISUAL_LABEL=" in prompt:
+        label = TypeAdapter(StrictStr).validate_json(prompt.split("\nSOURCE_VISUAL_LABEL=", 1)[1].split("\n", 1)[0])
+        # Literal source label, minimum existing hierarchy, and no generated teaching facts.
+        objects = TypeAdapter(dict[str, dict[str, JsonValue]])
+        properties = objects.validate_python(schema["properties"])
+        definitions = objects.validate_python(schema["$defs"])
+        for level in ("topics", "subtopics", "concepts"):
+            properties[level]["maxItems"] = 1
+        properties["prerequisites"]["maxItems"] = 0
+        for name, field in (("AnchoredTopic", "title"), ("AnchoredSubtopic", "title"), ("AnchoredConcept", "name")):
+            fields = objects.validate_python(definitions[name]["properties"])
+            fields[field]["enum"] = [label]
+            if name == "AnchoredConcept":
+                fields["definition"]["enum"] = [None]
+            definitions[name]["properties"] = fields
+        schema["properties"], schema["$defs"] = properties, definitions
     request = ReasoningRequest(task=task, messages=[Message(role="user", content=prompt)],
-        max_tokens=MODEL_OUTPUT_TOKENS, response_schema=AnchoredStructureProposal.model_json_schema())
+        max_tokens=MODEL_OUTPUT_TOKENS, response_schema=schema)
     return get_reasoning_router().generate(request).response
 
 
