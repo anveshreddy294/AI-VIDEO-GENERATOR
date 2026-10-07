@@ -64,7 +64,30 @@
         const response = await fetch(path, {method: 'POST', cache: 'no-store',
             headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
         if (!response.ok) {
-            // Never render raw upstream bodies, passwords, tokens or exception details.
+            // Map safe provider categories locally; never render upstream message text.
+            /** @type {Record<string, string>} */
+            const messages = {
+                signup_disabled: 'New account registration is disabled. Contact the project administrator.',
+                email_provider_disabled: 'Email registration is disabled. Contact the project administrator.',
+                email_address_not_authorized: 'Confirmation email cannot be sent to this address. The project administrator must configure SMTP.',
+                over_email_send_rate_limit: 'Confirmation email sending is rate limited. Try again later or contact the project administrator.',
+                over_request_rate_limit: 'Too many authentication requests. Please try again later.',
+                weak_password: 'Choose a stronger password that meets the account password requirements.',
+                email_address_invalid: 'Enter a valid email address.',
+                user_already_exists: 'An account already exists. Sign in instead.',
+                email_exists: 'An account already exists. Sign in instead.',
+                email_not_confirmed: 'Verify your email before signing in.',
+                invalid_credentials: 'Email or password was not accepted.',
+                unexpected_failure: 'Authentication email delivery failed. Contact the project administrator.',
+                validation_failed: 'Check the email address and password requirements.'
+            };
+            let errorCode = '';
+            try {
+                const failure = await response.json();
+                if (failure && typeof failure === 'object' && failure.detail &&
+                    typeof failure.detail.code === 'string') errorCode = failure.detail.code;
+            } catch { /* Fall back to safe HTTP-status messages for non-JSON failures. */ }
+            if (Object.prototype.hasOwnProperty.call(messages, errorCode)) throw new Error(messages[errorCode]);
             throw new Error(response.status === 401 ? 'Email or password was not accepted.' :
                 response.status === 422 ? 'Check the email address and password requirements.' :
                 'Authentication is unavailable. Please try again.');

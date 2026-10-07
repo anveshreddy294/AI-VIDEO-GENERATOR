@@ -1308,9 +1308,9 @@ async function handleSignup(event) {
             document.getElementById('fullName').value.trim());
         document.getElementById('password').value = '';
         if (ready) window.location.assign('/dashboard');
-        else toast.textContent = 'Check your email to confirm your account, then sign in.';
-    } catch {
-        toast.textContent = 'Account creation failed. Check your details or sign in if you already have an account.';
+        else toast.textContent = 'Account created. Check your email to verify your account before signing in.';
+    } catch (error) {
+        toast.textContent = error instanceof Error ? error.message : 'Account creation failed. Please try again.';
     } finally {
         button.disabled = false;
     }
@@ -1563,8 +1563,8 @@ async function handleLogin(event) {
                                         document.getElementById('loginPassword').value);
         document.getElementById('loginPassword').value = '';
         window.location.assign('/dashboard');
-    } catch {
-        toast.textContent = 'Sign-in failed. Check your email and password, then try again.';
+    } catch (error) {
+        toast.textContent = error instanceof Error ? error.message : 'Sign-in failed. Please try again.';
     } finally {
         button.disabled = false;
     }

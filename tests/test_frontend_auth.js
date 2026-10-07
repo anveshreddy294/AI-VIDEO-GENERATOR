@@ -92,3 +92,32 @@ test('source job polling displays the safe failure stage', async()=>{
     await assert.rejects(vm.runInNewContext(script,context),
         /STRUCTURING: Could not extract grounded concepts from the source/);
 });
+
+test('signup without confirmation stores returned session',async()=>{
+    const env=environment([json(envelope('signup-access'))]);
+    assert.equal(await env.api.signup('unit@example.test','unit-password','Unit User'),true);
+    assert.equal(env.values.size,1);
+    assert.equal(JSON.parse(env.calls[0].init.body).full_name,'Unit User');
+});
+test('signup mail rate limit displays safe actionable category',async()=>{
+    const env=environment([json({detail:{code:'over_email_send_rate_limit',message:'raw-secret-do-not-display'}},429)]);
+    await assert.rejects(env.api.signup('unit@example.test','unit-password','Unit User'),
+        error=>error.message.includes('rate limited')&&!error.message.includes('raw-secret'));
+    assert.equal(env.values.size,0);
+});
+test('login pending confirmation shows verification instruction',async()=>{
+    const env=environment([json({detail:{code:'email_not_confirmed',message:'raw-secret'}},401)]);
+    await assert.rejects(env.api.login('unit@example.test','unit-password'),/Verify your email/);
+});
+test('signup page confirmation message does not redirect',async()=>{
+    const landing=fs.readFileSync(path.join(__dirname,'../app/api/landing.py'),'utf8');
+    const start=landing.indexOf('async function handleSignup(event)');
+    const end=landing.indexOf('</script>',start);
+    const elements={signupToast:{style:{},textContent:''},btnSubmitSignup:{disabled:false},signupEmail:{value:'unit@example.test'},password:{value:'unit-password'},fullName:{value:'Unit'}};
+    const redirects=[];
+    const context={Error,document:{getElementById:id=>elements[id]},window:{VisualAIAuth:{signup:async()=>false},location:{assign:path=>redirects.push(path)}}};
+    await vm.runInNewContext(landing.slice(start,end)+'\nhandleSignup({preventDefault(){}})',context);
+    assert.equal(elements.signupToast.textContent,'Account created. Check your email to verify your account before signing in.');
+    assert.equal(elements.password.value,'');
+    assert.deepEqual(redirects,[]);
+});

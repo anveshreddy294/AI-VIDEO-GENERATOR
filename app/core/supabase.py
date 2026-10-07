@@ -47,6 +47,31 @@ class SupabaseResponseError(SupabaseError):
     """Supabase returned an unexpected response or rejected an operation."""
 
 
+AUTH_ERROR_MESSAGES: dict[str, str] = {
+    "signup_disabled": "New account registration is disabled. Contact the project administrator.",
+    "email_provider_disabled": "Email registration is disabled. Contact the project administrator.",
+    "email_address_not_authorized": "Confirmation email cannot be sent to this address. The project administrator must configure SMTP.",
+    "over_email_send_rate_limit": "Confirmation email sending is rate limited. Try again later or contact the project administrator.",
+    "over_request_rate_limit": "Too many authentication requests. Please try again later.",
+    "weak_password": "Choose a stronger password that meets the account password requirements.",
+    "email_address_invalid": "Enter a valid email address.",
+    "user_already_exists": "An account already exists. Sign in instead.",
+    "email_exists": "An account already exists. Sign in instead.",
+    "email_not_confirmed": "Verify your email before signing in.",
+    "invalid_credentials": "Email or password was not accepted.",
+    "unexpected_failure": "Authentication email delivery failed. Contact the project administrator.",
+    "validation_failed": "Check the email address and password requirements.",
+}
+
+
+class SupabaseAuthOperationError(SupabaseError):
+    """Preserve provider category without exposing its raw message or request credentials."""
+    def __init__(self, code: str, status_code: int) -> None:
+        self.code = code
+        self.status_code = status_code
+        super().__init__(AUTH_ERROR_MESSAGES.get(code, "Authentication request failed. Please try again later."))
+
+
 @dataclass(frozen=True)
 class SupabaseConfig:
     """Environment-only credentials; repr intentionally excludes all keys."""
@@ -56,15 +81,26 @@ class SupabaseConfig:
     admin_key: str = field(default='', repr=False)
     audience: str = 'authenticated'
     timeout_seconds: float = 10.0
+    confirmation_redirect_url: str = ''
 
     @classmethod
     def from_settings(cls, config: Settings) -> SupabaseConfig:
         return cls(config.supabase_url, config.supabase_publishable_key or config.supabase_anon_key,
                    config.supabase_secret_key or config.supabase_service_role_key,
-                   config.supabase_jwt_audience, config.supabase_timeout_seconds)
+                   config.supabase_jwt_audience, config.supabase_timeout_seconds, config.supabase_auth_redirect_url)
 
     def validate(self) -> None:
-        """Reject credential-bearing URLs and redirects to unexpected origins."""
+        """Reject credential-bearing URLs; confirmation redirects are configured server-side."""
+        if self.confirmation_redirect_url:
+            try:
+                redirect = urlsplit(self.confirmation_redirect_url)
+            except ValueError:
+                raise SupabaseConfigurationError('Supabase confirmation redirect is invalid') from None
+            local = redirect.scheme == 'http' and redirect.hostname in {'localhost', '127.0.0.1', '::1'}
+            if (not redirect.hostname or (redirect.scheme != 'https' and not local) or
+                    redirect.username or redirect.password or redirect.query or redirect.fragment or
+                    redirect.path != '/login'):
+                raise SupabaseConfigurationError('Supabase confirmation redirect must be an application login URL')
         try:
             parsed = urlsplit(self.url)
         except ValueError:
@@ -131,7 +167,7 @@ class SupabaseRuntime:
                  token: str | None = None, admin: bool = False,
                  params: Mapping[str, str] | None = None,
                  body: dict[str, JsonValue] | None = None,
-                 prefer: str | None = None) -> JsonValue:
+                 prefer: str | None = None, auth_operation: bool = False) -> JsonValue:
         if not path.startswith('/') or path.startswith('//'):
             raise SupabaseResponseError('Invalid Supabase endpoint')
         key = self.config.admin_key if admin else self.config.public_key
@@ -148,6 +184,17 @@ class SupabaseRuntime:
             response = self._http.request(method, path, headers=headers, params=params, json=body)
         except httpx.RequestError:
             raise SupabaseUnavailable('Supabase connection failed') from None
+        if auth_operation and not response.is_success:
+            try:
+                failure = response.json()
+            except ValueError:
+                failure = None
+            code = failure.get('code') if isinstance(failure, dict) else None
+            # Only identifier-shaped categories may cross the public boundary; no raw error text.
+            import re
+            if not isinstance(code, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,63}', code):
+                code = ('over_request_rate_limit' if response.status_code == 429 else 'auth_request_failed')
+            raise SupabaseAuthOperationError(code, response.status_code)
         if response.status_code in {401, 403}:
             raise SupabaseAuthenticationError('Supabase authentication or authorization failed')
         if response.status_code == 429 or response.status_code >= 500:
@@ -216,13 +263,19 @@ class SupabaseRuntime:
         body: dict[str, JsonValue] = {'email': email, 'password': password}
         if full_name:
             body['data'] = {'full_name': full_name}
-        return self._request('POST', '/auth/v1/signup', body=body)
+        return self._request('POST', '/auth/v1/signup', body=body, auth_operation=True,
+                             params={'redirect_to': self.config.confirmation_redirect_url}
+                             if self.config.confirmation_redirect_url else None)
 
     def login(self, email: str, password: str) -> JsonValue:
         """Auth failure responses are intentionally generic, including wrong passwords."""
         try:
             return self._request('POST', '/auth/v1/token', params={'grant_type': 'password'},
-                                 body={'email': email, 'password': password})
+                                 body={'email': email, 'password': password}, auth_operation=True)
+        except SupabaseAuthOperationError as error:
+            if error.code == 'auth_request_failed' and error.status_code < 500:
+                raise SupabaseAuthenticationError('Login failed') from None
+            raise
         except SupabaseResponseError:
             raise SupabaseAuthenticationError('Login failed') from None
 

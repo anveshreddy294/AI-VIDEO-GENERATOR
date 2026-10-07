@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, ValidationError, field_validator
 
-from ..core.supabase import AuthenticatedUser, Profile, SupabaseError, SupabaseRuntime, SupabaseResponseError
+from ..core.supabase import AuthenticatedUser, Profile, SupabaseError, SupabaseRuntime, SupabaseResponseError, AuthServerUser
 from ..services.security.auth import auth_http_error, get_current_user, get_runtime, require_access_token
 
 class ValidationIssue(TypedDict):
@@ -92,6 +92,10 @@ class CurrentIdentity(BaseModel):
 
 def session_result(runtime: SupabaseRuntime, payload: JsonValue, *, allow_confirmation: bool = False) -> AuthResult:
     if allow_confirmation and isinstance(payload, dict) and not payload.get('access_token'):
+        try:
+            AuthServerUser.model_validate(payload)
+        except ValidationError:
+            raise SupabaseResponseError('Invalid Supabase signup response') from None
         return AuthResult(confirmation_required=True)
     try:
         session = AuthSession.model_validate(payload)

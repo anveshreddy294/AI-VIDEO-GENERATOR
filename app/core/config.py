@@ -135,6 +135,7 @@ class Settings:
 
         # --- Database & Persistence Architecture (Supabase / Local) ---
         self.database_provider: str = os.getenv("DATABASE_PROVIDER", "file").strip().lower()
+        self.supabase_auth_redirect_url: str = os.getenv("SUPABASE_AUTH_REDIRECT_URL", "").strip()
         self.supabase_url: str = os.getenv("SUPABASE_URL", "").strip()
         self.supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "").strip()
         self.supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()

@@ -8,7 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ...core.config import settings
 from ...core.supabase import (
-    AuthenticatedUser, SupabaseAuthenticationError, SupabaseConfigurationError,
+    AuthenticatedUser, SupabaseAuthOperationError, SupabaseAuthenticationError, SupabaseConfigurationError,
     SupabaseError, SupabaseResponseError, SupabaseRuntime, SupabaseUnavailable,
     get_supabase_runtime,
 )
@@ -21,6 +21,10 @@ def is_supabase_auth_configured() -> bool:
 
 
 def auth_http_error(error: SupabaseError) -> HTTPException:
+    if isinstance(error, SupabaseAuthOperationError):
+        status = (429 if error.status_code == 429 else 503 if error.status_code >= 500 else
+                  401 if error.code in {'invalid_credentials', 'email_not_confirmed'} else 400)
+        return HTTPException(status, {'code': error.code, 'message': str(error)})
     if isinstance(error, SupabaseAuthenticationError):
         return HTTPException(401, 'Authentication failed', headers={'WWW-Authenticate': 'Bearer'})
     if isinstance(error, (SupabaseConfigurationError, SupabaseUnavailable)):
