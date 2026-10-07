@@ -36,6 +36,9 @@ from ..schemas import (
 )
 from .answer_validator import validate_grounded_answer
 from ..security.legacy_boundary import require_local_learning_storage
+from ..repositories.knowledge_repository import KnowledgeRepository
+from .canonical_answer import CanonicalQARequest, generate_canonical_answer
+from starlette.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
@@ -141,8 +144,10 @@ def _build_qa_prompt(
     return "\n".join(parts)
 
 
-async def generate_grounded_answer(request: QARequest) -> QAResponse:
+async def generate_grounded_answer(request: QARequest | CanonicalQARequest, *, context: KnowledgeRepository | None = None) -> QAResponse:
     """Orchestrate end-to-end grounded question answering with Dual-Traceability."""
+    if context is not None and isinstance(request, CanonicalQARequest):
+        return await run_in_threadpool(generate_canonical_answer, request, context)
     require_local_learning_storage()
     t_start = time.perf_counter()
     user_id = request.user_id or "student_default"

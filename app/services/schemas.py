@@ -347,6 +347,10 @@ class TopicBlueprint(BaseModel):
 # Step 4: Grounded Q&A Schemas with Dual-Traceability
 class Citation(BaseModel):
     chunk_id: str
+    evidence_id: str | None = None
+    content_id: str | None = None
+    source_version: int | None = None
+    location: str | None = None
     source_id: str | None = None
     page_number: int | None = None
     quote: str = ""

@@ -90,7 +90,7 @@ app.include_router(assessment_router, dependencies=[Depends(legacy_learning_boun
 app.include_router(pipeline_router)
 app.include_router(instructor_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(video_router, dependencies=[Depends(legacy_learning_boundary)])
-app.include_router(qa_router, dependencies=[Depends(legacy_learning_boundary)])
+app.include_router(qa_router)
 app.include_router(models_router)
 app.include_router(learning_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(auth_router)

@@ -206,13 +206,12 @@ def test_wrong_canonical_owner_not_reindexed(fixture: RepairFixture) -> None:
 
 
 def test_qa_unavailable_has_safe_explicit_status(monkeypatch: pytest.MonkeyPatch) -> None:
-    import asyncio
-    from fastapi import HTTPException
+    from fastapi.testclient import TestClient
+    from app.main import app
     from app.api import qa
     from app.services.schemas import QARequest
     async def unavailable(request: QARequest) -> None:
         raise vector_store.RetrievalUnavailable('No compatible vectors')
     monkeypatch.setattr(qa, 'generate_grounded_answer', unavailable)
-    with pytest.raises(HTTPException) as error:
-        asyncio.run(qa.ask_grounded_question(QARequest(user_id='owner', source_id='SRC_test', question='What is it?')))
-    assert error.value.status_code == 503 and error.value.detail['code'] == 'RETRIEVAL_UNAVAILABLE'
+    response = TestClient(app).post('/qa/answer', json={'user_id': 'owner', 'source_id': 'SRC_test', 'question': 'What is it?'})
+    assert response.status_code == 503 and response.json()['detail']['code'] == 'RETRIEVAL_UNAVAILABLE'

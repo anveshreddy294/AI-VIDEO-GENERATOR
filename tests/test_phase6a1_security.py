@@ -101,8 +101,12 @@ def test_every_legacy_route_authenticates_then_fails_closed(
 ) -> None:
     response = TestClient(app).request(method, route_url(path), headers={'Authorization': 'Bearer ' + token_for(OWNER)},
                                       json={'user_id': str(OTHER), 'student_id': str(OTHER)})
-    assert response.status_code == 409, (method, path, response.text)
-    assert response.json()['detail']['code'] == 'SUPABASE_LEARNING_NOT_INTEGRATED'
+    if path in {'/qa/answer', '/qa/evidence'}:
+        assert response.status_code == 422, (method, path, response.text)
+        assert response.json()['detail']['code'] == 'INVALID_SCOPE'
+    else:
+        assert response.status_code == 409, (method, path, response.text)
+        assert response.json()['detail']['code'] == 'SUPABASE_LEARNING_NOT_INTEGRATED'
     assert boundary_runtime[1] == ['/auth/v1/user']
     assert 'secret-never-use' not in response.text
 
