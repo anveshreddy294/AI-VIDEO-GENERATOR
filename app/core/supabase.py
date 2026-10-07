@@ -47,6 +47,10 @@ class SupabaseResponseError(SupabaseError):
     """Supabase returned an unexpected response or rejected an operation."""
 
 
+class SupabaseConflict(SupabaseResponseError):
+    """A database uniqueness conflict, without forwarding the upstream body."""
+
+
 AUTH_ERROR_MESSAGES: dict[str, str] = {
     "signup_disabled": "New account registration is disabled. Contact the project administrator.",
     "email_provider_disabled": "Email registration is disabled. Contact the project administrator.",
@@ -199,6 +203,8 @@ class SupabaseRuntime:
             raise SupabaseAuthenticationError('Supabase authentication or authorization failed')
         if response.status_code == 429 or response.status_code >= 500:
             raise SupabaseUnavailable('Supabase service is unavailable')
+        if response.status_code == 409:
+            raise SupabaseConflict('Supabase write conflict')
         if not response.is_success:
             raise SupabaseResponseError('Supabase rejected the operation')
         if not response.content:

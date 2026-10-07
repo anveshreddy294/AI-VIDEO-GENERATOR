@@ -2,6 +2,9 @@
 
 Returns the configured repository implementation (File or Supabase).
 """
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from ...core.config import settings
 from ...core.supabase import AuthenticatedUser, SupabaseRuntime, SupabaseConfigurationError
@@ -9,6 +12,20 @@ from .base import SourceRepository, AssessmentRepository, LearningProfileReposit
 from .file_repository import FileSourceRepository, FileAssessmentRepository, FileLearningProfileRepository
 from .supabase_repository import SupabaseSourceRepository, SupabaseAssessmentRepository, SupabaseLearningProfileRepository
 from ..security.legacy_boundary import require_local_learning_storage
+
+if TYPE_CHECKING:
+    from .knowledge_repository import KnowledgeRepository
+
+
+def get_knowledge_repository(
+    *, token: str, runtime: SupabaseRuntime, user: AuthenticatedUser | None = None
+) -> KnowledgeRepository:
+    """Canonical knowledge has no file implementation or provider fallback."""
+    from .knowledge_repository import KnowledgeRepository
+
+    if settings.database_provider != 'supabase':
+        raise SupabaseConfigurationError('Canonical knowledge requires Supabase mode')
+    return KnowledgeRepository(user, token, runtime)
 
 
 def get_source_repository(*, user: AuthenticatedUser | None = None, token: str | None = None,

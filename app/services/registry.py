@@ -343,6 +343,8 @@ def save_knowledge_graph(source_id: str, kg: KnowledgeGraph) -> None:
 
 def load_knowledge_graph(source_id: str) -> KnowledgeGraph | None:
     """Load Knowledge Graph for a source with runtime, fixture, and legacy fallback."""
+    from .security.legacy_boundary import require_local_learning_storage
+    require_local_learning_storage()
     # 1. Check runtime registry
     kg_file = get_registry_dir() / validate_id(source_id) / "knowledge_graph.json"
     # 2. Check fixtures registry

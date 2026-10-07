@@ -16,6 +16,7 @@ from .core.config import settings
 from fastapi import Depends, FastAPI, Request, Response
 from .services.security.legacy_boundary import legacy_learning_boundary
 from .api.sources import router as sources_router, SourceDependency
+from .api.knowledge import router as knowledge_router
 from .core.supabase import SupabaseError
 from .services.security.auth import auth_http_error
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,6 +94,7 @@ app.include_router(models_router)
 app.include_router(learning_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(auth_router)
 app.include_router(sources_router)
+app.include_router(knowledge_router)
 
 
 @app.exception_handler(SupabaseError)

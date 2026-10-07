@@ -139,12 +139,14 @@ class SupabaseSourceRepository:
     def save_content_units(self, source_id: str, units: list[ContentUnit]) -> None:
         raise SupabaseResponseError('Use atomic ingestion RPC')
 
-    def get_knowledge_graph(self, source_id: str) -> KnowledgeGraph | None:
-        from ..registry import load_knowledge_graph
-        return load_knowledge_graph(source_id) if self.get_source(source_id) else None
+    def get_knowledge_graph(self, source_id: str, version: int | None = None) -> KnowledgeGraph | None:
+        """Compatibility projection requires an explicit immutable canonical version."""
+        from .knowledge_repository import KnowledgeRepository, KnowledgeError
+        from ..knowledge_service import KnowledgeService
+        if version is None:
+            raise KnowledgeError('INVALID_SCOPE')
+        repo = KnowledgeRepository(self.user, self._token, self.runtime)
+        return KnowledgeService(repo).project_graph(repo.scope(source_id, version))
 
     def save_knowledge_graph(self, source_id: str, kg: KnowledgeGraph) -> None:
-        from ..registry import save_knowledge_graph
-        if self.get_source(source_id) is None:
-            raise SupabaseResponseError('Source not found')
-        save_knowledge_graph(source_id, kg)
+        raise SupabaseResponseError('Use the internal typed canonical snapshot adapter')
