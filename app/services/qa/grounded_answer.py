@@ -35,6 +35,7 @@ from ..schemas import (
     StageDiagnostics,
 )
 from .answer_validator import validate_grounded_answer
+from ..security.legacy_boundary import require_local_learning_storage
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ _DEFAULT_TRACE_DIR = settings.runtime_dir / "answer_traces"
 
 def get_trace_dir(user_id: str, source_id: str) -> Path:
     """Return directory path for audit traces partitioned by user_id and source_id."""
+    require_local_learning_storage()
     p = _DEFAULT_TRACE_DIR / user_id / source_id
     p.mkdir(parents=True, exist_ok=True)
     return p
@@ -58,6 +60,7 @@ def save_answer_trace(trace: QAAnswerTrace) -> Path:
 
 def list_answer_traces(user_id: str, source_id: str, limit: int = 50) -> list[dict[str, Any]]:
     """Retrieve historical answer traces for auditing and instructor review."""
+    require_local_learning_storage()
     trace_dir = _DEFAULT_TRACE_DIR / user_id / source_id
     if not trace_dir.exists():
         return []
@@ -140,6 +143,7 @@ def _build_qa_prompt(
 
 async def generate_grounded_answer(request: QARequest) -> QAResponse:
     """Orchestrate end-to-end grounded question answering with Dual-Traceability."""
+    require_local_learning_storage()
     t_start = time.perf_counter()
     user_id = request.user_id or "student_default"
     source_id = request.source_id

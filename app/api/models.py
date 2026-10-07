@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..core.model_manager import model_manager
+from ..services.security.legacy_boundary import legacy_learning_boundary
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ def get_models_status() -> dict[str, Any]:
     return model_manager.get_status()
 
 
-@router.post("/switch", response_model=ModelStatusResponse)
+@router.post("/switch", response_model=ModelStatusResponse, dependencies=[Depends(legacy_learning_boundary)])
 def switch_active_model(req: SwitchModelRequest) -> dict[str, Any]:
     """Switch active model and configure fallback chain in runtime."""
     try:

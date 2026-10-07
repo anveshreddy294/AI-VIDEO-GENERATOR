@@ -19,6 +19,7 @@ from uuid import uuid4
 from ...core.config import settings
 from ..assessment.schemas import VideoTarget, VideoTargetMatrix
 from ..pipeline_tracker import job_manager
+from ..security.legacy_boundary import require_local_learning_storage
 from ..schemas import LayerBVideoSceneChunk
 from .artifact_store import find_existing_video, store_video_artifacts
 from .manim_renderer import render_video_plan
@@ -38,6 +39,7 @@ _ACTIVE_JOBS: dict[str, VideoArtifact] = {}
 
 def get_video_job(job_id: str) -> VideoArtifact | None:
     """Retrieve video job artifact by ID."""
+    require_local_learning_storage()
     if job_id in _ACTIVE_JOBS:
         return _ACTIVE_JOBS[job_id]
 
@@ -54,6 +56,7 @@ def get_video_job(job_id: str) -> VideoArtifact | None:
 
 def _save_video_artifact(artifact: VideoArtifact) -> Path:
     """Persist video artifact record."""
+    require_local_learning_storage()
     settings.renders_dir.mkdir(parents=True, exist_ok=True)
     job_file = settings.renders_dir / f"{artifact.job_id}_artifact.json"
     job_file.write_text(artifact.model_dump_json(indent=2), encoding="utf-8")
@@ -69,6 +72,7 @@ async def execute_video_generation_job(
     mock_tts: bool | None = None,
 ) -> VideoArtifact:
     """Execute complete end-to-end Step 3 generation pipeline asynchronously."""
+    require_local_learning_storage()
     jid = job_id or f"JOB_{uuid4().hex[:10].upper()}"
     student_id = target.student_id or "STU_DEFAULT"
     source_id = target.source_id or "SRC_DEFAULT"

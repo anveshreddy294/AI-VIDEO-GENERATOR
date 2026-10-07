@@ -11,6 +11,7 @@ from pathlib import Path
 
 from ...core.config import BASE_DIR, settings
 from .schemas import ConceptMastery, StudentLearningProfile
+from ..security.legacy_boundary import require_local_learning_storage
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ LEGACY_PROFILES_DIR = BASE_DIR / "storage" / "learning_profiles"
 
 def _profile_path(student_id: str, source_id: str) -> Path:
     """Get the file path for a student's profile on a specific source in runtime storage."""
+    require_local_learning_storage()
     safe_student = validate_id(student_id)
     safe_source = validate_id(source_id)
     return PROFILES_DIR / f"{safe_student}_{safe_source}.json"

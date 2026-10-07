@@ -340,6 +340,8 @@ def build_video_target_matrix(
 
 def save_video_matrix(matrix: VideoTargetMatrix) -> Path:
     """Save the Video Target Matrix to runtime disk for Step 3 ingestion."""
+    from ..security.legacy_boundary import require_local_learning_storage
+    require_local_learning_storage()
     from ...core.config import BASE_DIR, settings
     out_dir = getattr(settings, "video_targets_dir", BASE_DIR / "storage" / "runtime" / "video_targets")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -352,6 +354,8 @@ def save_video_matrix(matrix: VideoTargetMatrix) -> Path:
 
 def load_video_matrix(student_id: str, source_id: str) -> VideoTargetMatrix | None:
     """Load an existing Video Target Matrix from runtime disk with legacy fallback."""
+    from ..security.legacy_boundary import require_local_learning_storage
+    require_local_learning_storage()
     from ...core.config import BASE_DIR, settings
     safe_student = validate_id(student_id)
     safe_source = validate_id(source_id)

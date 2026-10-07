@@ -13,7 +13,8 @@ if sys.platform == "win32":
 from contextlib import asynccontextmanager
 from .core.config import settings
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
+from .services.security.legacy_boundary import legacy_learning_boundary
 from .api.sources import router as sources_router, SourceDependency
 from .core.supabase import SupabaseError
 from .services.security.auth import auth_http_error
@@ -83,13 +84,13 @@ app.add_middleware(
 app.include_router(landing_router)
 app.include_router(dashboard_router)
 app.include_router(upload_router)
-app.include_router(assessment_router)
+app.include_router(assessment_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(pipeline_router)
-app.include_router(instructor_router)
-app.include_router(video_router)
-app.include_router(qa_router)
+app.include_router(instructor_router, dependencies=[Depends(legacy_learning_boundary)])
+app.include_router(video_router, dependencies=[Depends(legacy_learning_boundary)])
+app.include_router(qa_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(models_router)
-app.include_router(learning_router)
+app.include_router(learning_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(auth_router)
 app.include_router(sources_router)
 
@@ -205,7 +206,7 @@ def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str,
     return {"sources": results}
 
 
-@app.get("/debug/qdrant")
+@app.get("/debug/qdrant", dependencies=[Depends(legacy_learning_boundary)])
 def debug_qdrant(request: Request):
     """Diagnostic endpoint to check Qdrant collection state.
 

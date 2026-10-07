@@ -108,6 +108,8 @@ def search_concept_chunks(
     First checks provided_chunks (from Step 1 JSON payload in memory).
     If not available, queries Qdrant Layer A collection filtered by source_id.
     """
+    from ..security.legacy_boundary import require_local_learning_storage
+    require_local_learning_storage()
     # 1. Fast in-memory resolution from Step 1 JSON payload
     if provided_chunks:
         matched = []

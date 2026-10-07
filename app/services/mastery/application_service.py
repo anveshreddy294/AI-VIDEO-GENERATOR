@@ -19,6 +19,7 @@ from typing import Any
 from pathlib import Path
 
 from ..registry import get_source_record, load_knowledge_graph
+from ..security.legacy_boundary import require_local_learning_storage
 from ..schemas import KnowledgeGraph
 from .api_schemas import (
     AssessmentSubmissionRequestDTO,
@@ -94,6 +95,7 @@ class AdaptiveLearningService:
         misconception_repo: MisconceptionRepository | None = None,
         strategy_selector: TeachingStrategySelector | None = None,
     ) -> None:
+        require_local_learning_storage()
         self.mastery_repo = mastery_repo or InMemoryMasteryRepository()
         self.attempt_repo = attempt_repo or InMemoryAssessmentAttemptRepository()
         self.question_registry = question_registry or InMemoryQuestionRegistry()
@@ -136,6 +138,7 @@ class AdaptiveLearningService:
     # -------------------------------------------------------------------------
     def _verify_source_access(self, user_id: str, source_id: str) -> KnowledgeGraph:
         """Verify source exists in registry and user is authorized under current dev semantics."""
+        require_local_learning_storage()
         clean_user = user_id.strip() if user_id else ""
         clean_source = source_id.strip() if source_id else ""
 
@@ -810,6 +813,7 @@ class AdaptiveLearningService:
         job_id: str,
     ) -> RemediationStatusResponseDTO:
         """Poll remediation job status with strict tenant isolation and safe stream URLs."""
+        require_local_learning_storage()
         clean_user = user_id.strip()
         clean_source = source_id.strip()
         clean_job = job_id.strip()

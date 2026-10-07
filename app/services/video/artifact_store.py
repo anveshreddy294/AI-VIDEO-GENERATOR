@@ -26,6 +26,7 @@ from typing import Any
 
 from ...core.config import settings
 from .scene_schema import VideoArtifact, VideoJobStatus, VideoPlan
+from ..security.legacy_boundary import require_local_learning_storage
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,7 @@ def get_video_dir(student_id: str, source_id: str, concept_id: str) -> Path:
     Validates identifiers against path traversal and verifies that the resolved
     directory remains strictly inside the canonical base directory.
     """
+    require_local_learning_storage()
     valid_student = validate_path_component(student_id, "student_id")
     valid_source = validate_path_component(source_id, "source_id")
     valid_concept = validate_path_component(concept_id, "concept_id")

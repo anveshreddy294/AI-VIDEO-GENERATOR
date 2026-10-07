@@ -8,6 +8,7 @@ from ...core.supabase import AuthenticatedUser, SupabaseRuntime, SupabaseConfigu
 from .base import SourceRepository, AssessmentRepository, LearningProfileRepository
 from .file_repository import FileSourceRepository, FileAssessmentRepository, FileLearningProfileRepository
 from .supabase_repository import SupabaseSourceRepository, SupabaseAssessmentRepository, SupabaseLearningProfileRepository
+from ..security.legacy_boundary import require_local_learning_storage
 
 
 def get_source_repository(*, user: AuthenticatedUser | None = None, token: str | None = None,
@@ -24,13 +25,11 @@ def get_source_repository(*, user: AuthenticatedUser | None = None, token: str |
 
 def get_assessment_repository() -> AssessmentRepository:
     """Return the active assessment repository based on database provider configuration."""
-    if settings.database_provider == "supabase" and settings.supabase_url:
-        return SupabaseAssessmentRepository()
+    require_local_learning_storage()
     return FileAssessmentRepository()
 
 
 def get_learning_profile_repository() -> LearningProfileRepository:
     """Return the active learning profile repository based on database provider configuration."""
-    if settings.database_provider == "supabase" and settings.supabase_url:
-        return SupabaseLearningProfileRepository()
+    require_local_learning_storage()
     return FileLearningProfileRepository()

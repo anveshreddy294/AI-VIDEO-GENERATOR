@@ -347,7 +347,13 @@ def _payload(chunk: LayerChunk) -> dict[str, Any]:
 
 
 class RetrievalUnavailable(RuntimeError):
-    """No vectors match the active query embedding space for this source."""
+    """Semantic retrieval cannot safely provide verified evidence."""
+
+
+def _require_supported_retrieval_mode() -> None:
+    """Legacy retrieval lacks canonical hydration; reject before any vector/provider call."""
+    if settings.database_provider not in {'file', 'local'}:
+        raise RetrievalUnavailable('Canonical evidence verification is required for this database provider')
 
 
 def embedding_provenance() -> dict[str, str | int]:
@@ -432,6 +438,7 @@ def search_layer_a(
     user_id: str = "student_default",
 ) -> list[dict[str, Any]]:
     """Legacy compatibility search: delegates to authoritative search_source_chunks."""
+    _require_supported_retrieval_mode()
     return search_source_chunks(
         user_id=user_id,
         source_id=source_id or "",
@@ -463,6 +470,7 @@ def search_source_chunks(
     - injection_status in ["clean", "sanitized"]
     - Safe degraded threshold on vector fallback (>= 0.25) to prevent arbitrary leakage
     """
+    _require_supported_retrieval_mode()
     try:
         client = get_client()
         vector = _embed([query], task_type="retrieval_query")[0]
@@ -560,6 +568,7 @@ def retrieve_layer_b_scene(
     Matches layer="B", user_id, source_id, (video_id if provided), and finds the scene
     where timestamp_start <= timestamp <= timestamp_end.
     """
+    _require_supported_retrieval_mode()
     try:
         client = get_client()
         existing = [c.name for c in client.get_collections().collections]
@@ -629,6 +638,7 @@ def retrieve_exact_chunks(
     Bypasses semantic vector search when exact chunk_ids, source_id, or concept_ids
     are already known from the assessment / knowledge graph provenance trail.
     """
+    _require_supported_retrieval_mode()
     try:
         client = get_client()
         existing_collections = [c.name for c in client.get_collections().collections]

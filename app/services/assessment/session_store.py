@@ -10,6 +10,7 @@ from pathlib import Path
 
 from ...core.config import BASE_DIR, settings
 from .schemas import AssessmentSession
+from ..security.legacy_boundary import require_local_learning_storage
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +21,14 @@ LEGACY_SESSIONS_DIR = BASE_DIR / "storage" / "assessment_sessions"
 
 def save_session(session: AssessmentSession) -> None:
     """Persist an AssessmentSession to runtime disk."""
+    require_local_learning_storage()
     path = SESSIONS_DIR / f"{validate_id(session.session_id)}.json"
     atomic_json(path, session.model_dump())
 
 
 def load_session(session_id: str) -> AssessmentSession | None:
     """Load an AssessmentSession from runtime disk with legacy fallback. Returns None if not found."""
+    require_local_learning_storage()
     path = SESSIONS_DIR / f"{validate_id(session_id)}.json"
     if not path.exists() and LEGACY_SESSIONS_DIR.exists():
         path = LEGACY_SESSIONS_DIR / f"{validate_id(session_id)}.json"

@@ -15,6 +15,7 @@ from pydantic import JsonValue
 from ..services.repositories.factory import get_source_repository
 from ..services.repositories.source_repository import SupabaseSourceRepository
 from ..services.security.auth import bearer_scheme, get_current_user, get_runtime
+from ..services.security.source_scope import require_source_scope
 
 router = APIRouter(prefix='/sources', tags=['Sources'])
 
@@ -55,9 +56,7 @@ def read_source(source_id: str, repository: SourceDependency) -> SourceRecord:
 
 @router.get('/{source_id}/versions/{version}')
 def read_version(source_id: str, version: int, repository: SourceDependency) -> SourceVersion:
-    row = require_source_repository(repository).get_source_version(source_id, version)
-    if row is None:
-        raise HTTPException(404, 'Source version not found')
+    _, row = require_source_scope(require_source_repository(repository), source_id, version)
     return row
 
 
