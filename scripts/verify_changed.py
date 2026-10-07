@@ -15,6 +15,7 @@ from collections.abc import Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS: dict[str, tuple[str, ...]] = {
+    "NOTES": ("test_grounded_notes", "test_canonical_retrieval"),
     "TOOLING": ("test_verify_changed",),
     "PROVIDERS": ("test_reasoning_provider", "test_embedding_configuration"),
     "VISION": (
@@ -60,6 +61,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
 }
 RULES: dict[str, tuple[str, ...]] = {
+    "NOTES": ("app/services/grounded_notes.py", "app/api/learning_sessions.py"),
     "TOOLING": ("scripts/verify_changed.py",),
     "PROVIDERS": ("app/core/reasoning.py", "app/core/config.py"),
     "BACKEND_CONTRACTS": ("tests/conftest.py",),
@@ -100,6 +102,7 @@ RULES: dict[str, tuple[str, ...]] = {
         "app/templates/*",
         "tests/test_frontend_auth.js",
         "tests/test_learning_frontend.js",
+        "tests/test_notes_frontend.js",
     ),
 }
 GATE_PATTERNS = (
@@ -305,6 +308,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                         "--test",
                         "tests/test_frontend_auth.js",
                         "tests/test_learning_frontend.js",
+                        "tests/test_notes_frontend.js",
                     ],
                     ROOT,
                 )

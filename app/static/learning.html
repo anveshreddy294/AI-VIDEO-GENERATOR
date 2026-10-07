@@ -2,7 +2,7 @@
 <html lang="en" data-source-provider="supabase">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisualAI · Your learning space</title><link rel="stylesheet" href="/assets/learning.css">
-<script defer src="/assets/auth.js"></script><script defer src="/assets/learning.js"></script></head>
+<script defer src="/assets/auth.js"></script><script defer src="/assets/notes.js"></script><script defer src="/assets/learning.js"></script></head>
 <body><header><a class="brand" href="/dashboard">Visual<span>AI</span><small>Your learning space</small></a>
 <nav aria-label="Main"><button id="sources-nav" type="button">My sources</button><button id="logout" type="button">Sign out</button></nav></header>
 <main><p class="eyebrow">EXPLORE · FOCUS · UNDERSTAND</p>
@@ -21,12 +21,17 @@
 <p id="session-source" class="muted"></p><h1 id="session-title">Focused learning</h1><p id="session-subtitle" class="intro"></p>
 <p id="session-state" class="badge"></p><p id="new-version" class="muted" hidden>A newer source version is available. This session keeps its original material.</p>
 <div class="actions" aria-label="Learning actions"><a href="#ask-form" class="primary">Ask VisualAI</a><a href="#learn-view">Learn</a>
-<button disabled title="Coming in a future phase">Notes · coming next</button><button disabled title="Coming in a future phase">Practice · coming next</button>
+<button id="notes-tab" type="button" disabled aria-controls="notes-panel" aria-expanded="false">Notes</button><button disabled title="Coming in a future phase">Practice · coming next</button>
 <button disabled title="Coming in a future phase">Visualize · coming next</button></div>
 <div class="learning-columns"><section class="card" aria-labelledby="ask-title"><h2 id="ask-title">Ask about this topic</h2>
 <p class="muted">Answers stay within this session’s selected material.</p>
 <form id="ask-form"><label for="question">Your question</label><textarea id="question" rows="3" maxlength="4000" required placeholder="What would you like to understand?"></textarea>
 <button id="ask-button" type="submit" class="primary">Ask VisualAI</button></form><div id="answer" role="status" aria-live="polite"></div><ul id="citations"></ul></section>
 <section id="learn-view" class="card" aria-labelledby="learn-title"><h2 id="learn-title">Learn the essentials</h2><p class="muted">Concepts and evidence from your material. No extra generation needed.</p><div id="concept-cards"></div></section></div>
+<section id="notes-panel" class="card notes-panel" hidden aria-labelledby="notes-title">
+<h2 id="notes-title">Notes</h2><div class="notes-controls"><div><label for="notes-detail">Detail level</label>
+<select id="notes-detail"><option value="concise">Concise</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select></div>
+<button id="generate-notes" type="button" class="primary" disabled>Generate Notes</button></div>
+<p id="notes-status" role="status" aria-live="polite">Generate grounded notes for this learning session.</p><div id="notes-content"></div></section>
 <div class="session-footer"><button type="button" id="complete-session">Complete session</button><button type="button" id="abandon-session">Leave this session</button></div></section>
 <noscript>JavaScript is required to sign in and load your private learning material.</noscript></main></body></html>

@@ -30,7 +30,7 @@ test('private calls use protectedFetch and safe text rendering',()=>{
 });
 test('future actions disabled and learner controls have labels',()=>{
     const html=fs.readFileSync(path.join(__dirname,'../app/static/learning.html'),'utf8');
-    assert.match(html,/button disabled[^>]*>Notes/);
+    assert.match(html,/button id="notes-tab"[^>]*disabled/);
     assert.match(html,/button disabled[^>]*>Practice/);
     assert.match(html,/button disabled[^>]*>Visualize/);
     assert(html.includes('label for="question"')&&html.includes('aria-live="polite"'));

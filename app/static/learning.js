@@ -68,6 +68,7 @@
     if (typeof module !== 'undefined') module.exports = {readiness, safeError, qaPayload, location, row, rows};
     if (typeof document === 'undefined') return;
     const auth = /** @type {{protectedFetch:(path:string,options?:RequestInit)=>Promise<Response>, logout:()=>Promise<void>}} */ (Reflect.get(window, 'VisualAIAuth'));
+    const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
     /** @param {string} id @returns {HTMLElement} */
     function el(id) {
         const element = document.getElementById(id);
@@ -120,7 +121,7 @@
         return {source_id:text(value,'source_id'), filename:text(value,'filename'),status:text(value,'status'),version:/** @type {number} */ (value.version)};
     }
     async function loadSources() {
-        const ticket = ++navigation; show('sources'); session = null;
+        const ticket = ++navigation; show('sources'); session = null; notesUI.setSession(null);
         el('source-cards').replaceChildren(node('p','Loading your material…','muted'));
         sources = rows(row(await api('/sources')).sources).map(decodeSource);
         if (ticket !== navigation) return;
@@ -149,7 +150,7 @@
     }
     /** @param {Source} item @param {number} version */
     async function openSource(item, version) {
-        const ticket = ++navigation; source = item; session = null; knowledge = null; show('explorer');
+        const ticket = ++navigation; source = item; session = null; notesUI.setSession(null); knowledge = null; show('explorer');
         el('explorer-title').textContent = item.filename;
         el('source-location').textContent = 'YOUR MATERIAL · VERSION ' + version;
         el('readiness').textContent = 'Loading your knowledge map…'; el('topic-cards').replaceChildren();
@@ -189,12 +190,16 @@
     }
     /** @param {string} id @param {boolean} resume */
     async function openSession(id,resume) {
-        const ticket = ++navigation; show('session'); session = null;
+        const ticket = ++navigation; show('session'); session = null; notesUI.setSession(null);
         el('session-title').textContent = 'Loading your focused session…'; el('concept-cards').replaceChildren();
         if (resume) await post('/learning-sessions/' + encodeURIComponent(id) + '/resume');
         const view = row(await api('/learning-sessions/' + encodeURIComponent(id)));
         if (ticket !== navigation) return;
-        session = row(view.session); source = sources.find(s => s.source_id === session?.source_id) || decodeSource(row(await api('/sources/' + encodeURIComponent(text(session,'source_id')))));
+        const loadedSession = row(view.session);
+        const loadedSource = sources.find(s => s.source_id === loadedSession.source_id) || decodeSource(row(await api('/sources/' + encodeURIComponent(text(loadedSession,'source_id')))));
+        if (ticket !== navigation) return;
+        session = loadedSession; source = loadedSource;
+        notesUI.setSession(session);
         const version = session.source_version;
         el('session-source').textContent = source.filename + ' · Version ' + version;
         el('session-title').textContent = text(view,'topic_title');

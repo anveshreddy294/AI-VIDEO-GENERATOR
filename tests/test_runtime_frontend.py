@@ -49,7 +49,9 @@ def test_supabase_dashboard_has_truthful_source_only_controls(monkeypatch: pytes
     assert 'value="student_1"' not in content
     assert 'for="studentId">Student Identifier' not in content
     assert 'My sources' in content and 'Explore your topics' in content
-    assert 'Focused learning' in content and 'Notes · coming next' in content
+    assert 'Focused learning' in content
+    assert 'id="notes-tab"' in content and 'aria-controls="notes-panel"' in content
+    assert 'Generate Notes' in content and '/assets/notes.js' in content
     assert '/assets/learning.js' in content and '/assets/auth.js' in content
     script=TestClient(app).get('/assets/learning.js').text
     assert "Reflect.get(window, 'VisualAIAuth')" in script and 'auth.protectedFetch' in script

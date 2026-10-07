@@ -104,3 +104,35 @@ async def session_operation(session_id: UUID, request: Request) -> LearningSessi
         raise storage_error() from None
     except KnowledgeError as error:
         raise _safe_error(error) from None
+
+
+from ..services.grounded_notes import (
+    GroundedNotesService,
+    GroundedNotes,
+    NotesOptions,
+    NotesRequest,
+    NotesError,
+)
+from ..core.reasoning import ProviderFailure
+
+
+@router.post("/{session_id}/notes", response_model=GroundedNotes)
+async def generate_session_notes(session_id: UUID, request: Request) -> GroundedNotes:
+    """Generate only owned, session-scoped notes; there is no persistence or scope override."""
+    context = await _context(request)
+    try:
+        options = NotesOptions.model_validate_json((await request.body()) or b"{}")
+        body = NotesRequest(session_id=session_id, **options.model_dump())
+        return await run_in_threadpool(GroundedNotesService(context).generate, body)
+    except ValidationError:
+        raise HTTPException(422, {"code": "INVALID_NOTES_REQUEST"}) from None
+    except SessionStorageUnavailable:
+        raise storage_error() from None
+    except KnowledgeError as error:
+        raise _safe_error(error) from None
+    except ProviderFailure:
+        raise HTTPException(503, {"code": "NOTES_PROVIDER_UNAVAILABLE"}) from None
+    except NotesError as error:
+        raise HTTPException(
+            422 if error.code == "INVALID_NOTES" else 409, {"code": error.code}
+        ) from None

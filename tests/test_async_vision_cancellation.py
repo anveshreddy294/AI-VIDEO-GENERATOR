@@ -394,7 +394,13 @@ def test_scenario_j_dispatch_async_image(tmp_path, monkeypatch):
             ),
         )
 
-        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        from app.services.visual_verifier import VisualVerificationResult
+
+        # This synthetic image exercises async dispatch, not pixel correctness.
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post, patch(
+            "app.services.visual_evidence.VisualEvidenceVerifier.verify",
+            return_value=VisualVerificationResult(status="VERIFIED"),
+        ) as mock_verify:
             mock_post.return_value = mock_resp
             result = await dispatch_async(
                 test_image, source_id="SRC_123", asset_id="AST_123"
@@ -404,6 +410,9 @@ def test_scenario_j_dispatch_async_image(tmp_path, monkeypatch):
             assert result.modality == "image"
             assert len(result.units) == 1
             assert "Newton's Second Law" in result.units[0].visual_description
+            mock_verify.assert_called_once()
+            assert mock_verify.call_args.args[0] == SAMPLE_IMAGE_BYTES
+            mock_post.assert_called_once()
 
     asyncio.run(_run())
 

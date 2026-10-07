@@ -287,7 +287,17 @@ class TestVisionOpenRouter(unittest.TestCase):
 
         try:
             from app.services.dispatcher import dispatch
-            res = dispatch(tmp_path, source_id="SRC_test1", asset_id="AST_test1")
+            from app.services.visual_verifier import VisualVerificationResult
+
+            # Generic mock claims do not describe the osmosis fixture. This
+            # contract covers provider dispatch and ContentUnit formatting only.
+            with patch(
+                "app.services.visual_evidence.VisualEvidenceVerifier.verify",
+                return_value=VisualVerificationResult(status="VERIFIED"),
+            ) as mock_verify:
+                res = dispatch(tmp_path, source_id="SRC_test1", asset_id="AST_test1")
+            mock_verify.assert_called_once()
+            self.assertEqual(mock_verify.call_args.args[0], tmp_path.read_bytes())
             self.assertEqual(res.modality, "image")
             self.assertEqual(len(res.units), 1)
             unit = res.units[0]
