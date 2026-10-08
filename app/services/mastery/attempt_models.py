@@ -25,6 +25,8 @@ class AssessmentAttempt(BaseModel):
     """Domain entity representing a single evaluated assessment question attempt."""
 
     attempt_id: str
+    learning_session_id: str | None = None
+    source_version: int | None = None
     user_id: str
     source_id: str
     session_id: str | None = None

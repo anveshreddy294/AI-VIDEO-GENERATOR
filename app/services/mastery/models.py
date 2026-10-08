@@ -48,6 +48,7 @@ class MasteryConfig(BaseModel):
         le=100.0,
         description="Score percentage below which a concept is marked WEAK.",
     )
+    min_diagnostic_correct_streak: int = Field(default=1, ge=1)
     min_remediation_attempts: int = Field(
         default=1,
         description="Minimum remediation attempts required before reassessment.",
@@ -76,6 +77,9 @@ class MasteryRecord(BaseModel):
     session_id: str | None = None
     concept_id: str
 
+    learning_session_id: str | None = None
+    source_version: int | None = None
+    consecutive_correct: int = Field(default=0, ge=0)
     attempt_count: int = Field(default=0, ge=0)
     correct_count: int = Field(default=0, ge=0)
     incorrect_count: int = Field(default=0, ge=0)

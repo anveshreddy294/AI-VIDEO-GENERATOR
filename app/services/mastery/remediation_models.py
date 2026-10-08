@@ -27,6 +27,8 @@ class RemediationJob(BaseModel):
     """Domain entity representing a single grounded remedial video execution."""
 
     remediation_job_id: str
+    learning_session_id: str | None = None
+    source_version: int | None = None
     user_id: str
     source_id: str
     session_id: str | None = None

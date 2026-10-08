@@ -210,6 +210,7 @@ class MasteryStateMachine:
             record.session_id = session_id
 
         # Update lifetime attempt counters
+        record.consecutive_correct = record.consecutive_correct + 1 if is_correct else 0
         record.attempt_count += 1
         if is_correct:
             record.correct_count += 1
@@ -262,8 +263,10 @@ class MasteryStateMachine:
 
         # In UNASSESSED or LEARNING:
         if record.mastery_state in (MasteryState.UNASSESSED, MasteryState.LEARNING):
-            if is_correct and record.mastery_score >= self.config.mastery_threshold:
+            if is_correct and record.mastery_score >= self.config.mastery_threshold and record.consecutive_correct >= self.config.min_diagnostic_correct_streak:
                 return self.transition_to(record, MasteryState.MASTERED)
+            if is_correct and record.mastery_score >= self.config.weak_threshold:
+                return self.transition_to(record, MasteryState.LEARNING)
             return self.transition_to(record, MasteryState.WEAK)
 
         # In WEAK:
@@ -276,7 +279,7 @@ class MasteryStateMachine:
                 ):
                     return self.transition_to(record, MasteryState.MASTERED)
             else:
-                if is_correct and record.mastery_score >= self.config.mastery_threshold:
+                if is_correct and record.mastery_score >= self.config.mastery_threshold and record.consecutive_correct >= self.config.min_diagnostic_correct_streak:
                     return self.transition_to(record, MasteryState.MASTERED)
             # Stays WEAK
 

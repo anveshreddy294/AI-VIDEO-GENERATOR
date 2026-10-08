@@ -54,7 +54,7 @@ class SessionAssessmentService:
         self.retrieval = retrieval or RetrievalService()
 
     def start(
-        self, learning_session_id: UUID, request: SessionAssessmentRequest
+        self, learning_session_id: UUID, request: SessionAssessmentRequest, *, reassessment_job_id: str | None = None
     ) -> AssessmentStartResponse:
         if request.concept_ids is not None and len(set(request.concept_ids)) != len(
             request.concept_ids
@@ -77,6 +77,7 @@ class SessionAssessmentService:
         digest = hashlib.sha256(
             json.dumps(
                 {
+                    **({"reassessment_job_id": reassessment_job_id} if reassessment_job_id else {}),
                     "learning_session_id": str(learning_session_id),
                     "source_id": narrowed.source_id,
                     "version": narrowed.source_version,
@@ -160,6 +161,8 @@ class SessionAssessmentService:
             source_id=narrowed.source_id,
             source_version=narrowed.source_version,
             learning_session_id=learning_session_id,
+            reassessment_job_id=reassessment_job_id,
+            assessment_type="REASSESSMENT" if reassessment_job_id else "DIAGNOSTIC",
             request_hash=digest,
             concept_queue=plan.concept_targets,
             questions=questions,

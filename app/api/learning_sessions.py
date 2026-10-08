@@ -189,3 +189,53 @@ async def submit_session_assessment(session_id: UUID, assessment_id: str, reques
 @router.get("/{session_id}/assessments/{assessment_id}/result",response_model=AssessmentPerformance)
 async def get_session_assessment_result(session_id: UUID, assessment_id: str, request: Request) -> AssessmentStartResponse | AssessmentPerformance:
     return await _assessment_action(request,session_id,"result",assessment_id)
+
+
+from ..services.mastery.session_learning import SessionLearningService, LearningProgress, FinalizeAssessment
+
+
+async def _learning_action(request: Request, session_id: UUID, action: Literal["get", "finalize", "complete", "reassess"], job_id: str = "") -> LearningProgress | AssessmentStartResponse:
+    context = await _context(request)
+    service = SessionLearningService(context)
+    try:
+        if action == "finalize":
+            body = FinalizeAssessment.model_validate_json(await request.body())
+            return await run_in_threadpool(service.finalize,session_id,body.assessment_id)
+        if action == "reassess":
+            assessment = SessionAssessmentRequest.model_validate_json(await request.body())
+            return await run_in_threadpool(service.reassess,session_id,job_id,assessment)
+        if action == "complete":
+            if await request.body():
+                raise HTTPException(422,{"code":"INVALID_LEARNING_REQUEST"})
+            return await run_in_threadpool(service.complete,session_id,job_id)
+        return await run_in_threadpool(service.get,session_id)
+    except ValidationError:
+        raise HTTPException(422,{"code":"INVALID_LEARNING_REQUEST"}) from None
+    except AssessmentInsufficientEvidence:
+        raise HTTPException(409,{"code":"INSUFFICIENT_EVIDENCE"}) from None
+    except KnowledgeError as error:
+        raise _safe_error(error) from None
+    except SessionStorageUnavailable:
+        raise storage_error() from None
+    except ProviderFailure:
+        raise HTTPException(503,{"code":"ASSESSMENT_PROVIDER_UNAVAILABLE"}) from None
+
+
+@router.get("/{session_id}/mastery",response_model=LearningProgress)
+async def get_session_mastery(session_id: UUID,request: Request) -> LearningProgress | AssessmentStartResponse:
+    return await _learning_action(request,session_id,"get")
+
+
+@router.post("/{session_id}/mastery/finalize",response_model=LearningProgress)
+async def finalize_session_mastery(session_id: UUID,request: Request) -> LearningProgress | AssessmentStartResponse:
+    return await _learning_action(request,session_id,"finalize")
+
+
+@router.post("/{session_id}/remediation/{job_id}/complete",response_model=LearningProgress)
+async def complete_session_remediation(session_id: UUID,job_id: str,request: Request) -> LearningProgress | AssessmentStartResponse:
+    return await _learning_action(request,session_id,"complete",job_id)
+
+
+@router.post("/{session_id}/remediation/{job_id}/reassessment",response_model=AssessmentStartResponse)
+async def reassess_session_remediation(session_id: UUID,job_id: str,request: Request) -> LearningProgress | AssessmentStartResponse:
+    return await _learning_action(request,session_id,"reassess",job_id)

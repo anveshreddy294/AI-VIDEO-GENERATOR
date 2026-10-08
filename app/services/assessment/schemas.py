@@ -103,6 +103,8 @@ class ConceptSnapshot(BaseModel):
 class AssessmentSession(BaseModel):
     """A quiz session for a student on a specific source."""
     session_id: str = Field(default_factory=lambda: f"SESS_{uuid4().hex[:12]}")
+    reassessment_job_id: str | None = None
+    assessment_type: Literal["DIAGNOSTIC", "REASSESSMENT"] = "DIAGNOSTIC"
     learning_session_id: UUID | None = None
     source_version: int | None = None
     request_hash: str | None = None
