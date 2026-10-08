@@ -1,6 +1,7 @@
 """OpenAPI, browser contract and existing source boundary regression coverage."""
 from __future__ import annotations
 import inspect
+from html.parser import HTMLParser
 from pathlib import Path
 import shutil
 import subprocess
@@ -92,3 +93,71 @@ def test_browser_session_contracts_in_node() -> None:
     result=subprocess.run([node,'--test',str(root/'tests/test_frontend_auth.js')],cwd=root,
                           capture_output=True,text=True,timeout=30)
     assert result.returncode==0,result.stdout+result.stderr
+
+
+def test_notes_asset_serves_existing_script_without_credentials() -> None:
+    response = TestClient(app).get("/assets/notes.js")
+    assert response.status_code == 200
+    assert response.headers["content-type"].split(";")[0] == "application/javascript"
+    expected = Path(__file__).resolve().parent.parent / "app/static/notes.js"
+    assert response.content == expected.read_bytes()
+    assert "VisualAINotes" in response.text
+
+
+def test_learner_shell_local_asset_dependencies_resolve() -> None:
+    class AssetDependencies(HTMLParser):
+        def __init__(self) -> None:
+            super().__init__()
+            self.paths: set[str] = set()
+
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+            for name, value in attrs:
+                if name in {"src", "href"} and value and value.startswith("/assets/"):
+                    self.paths.add(value)
+
+    client = TestClient(app)
+    page = client.get("/learn")
+    assert page.status_code == 200
+    dependencies = AssetDependencies()
+    dependencies.feed(page.text)
+    assert {"/assets/auth.js", "/assets/notes.js", "/assets/learning.js", "/assets/learning.css"} <= dependencies.paths
+    for path in sorted(dependencies.paths):
+        assert client.get(path).status_code == 200, path
+
+
+@pytest.mark.parametrize("path", ["/assets/learning.js", "/assets/learning.css", "/assets/notes.js"])
+def test_learner_assets_require_cache_revalidation(path: str) -> None:
+    response = TestClient(app).get(path)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_learner_upload_guidance_matches_authoritative_backend_extensions() -> None:
+    from html.parser import HTMLParser
+    from app.services.visual_evidence import MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS
+    class Picker(HTMLParser):
+        accept: str = ""
+        def handle_starttag(self, tag: str, attrs: list[tuple[str,str|None]]) -> None:
+            values=dict(attrs)
+            if tag=="input" and values.get("id")=="upload-file":
+                self.accept=values.get("accept") or ""
+                assert values.get("aria-describedby")=="upload-help"
+    page=TestClient(app).get("/learn").text
+    picker=Picker();picker.feed(page)
+    assert {v.removeprefix(".") for v in picker.accept.split(",")}==settings.allowed_extensions
+    assert picker.accept==".pdf,.txt,.png,.jpg,.jpeg,.webp,.mp4,.mov,.mkv"
+    assert "PDF, TXT, PNG, JPG, JPEG, WEBP, MP4, MOV, MKV" in page
+    assert "original PDF instead of one long phone screenshot" in page
+    assert "production processing is not qualified" in page
+    assert MAX_IMAGE_BYTES==8*1024*1024 and MAX_IMAGE_PIXELS==16_000_000
+    assert "max 8 MB, max 16 megapixels" in page
+
+
+def test_long_upload_guidance_is_collapsed_while_limits_remain_visible() -> None:
+    page=TestClient(app).get("/learn").text
+    assert '<details class="upload-guidance"><summary>Best results and video support</summary>' in page
+    assert '<details class="upload-guidance" open' not in page
+    before=page.split('<details class="upload-guidance">')[0]
+    assert "PDF, TXT, PNG, JPG, JPEG, WEBP, MP4, MOV, MKV" in before
+    assert "max 8 MB, max 16 megapixels" in before
+    assert "Video processing: experimental" in before

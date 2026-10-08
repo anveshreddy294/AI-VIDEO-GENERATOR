@@ -130,6 +130,22 @@ class PipelineJob(BaseModel):
             return 'FAILED'
         return 'RUNNING'
 
+    @computed_field
+    @property
+    def source_lifecycle(self) -> str | None:
+        """Source-stage vocabulary independent of legacy storage enum checkpoints."""
+        if not self.metadata.get("source_owner"):
+            return None
+        if self.state == "SUCCEEDED":
+            return "READY"
+        if self.state == "FAILED":
+            return "FAILED"
+        return {"queued":"UPLOADED", "ingesting_source":"EXTRACTING",
+                "EXTRACTING_SOURCE":"EXTRACTING", "PREPARING_IMAGE":"EXTRACTING",
+                "UNDERSTANDING_IMAGE":"EXTRACTING", "VALIDATING_VISUAL_EVIDENCE":"VERIFYING",
+                "PERSISTING_SOURCE":"PERSISTING", "BUILDING_LEARNING_STRUCTURE":"STRUCTURING",
+                "INDEXING_SOURCE":"INDEXING"}.get(self.current_stage, "UPLOADED")
+
 
 class JobManager:
     """Thread-safe in-memory job registry and SSE event broadcaster."""
@@ -192,6 +208,13 @@ class JobManager:
     ) -> None:
         """Mark job as cancelled, notify subscribers, and cancel running task."""
         job = self._jobs.get(job_id)
+        if job and job.metadata.get("source_owner") and not job.is_finished:
+            # Bounded source threads settle against canonical state; cancellation
+            # must never publish a false terminal failure while they can commit.
+            task = self._running_tasks.get(job_id)
+            if task and not task.done() and task != asyncio.current_task():
+                task.cancel()
+            return
         if job:
             job.error = error_message
             job.status = "cancelled"

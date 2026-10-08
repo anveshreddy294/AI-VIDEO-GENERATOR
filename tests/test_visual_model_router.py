@@ -124,7 +124,7 @@ def test_strict_signal_schema(signals: dict[str, object]) -> None:
 def test_moondream_removed_from_unknown_production_route() -> None:
     cloud = CloudDouble()
     local = LocalDouble()
-    result = VisualModelRouter(cloud, local).extract(
+    result = VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(
         FIXTURE.read_bytes(), "printed.png"
     )
     assert cloud.calls == [("general", False)] and local.calls == 0
@@ -142,7 +142,7 @@ def test_structural_workloads_use_qualified_model(workload: str, tier: Tier) -> 
     signals = signals_for_workload(TypeAdapter(Workload).validate_python(workload))
     cloud = CloudDouble()
     local = LocalDouble()
-    VisualModelRouter(cloud, local).extract(
+    VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(
         FIXTURE.read_bytes(), "fixture.png", signals
     )
     assert cloud.calls == [(tier, False)] and local.calls == 0
@@ -165,7 +165,7 @@ def test_operational_chains_only(
         [ProviderFailure("TIMEOUT", True), ProviderFailure("RATE_LIMIT", True)]
     )
     local = LocalDouble()
-    result = VisualModelRouter(cloud, local).extract(
+    result = VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(
         FIXTURE.read_bytes(), "printed.png", VisualSignals.model_validate(signals)
     )
     assert [t for t, _ in cloud.calls] == chain and local.calls == 1
@@ -201,7 +201,7 @@ def test_invalid_quality_never_operational_fallback(output: dict[str, object]) -
     cloud = CloudDouble([output])
     local = LocalDouble()
     with pytest.raises(VisionExtractionFailed):
-        VisualModelRouter(cloud, local).extract(
+        VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(
             FIXTURE.read_bytes(), "printed.png", VisualSignals(semantic_kind="TEXT")
         )
     assert len(cloud.calls) == 1 and local.calls == 0
@@ -215,7 +215,7 @@ def test_request_config_failure_never_local(category: str) -> None:
     cloud = CloudDouble([ProviderFailure(category)])
     local = LocalDouble()
     with pytest.raises(VisionExtractionFailed):
-        VisualModelRouter(cloud, local).extract(FIXTURE.read_bytes(), "printed.png")
+        VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(FIXTURE.read_bytes(), "printed.png")
     assert len(cloud.calls) == 1 and local.calls == 0
 
 
@@ -249,7 +249,7 @@ def test_shared_worker_transport_classification(status: int, fallback: bool) -> 
     with pytest.raises(ProviderFailure) as caught:
         provider.generate(
             private_image_transport(FIXTURE.read_bytes()),
-            "fast",
+            "general",
             False,
             __import__("time").monotonic() + 60,
         )
@@ -287,6 +287,10 @@ def test_worker_model_correlation_and_secure_request() -> None:
     assert result.model == MODELS["general"]
     request = json.loads(captured[0].content)
     assert "model" not in request and request["tier"] == "general"
+    schema = json.loads(request["prompt"].split("JSON_SCHEMA=", 1)[1])
+    assert "confidence" in schema["required"] and "content_kind" in schema["required"]
+    assert schema["properties"]["confidence"]["exclusiveMinimum"] == 0
+    assert "default" not in schema["properties"]["confidence"]
     assert captured[0].headers["Authorization"] == "Bearer secret-test"
     assert (
         "secret-test" not in json.dumps(request)
@@ -302,7 +306,7 @@ def test_cloud_adapter_persists_same_content_contract(
 
     cloud = CloudDouble()
     local = LocalDouble()
-    router = VisualModelRouter(cloud, local)
+    router = VisualModelRouter(cloud, local, local_fallback_enabled=True)
     monkeypatch.setattr(settings, "vision_provider", "cloudflare")
     monkeypatch.setattr(visual_router, "get_visual_router", lambda: router)
     result = visual_content_unit(
@@ -361,7 +365,7 @@ def test_cloud_injection_cannot_enter_canonical_store(
         ]
     )
     local = LocalDouble()
-    router = VisualModelRouter(cloud, local)
+    router = VisualModelRouter(cloud, local, local_fallback_enabled=True)
     remote, repo, path = context
     path = path.with_suffix(".png")
     path.write_bytes(FIXTURE.read_bytes())
@@ -372,7 +376,7 @@ def test_cloud_injection_cannot_enter_canonical_store(
     monkeypatch.setattr(
         router,
         "extract",
-        lambda image, source, signals=None: original(
+        lambda image, source, signals=None, **kwargs: original(
             image, source, VisualSignals(semantic_kind="TEXT")
         ),
     )
@@ -537,3 +541,15 @@ def test_only_visual_worker_timeout_receives_timeout_category(
         transport.fetch_payload({"task": task}, time.monotonic() + 60)
     assert caught.value.category == category and caught.value.retryable
     assert "test-secret" not in str(caught.value)
+
+
+def test_unqualified_tier_and_triage_never_reach_transport() -> None:
+    calls: list[httpx.Request] = []
+    provider = CloudflareVisionProvider(CloudflareProvider(
+        ProviderPolicy("https://worker.test/v1/generate",SecretStr("test-only")),
+        httpx.MockTransport(lambda request: calls.append(request) or httpx.Response(500))))
+    for tier,triage in [("fast",False),("general",True)]:
+        with pytest.raises(ProviderFailure,match="REQUEST_REJECTED"):
+            provider.generate(private_image_transport(FIXTURE.read_bytes()),tier,triage,__import__('time').monotonic()+60)
+    assert calls == []
+    assert set(MODELS) == {"general","deep"}

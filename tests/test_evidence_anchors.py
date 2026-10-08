@@ -102,7 +102,7 @@ def test_derived_labels_allow_supported_annotations_without_literal_title() -> N
     assert not label_supported("General concepts", "Variables are symbols.", True)
 
 
-def test_semantic_rejection_fails_closed_without_repair_ollama_or_circuit_failure() -> None:
+def test_semantic_rejection_fails_closed_after_repair_without_ollama_or_circuit_failure() -> None:
     units, body = anchored_body()
     body["concepts"][0]["evidence"][0]["anchor_id"] = "EA_unknown"
     tasks = []
@@ -133,7 +133,7 @@ def test_semantic_rejection_fails_closed_without_repair_ollama_or_circuit_failur
     with pytest.raises(UnderstandingError, match="UNSUPPORTED_EVIDENCE"):
         understand_content(SCOPE, units, generate)
     assert (
-        tasks == ["content_understanding"]
+        tasks == ["content_understanding", "structure_repair"]
         and fallback.calls == 0
         and route.circuit.consecutive_failures == 0
     )

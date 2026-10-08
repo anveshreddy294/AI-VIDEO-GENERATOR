@@ -172,7 +172,7 @@ def health_qdrant() -> dict:
         return {
             "service": "Qdrant",
             "status": "unreachable",
-            "error": str(exc),
+            "error": "QDRANT_UNAVAILABLE",
         }
 
 
@@ -289,3 +289,11 @@ if __name__ == "__main__":
         reload_dirs=[str(app_dir)],
         reload_excludes=[str(venv_dir), str(storage_dir)],
     )
+
+
+from .core.inference_health import InferenceHealth, inference_health
+
+@app.get("/health/inference", response_model=InferenceHealth)
+def health_inference() -> InferenceHealth:
+    """Report primary reachability without spending inference tokens or exposing configuration."""
+    return inference_health()

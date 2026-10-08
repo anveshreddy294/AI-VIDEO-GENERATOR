@@ -17,7 +17,8 @@ from ...core.processing_errors import ProcessingError, ProcessingCode
 from ..chunker import create_rich_chunks
 from ..dispatcher import dispatch
 from ..visual_router import VisualSignals
-from ..registry import calculate_sha256, validate_file
+from ..registry import calculate_sha256
+from ..file_truth import FileTruth, inspect_upload
 from ..repositories.source_repository import SourceVersion, SupabaseSourceRepository
 from ..schemas import ContentUnit, RichChunk, SourceRecord
 from ..security.content_sanitizer import sanitize_content_records
@@ -26,6 +27,7 @@ from .normalizer import normalize_content_units
 from .failures import ingestion_stage, SourceIndexFailed
 from .failures import SourceFailure, SourceIngestionFailed
 from .knowledge_publication import prepare_knowledge_index
+from .progress import report
 from ..content_understanding import UNDERSTANDING_VERSION, UnderstandingError
 from ..educational_chunker import ChunkPolicy
 from ..repositories.knowledge_repository import KnowledgeError
@@ -49,6 +51,7 @@ def index_committed_source(
     metrics: dict[str, JsonValue] = {}
     if version.provenance.get("knowledge_pipeline") == UNDERSTANDING_VERSION:
         try:
+            report("BUILDING_LEARNING_STRUCTURE")
             chunks, metrics = prepare_knowledge_index(repo, record)
         except (
             UnderstandingError,
@@ -57,11 +60,13 @@ def index_committed_source(
             TimeoutError,
         ) as error:
             reason = "MODEL_TIMEOUT" if isinstance(error, TimeoutError) else error.code
-            repo.mark_status(record, "FAILED", "CONTENT_UNDERSTANDING_FAILED:" + reason)
+            if record.status != "READY":
+                repo.mark_status(record, "FAILED", "CONTENT_UNDERSTANDING_FAILED:" + reason)
             raise SourceIngestionFailed(
                 SourceFailure(
                     stage="STRUCTURING",
                     code=reason,
+                    validation_detail=error.detail if isinstance(error, UnderstandingError) else None,
                     retryable=True,
                     reason_code=(
                         reason
@@ -75,55 +80,63 @@ def index_committed_source(
     else:
         # Historical unmapped sources retain their durable Phase 5B index; no automatic backfill.
         chunks = [RichChunk.model_validate(row) for row in version.rich_chunks]
-    repo.mark_status(record, "INDEXING")
-    started = time.monotonic()
-    logger.info(
-        "INDEXING_STARTED",
-        extra={
-            "source_id": record.source_id,
-            "version": record.version,
-            "chunks": len(chunks),
-        },
-    )
-    try:
-        count = upsert_chunks(chunks)
-        if count != len(chunks):
-            raise ValidationFailed("Vector indexing count mismatch")
-    except Exception as error:
-        # Persist only a credential-free classification; do not log upstream bodies.
-        reason: ProcessingCode = (
-            error.code if isinstance(error, ProcessingError) else "VECTOR_INDEX_FAILED"
-        )
-        persisted_error = (
-            error.code
-            if isinstance(error, ProcessingError)
-            else "QDRANT_INDEX_FAILED:" + type(error).__name__
-        )
-        repo.mark_status(record, "FAILED", persisted_error)
-        logger.warning(
-            "INDEXING_FAILED",
+    # Complete all fallible read-side result preparation before publishing READY.
+    content_count = len(repo.get_content_units(record.source_id, record.version))
+    diagnostics = None
+    count = len(chunks)
+    if record.status == "READY":
+        metrics.update(qdrant_writes=0, indexing_latency_seconds=0.0)
+    else:
+        report("INDEXING_SOURCE")
+        repo.mark_status(record, "INDEXING")
+        started = time.monotonic()
+        logger.info(
+            "INDEXING_STARTED",
             extra={
                 "source_id": record.source_id,
                 "version": record.version,
-                "reason_code": reason,
+                "chunks": len(chunks),
             },
         )
-        raise SourceIndexFailed(reason) from None
-    repo.mark_status(record, "READY")
-    logger.info(
-        "INDEXING_COMPLETED",
-        extra={
-            "source_id": record.source_id,
-            "version": record.version,
-            "chunks": count,
-            "duration": time.monotonic() - started,
-        },
-    )
-    from ...db.vector_store import get_index_timings
-    metrics.update(indexing_latency_seconds=time.monotonic() - started, qdrant_writes=1, **get_index_timings())
-    from ...db.vector_store import get_last_embed_diagnostics
+        try:
+            count = upsert_chunks(chunks)
+            if count != len(chunks):
+                raise ValidationFailed("Vector indexing count mismatch")
+        except Exception as error:
+            # Persist only a credential-free classification; do not log upstream bodies.
+            reason: ProcessingCode = (
+                error.code if isinstance(error, ProcessingError) else "VECTOR_INDEX_FAILED"
+            )
+            persisted_error = (
+                error.code
+                if isinstance(error, ProcessingError)
+                else "QDRANT_INDEX_FAILED:" + type(error).__name__
+            )
+            repo.mark_status(record, "FAILED", persisted_error)
+            logger.warning(
+                "INDEXING_FAILED",
+                extra={
+                    "source_id": record.source_id,
+                    "version": record.version,
+                    "reason_code": reason,
+                },
+            )
+            raise SourceIndexFailed(reason) from None
+        logger.info(
+            "INDEXING_COMPLETED",
+            extra={
+                "source_id": record.source_id,
+                "version": record.version,
+                "chunks": count,
+                "duration": time.monotonic() - started,
+            },
+        )
+        from ...db.vector_store import get_index_timings
+        metrics.update(indexing_latency_seconds=time.monotonic() - started, qdrant_writes=1, **get_index_timings())
+        from ...db.vector_store import get_last_embed_diagnostics
 
-    diagnostics = get_last_embed_diagnostics()
+        diagnostics = get_last_embed_diagnostics()
+        repo.mark_status(record, "READY")
     return {
         "status": "READY",
         "source_id": record.source_id,
@@ -139,7 +152,7 @@ def index_committed_source(
         "file_hash": record.file_hash,
         "version": record.version,
         "source_version": record.source_version,
-        "content_units": len(repo.get_content_units(record.source_id, record.version)),
+        "content_units": content_count,
         "chunks_synced": count,
         "topic_blueprint": version.topic_blueprint,
         "knowledge_state": (
@@ -153,13 +166,14 @@ def index_committed_source(
 
 def ingest_source(
     repo: SupabaseSourceRepository, temp_path: Path, filename: str,
-    *, routing_signals: VisualSignals | None = None,
+    *, routing_signals: VisualSignals | None = None, file_truth: FileTruth | None = None,
 ) -> dict[str, JsonValue]:
     """Binary files stay on disk; source/version/content state exists only in Supabase."""
     total_started = time.perf_counter()
     if repo.runtime.verify_user(repo._token).user_id != repo.user.user_id:
         raise KnowledgeError("NOT_FOUND")
-    source_type, mime_type = validate_file(temp_path, filename)
+    truth = inspect_upload(temp_path, filename, file_truth.browser_mime if file_truth else None)
+    source_type, mime_type = truth.source_type, truth.mime_type
     file_hash = calculate_sha256(temp_path)
     existing = repo.find_upload(filename, file_hash)
     if existing:
@@ -189,10 +203,11 @@ def ingest_source(
         settings.upload_dir
         / repo.owner_id
         / record.source_id
-        / ("original" + Path(filename).suffix.lower())
+        / ("original." + truth.extension)
     )
     persistent_file.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(temp_path, persistent_file)
+    report("EXTRACTING_SOURCE")
     with ingestion_stage("EXTRACTION"):
         from ..visual_router import VisualScope, visual_scope
         with visual_scope(VisualScope(user_id=repo.owner_id, source_id=record.source_id, source_version=record.version)):
@@ -208,6 +223,7 @@ def ingest_source(
             for i, unit in enumerate(raw_units)
         }
         for unit in raw_units:
+            unit.provenance["file_truth"] = truth.provenance()
             previous_id = unit.content_id
             unit.content_id = old_to_new[previous_id]
             if unit.parent_content_id:
@@ -277,12 +293,15 @@ def ingest_source(
             JSON_OBJECT.validate_python(row.model_dump(mode="json")) for row in chunks
         ],
         provenance={
+            "file_truth": truth.provenance(),
             "knowledge_pipeline": UNDERSTANDING_VERSION,
             "chunk_policy": ChunkPolicy().model_dump(mode="json"),
         },
     )
     commit_started = time.perf_counter()
-    committed = repo.commit_ingestion(record, version, enriched)
+    report("PERSISTING_SOURCE")
+    with ingestion_stage("PERSISTENCE"):
+        committed = repo.commit_ingestion(record, version, enriched)
     commit_ms = (time.perf_counter()-commit_started)*1000
     result = index_committed_source(repo, committed)
     result["source_commit_ms"] = commit_ms

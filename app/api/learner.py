@@ -19,9 +19,14 @@ def learning_page() -> FileResponse:
 
 @router.get("/assets/learning.js", include_in_schema=False)
 def learning_script() -> FileResponse:
-    return FileResponse(STATIC / "learning.js", media_type="application/javascript")
+    return FileResponse(STATIC / "learning.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/assets/learning.css", include_in_schema=False)
 def learning_style() -> FileResponse:
-    return FileResponse(STATIC / "learning.css", media_type="text/css")
+    return FileResponse(STATIC / "learning.css", media_type="text/css", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/assets/notes.js", include_in_schema=False)
+def notes_script() -> FileResponse:
+    return FileResponse(STATIC / "notes.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})

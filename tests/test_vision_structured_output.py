@@ -211,7 +211,7 @@ def test_retry_failed_job_endpoint(tmp_path, monkeypatch):
 
     # 2. Register source and create a failed job
     test_file = tmp_path / "test_diagram.jpeg"
-    test_file.write_bytes(SAMPLE_IMAGE_BYTES)
+    test_file.write_bytes((Path(__file__).parent / "fixtures/multimodal/printed.png").read_bytes())
 
     source_record, persistent_file = register_source(test_file, "test_diagram.jpeg", uploaded_by="student_test")
     source_id = source_record.source_id

@@ -138,3 +138,80 @@ test('ASK integration clears on all navigation paths and uses no vision or vecto
 test('expired auth is reported through an explicit safe message allowlist',async()=>{
     const setup=askSetup(async()=>{throw new Error('Your session expired. Please sign in again.');});activate(setup);await setup.controller.ask();assert.equal(setup.doc.ids['ask-status'].textContent,'Please sign in again to continue.');
 });
+
+
+test('terminal source failure shows safe stage code and retry guidance',()=>{
+ const message=ui.sourceJobFailure({stage:'STRUCTURING',code:'INVALID_HIERARCHY',reason_code:'INVALID_HIERARCHY',retryable:true,message:'Canonical source saved; knowledge preparation failed. Retry this source.'});
+ assert.match(message,/STRUCTURING \(INVALID_HIERARCHY\)/);
+ assert.match(message,/canonical source was saved/);assert.match(message,/retry analysis/);
+});
+test('source failure excludes arbitrary provider messages paths prompts and tokens',()=>{
+ const secret='Bearer private-token C:\\private\\file prompt <script>';
+ const message=ui.sourceJobFailure({stage:'STRUCTURING',code:secret,reason_code:secret,retryable:false,message:secret});
+ assert(!message.includes(secret));assert(!message.includes('retry analysis'));
+ assert.equal(ui.sourceJobFailure({stage:secret,message:secret}),ui.sourceJobFailure(null));
+ assert.match(ui.sourceJobFailure({stage:'INDEXING',code:'QDRANT_INDEX_FAILED',reason_code:'VECTOR_INDEX_FAILED',retryable:true}),/VECTOR_INDEX_FAILED/);
+ const script=fs.readFileSync(path.join(__dirname,'../app/static/learning.js'),'utf8');
+ assert(script.includes('uploadStatus.fail(current.failure)'));assert(!script.includes('innerHTML'));
+});
+
+
+test('allowlisted validation detail is displayed without arbitrary detail leakage',()=>{
+ const base={stage:'STRUCTURING',code:'INVALID_HIERARCHY',retryable:true};
+ assert.match(ui.sourceJobFailure({...base,validation_detail:'CHILD_SUPPORT'}),/INVALID_HIERARCHY \/ CHILD_SUPPORT/);
+ assert(!ui.sourceJobFailure({...base,validation_detail:'Bearer secret /private/path'}).includes('secret'));
+});
+
+
+test('image extraction reports exact safe vision category independently of verification',()=>{
+ const base={stage:'EXTRACTION',code:'VISION_EXTRACTION_FAILED',retryable:true};
+ assert.equal(ui.sourceJobFailure({...base,vision_error_code:'VISION_INVALID_RESPONSE'}),'Image understanding failed (VISION_INVALID_RESPONSE).');
+ assert.equal(ui.sourceJobFailure({...base,vision_error_code:'VISION_TIMEOUT'}),'Image understanding timed out. Retry this image.');
+ assert.match(ui.sourceJobFailure({...base,vision_error_code:'VISION_AUTH_FAILED'}),/VISION_AUTH_FAILED/);
+ assert(!ui.sourceJobFailure({...base,vision_error_code:'Bearer secret C:/private'}).includes('secret'));
+ assert(!ui.sourceJobFailure({...base,stage:'VERIFICATION',vision_error_code:'VISION_TIMEOUT'}).includes('Image understanding timed out'));
+});
+
+test('upload progress is indeterminate and failures do not overwrite the learning session',()=>{
+ const session={textContent:'Active learning session'};const upload={textContent:''};
+ const status=ui.createUploadStatus(upload);
+ status.progress({current_stage:'EXTRACTION',progress_percent:5});
+ assert.match(upload.textContent,/^Understanding your material/);assert(!upload.textContent.includes('%'));
+ status.fail({stage:'EXTRACTION',code:'VISION_EXTRACTION_FAILED',vision_error_code:'VISION_TIMEOUT'});
+ assert.equal(upload.textContent,'Image understanding timed out. Retry this image.');
+ assert.equal(session.textContent,'Active learning session');
+ const script=fs.readFileSync(path.join(__dirname,'../app/static/learning.js'),'utf8');
+ const start=script.indexOf("el('upload-form').addEventListener");
+ const handler=script.slice(start,script.indexOf("    run(async",start));
+ assert(handler.includes('uploadStatus.progress(current)'));assert(handler.includes('uploadStatus.fail(current.failure)'));
+ assert(!handler.includes('status.textContent'));assert(!handler.includes('run(async'));
+});
+
+test('image progress reports actual coarse boundaries and upload exceptions remain safe',()=>{
+ const element={textContent:''};const status=ui.createUploadStatus(element);
+ for(const [stage,message] of [['PREPARING_IMAGE','Preparing image'],['UNDERSTANDING_IMAGE','Understanding image'],['VALIDATING_VISUAL_EVIDENCE','Validating visual evidence'],['BUILDING_LEARNING_STRUCTURE','Building learning structure'],['INDEXING_SOURCE','Indexing source']]){
+  status.progress({current_stage:stage,progress_percent:5});assert(element.textContent.startsWith(message));assert(!element.textContent.includes('%'));
+ }
+ status.error(new Error('Bearer token private provider body'));assert.equal(element.textContent,'Upload is temporarily unavailable.');
+});
+
+
+test('verification failures stay specific without exposing diagnostic content',()=>{
+    const failure={stage:'VERIFICATION',code:'VERIFICATION_REQUIRED',message:'Bearer private',verification_reasons:['raw provider text'],retryable:false};
+    assert.match(ui.sourceJobFailure(failure),/could not be verified/);
+    assert.match(ui.sourceJobFailure(failure),/original PDF/);
+    assert(!ui.sourceJobFailure(failure).includes('private'));
+    assert(!ui.sourceJobFailure(failure).includes('raw provider'));
+    assert.match(ui.sourceJobFailure({...failure,code:'VISUAL_EVIDENCE_REJECTED'}),/no unverified content/);
+});
+
+
+test('new upload clears prior failure and successful completion replaces progress',()=>{
+ const element={textContent:''};const status=ui.createUploadStatus(element);
+ status.fail({stage:'VERIFICATION',code:'VERIFICATION_REQUIRED'});
+ status.start();assert.equal(element.textContent,'Uploading your material…');
+ status.progress({current_stage:'source_ready'});assert.equal(element.textContent,'Ready…');
+ const message=ui.safeError(422,{detail:{code:'CORRUPT_IMAGE'}});
+ status.error(new Error(message));assert.equal(element.textContent,'The image is damaged or unreadable.');
+ assert(!ui.safeError(422,{detail:{code:'secret token'}}).includes('secret'));
+});

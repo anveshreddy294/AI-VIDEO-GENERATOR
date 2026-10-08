@@ -47,11 +47,11 @@ def dispatch(
         )
 
     if modality == "image":
-        from .visual_evidence import visual_content_unit
-        unit = visual_content_unit(file_path.read_bytes(), source_id=source_id,
+        from .visual_evidence import visual_content_units
+        units = visual_content_units(file_path.read_bytes(), source_id=source_id,
             asset_id=asset_id, source=file_path.name, image_path=str(file_path), routing_signals=routing_signals)
         return ExtractionResult(
-            source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
+            source_id=source_id, asset_id=asset_id, modality="image", units=units
         )
 
     if modality == "txt":
@@ -117,11 +117,11 @@ async def dispatch_async(
     modality = detect_modality(file_path)
 
     if modality == "image":
-        from .visual_evidence import visual_content_unit
-        unit = await asyncio.to_thread(visual_content_unit, file_path.read_bytes(),
+        from .visual_evidence import visual_content_units
+        units = await asyncio.to_thread(visual_content_units, file_path.read_bytes(),
             source_id=source_id, asset_id=asset_id, source=file_path.name, image_path=str(file_path), routing_signals=routing_signals)
         return ExtractionResult(
-            source_id=source_id, asset_id=asset_id, modality="image", units=[unit]
+            source_id=source_id, asset_id=asset_id, modality="image", units=units
         )
 
     # For other extractors (PDF, TXT, Video), run in thread pool to prevent blocking event loop

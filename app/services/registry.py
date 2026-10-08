@@ -99,44 +99,10 @@ def calculate_sha256(file_path: Path) -> str:
 
 
 def validate_file(file_path: Path, filename: str) -> tuple[str, str]:
-    """Validate extension, MIME type, file size, readability, corruption, and magic bytes.
-
-    Returns: (source_type, mime_type)
-    """
-    if not file_path.exists() or file_path.stat().st_size == 0:
-        raise ValueError(f"File '{filename}' is empty or does not exist.")
-
-    ext = Path(filename).suffix.lstrip(".").lower()
-    if not settings.is_allowed(filename):
-        raise ValueError(f"Extension '.{ext}' is not allowed.")
-
-    size = file_path.stat().st_size
-    # 500 MB size limit
-    if size > 500 * 1024 * 1024:
-        raise ValueError(f"File '{filename}' exceeds maximum allowed size of 500MB.")
-
-    from .modality import detect_modality
-    source_type = detect_modality(Path(filename))
-
-    guessed_mime, _ = mimetypes.guess_type(filename)
-    mime_type = guessed_mime or f"application/{ext}"
-
-    # Check magic bytes for non-txt files
-    if ext != "txt":
-        with file_path.open("rb") as f:
-            header = f.read(32)
-        signatures = MAGIC_SIGNATURES.get(ext, [])
-        valid = False
-        for sig in signatures:
-            if sig in header:
-                valid = True
-                break
-        if not valid and signatures:
-            raise ValueError(
-                f"File signature check failed for '{filename}'. File may be corrupted or disguised."
-            )
-
-    return source_type, mime_type
+    """Use the same decoded truth as HTTP admission and canonical ingestion."""
+    from .file_truth import inspect_upload
+    truth = inspect_upload(file_path, filename)
+    return truth.source_type, truth.mime_type
 
 
 def find_existing_by_hash(file_hash: str) -> SourceRecord | None:

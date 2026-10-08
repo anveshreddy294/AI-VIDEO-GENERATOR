@@ -282,7 +282,7 @@ def test_scenario_f_graceful_shutdown():
 # =========================================================================
 def test_scenario_g_source_status_on_cancelled_no_validation_error(tmp_path):
     test_file = tmp_path / "test.jpeg"
-    test_file.write_bytes(SAMPLE_IMAGE_BYTES)
+    test_file.write_bytes((Path(__file__).parent / "fixtures/multimodal/printed.png").read_bytes())
 
     rec, _ = register_source(test_file, "test.jpeg", uploaded_by="student_test")
 
@@ -374,8 +374,7 @@ def test_scenario_i_atomic_duplicate_upload_dedup():
 # =========================================================================
 def test_scenario_j_dispatch_async_image(tmp_path, monkeypatch):
     async def _run():
-        monkeypatch.setattr(settings, "vision_provider", "openrouter")
-        monkeypatch.setattr(settings, "openrouter_api_key", "sk-or-test-key")
+        monkeypatch.setattr(settings, "vision_provider", "ollama")
 
         test_image = tmp_path / "sample.jpeg"
         test_image.write_bytes(SAMPLE_IMAGE_BYTES)
@@ -384,13 +383,11 @@ def test_scenario_j_dispatch_async_image(tmp_path, monkeypatch):
             status_code=200,
             json={
                 "id": "gen-1",
-                "model": "google/gemini-2.0-flash-exp:free",
-                "choices": [
-                    {"message": {"content": json.dumps(VALID_EXTRACTION_JSON)}}
-                ],
+                "model": "gemma3:4b",
+                "response": json.dumps(VALID_EXTRACTION_JSON),
             },
             request=httpx.Request(
-                "POST", "https://openrouter.ai/api/v1/chat/completions"
+                "POST", "http://localhost:11434/api/generate"
             ),
         )
 

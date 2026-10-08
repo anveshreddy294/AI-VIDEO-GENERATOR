@@ -98,7 +98,7 @@ def test_accepted_visual_prepares_minimal_evidenced_hierarchy(
         "foreign_anchor",
     ],
 )
-def test_unsupported_content_and_membership_fail_without_model_repair(
+def test_unsupported_content_and_membership_fail_after_bounded_model_repair(
     defect: str,
 ) -> None:
     units, original = accepted("SIMPLE")
@@ -128,7 +128,7 @@ def test_unsupported_content_and_membership_fail_without_model_repair(
 
     with pytest.raises(UnderstandingError):
         understand_content(SCOPE, units, model)
-    assert len(calls) == 1
+    assert len(calls) == 2
 
 
 def test_visual_identity_grouping_requires_accepted_visual_provenance() -> None:
@@ -228,3 +228,46 @@ def test_single_visual_request_constrains_literal_label_without_changing_canonic
             "AnchoredConcept"
         ]["properties"]["name"]
     )
+
+
+def test_verified_handwriting_is_a_literal_visual_hierarchy_label() -> None:
+    units, body = accepted("SIMPLE")
+    label = "Osmosis"
+    provenance = copy.deepcopy(units[0].content.provenance)
+    visual = provenance["extraction"]
+    visual.update(visible_text=[], headings=[], labels=[], diagram_entities=[], handwriting_text=[label])
+    content = units[0].content.model_copy(update={"provenance": provenance})
+    units = [units[0].model_copy(update={"content": content, "provenance": provenance})]
+    def model(prompt: str) -> str:
+        assert 'SOURCE_VISUAL_LABEL="Osmosis"' in prompt
+        return json.dumps(body)
+    result = understand_content(SCOPE, units, model)
+    assert result.snapshot.topics[0].title == label
+    assert result.snapshot.subtopics[0].title == label
+    assert result.snapshot.concepts[0].name == label
+
+
+def test_verified_slide_regions_keep_separate_literal_topics() -> None:
+    units,base=accepted("SIMPLE")
+    source=units[0]
+    labels=["Feasibility and viability","Impact and benefits","Implementation roadmap"]
+    regions=[]
+    for i,label in enumerate(labels):
+        provenance=copy.deepcopy(source.content.provenance)
+        provenance.update(region_policy="repeated-slide-footers-v1",visual_verification={"status":"VERIFIED"})
+        provenance["extraction"].update(headings=[label],visible_text=[label],labels=[],diagram_entities=[],relationships=[])
+        content=source.content.model_copy(update={"content_id":"region"+str(i),"text":label,"provenance":provenance,"sequence_index":i})
+        regions.append(source.model_copy(update={"content_id":content.content_id,"content":content,"provenance":provenance}))
+    anchors=build_anchors(SCOPE,regions)
+    body={"topics":[],"subtopics":[],"concepts":[],"prerequisites":[]}
+    for i,label in enumerate(labels):
+        ref={"anchor_id":next(a.anchor_id for a in anchors if a.content_id=="region"+str(i))}
+        body["topics"].append({"key":"t"+str(i),"title":label,"evidence":[ref]})
+        body["subtopics"].append({"key":"s"+str(i),"topic_key":"t"+str(i),"title":label,"evidence":[ref]})
+        body["concepts"].append({"key":"c"+str(i),"subtopic_key":"s"+str(i),"name":label,"definition":None,"evidence":[ref]})
+    def model(prompt: str) -> str:
+        assert "SOURCE_VISUAL_REGIONS=" in prompt
+        return json.dumps(body)
+    result=understand_content(SCOPE,regions,model)
+    assert {t.title for t in result.snapshot.topics}==set(labels)
+    assert len(result.snapshot.content_concepts)==3

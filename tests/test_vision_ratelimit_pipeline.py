@@ -29,7 +29,7 @@ def test_image_pipeline_fails_closed_on_429(tmp_path, monkeypatch):
         monkeypatch.setattr(settings, "openrouter_api_key", "sk-test-key")
 
         test_img = tmp_path / "ratelimit_sample.png"
-        test_img.write_bytes(SAMPLE_PNG_BYTES)
+        test_img.write_bytes((Path(__file__).parent / "fixtures/multimodal/printed.png").read_bytes())
 
         job = job_manager.create_job("upload_and_assess")
         job_id = job.job_id
@@ -72,7 +72,7 @@ def test_image_pipeline_fails_closed_when_fallback_disabled(tmp_path, monkeypatc
         monkeypatch.setattr(settings, "vision_rate_limit_fallback", False)
 
         test_img = tmp_path / "ratelimit_fail_closed.png"
-        test_img.write_bytes(SAMPLE_PNG_BYTES)
+        test_img.write_bytes((Path(__file__).parent / "fixtures/multimodal/printed.png").read_bytes())
 
         job = job_manager.create_job("upload_and_assess")
         job_id = job.job_id

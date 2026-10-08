@@ -9,3 +9,7 @@
 .ask-evidence-status { font-size: .9rem; color: #475569; }
 .ask-citations { font-size: .85rem; color: #475569; padding-left: 1.25rem; }
 .ask-limitations { padding-left: 1.25rem; }
+
+.upload-help{flex-basis:100%;max-width:78ch;overflow-wrap:anywhere}.upload-help p+p{margin-top:6px}.upload input[type=file]{max-width:100%;min-width:0}
+
+.upload-help .upload-guidance{border:0;border-radius:0;padding:0;margin-top:6px;background:transparent}.upload-help .upload-guidance summary{font-size:13px;font-weight:600;color:var(--green)}.upload-help .upload-guidance[open] summary{margin-bottom:6px}.upload-help p{line-height:1.45}

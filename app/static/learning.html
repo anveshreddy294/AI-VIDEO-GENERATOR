@@ -10,8 +10,17 @@
 <section id="sources-panel" aria-labelledby="sources-title"><h1 id="sources-title">What will you learn today?</h1>
 <p class="intro">Choose your material, explore its topics, and focus on one thing at a time.</p>
 <form id="upload-form" class="upload"><label for="upload-file">Add your learning material</label>
-<input id="upload-file" name="file" type="file" required><button class="primary" id="upload-button" type="submit">Analyze Learning Material</button>
+<input id="upload-file" name="file" type="file" accept=".pdf,.txt,.png,.jpg,.jpeg,.webp,.mp4,.mov,.mkv" aria-describedby="upload-help" required><button class="primary" id="upload-button" type="submit">Analyze Learning Material</button>
+<div id="upload-help" class="upload-help">
+<p><strong>Supported:</strong> PDF, TXT, PNG, JPG, JPEG, WEBP, MP4, MOV, MKV</p>
+<p>Images: max 8 MB, max 16 megapixels. Video processing: experimental.</p>
+<details class="upload-guidance"><summary>Best results and video support</summary>
+<p><strong>Best results:</strong> Upload a clear document, textbook page, single slide, diagram, flowchart, handwritten note, table, graph, or educational image. For several slides/pages, upload the original PDF instead of one long phone screenshot.</p>
+<p>Video formats are accepted; production processing is not qualified by this image acceptance.</p>
+</details>
+</div>
 <p>No quiz starts automatically. Explore your topics when processing finishes.</p></form>
+<div id="upload-status" role="status" aria-live="polite"></div>
 <h2>My sources</h2><div id="source-cards" class="grid"></div>
 <h2>Pick up where you left off</h2><div id="session-cards" class="grid"></div></section>
 <section id="explorer-panel" hidden aria-labelledby="explorer-title"><button type="button" class="back" id="explorer-back">← My sources</button>

@@ -17,6 +17,7 @@ from app.core.supabase import AuthenticatedUser, SupabaseConfig, SupabaseRuntime
 from app.services.repositories.factory import get_source_repository
 from app.services.repositories.file_repository import FileSourceRepository
 from app.services.repositories.source_repository import SourceVersion, SupabaseSourceRepository
+from app.services.ingestion.failures import SourceIngestionFailed
 from app.services.ingestion.source_ingestion import ingest_source, index_committed_source
 from app.services.schemas import ContentUnit, SourceRecord, RichChunk
 
@@ -181,7 +182,7 @@ def test_commit_failure_never_calls_qdrant_or_local_fallback(context: Context, m
     def forbidden(chunks: list[RichChunk]) -> int:
         pytest.fail('Qdrant called before successful canonical commit')
     monkeypatch.setattr(vector_store,'upsert_chunks',forbidden)
-    with pytest.raises(SupabaseError) as error:
+    with pytest.raises(SourceIngestionFailed) as error:
         ingest_source(repo,path,'fixture.txt')
     assert not remote.sources and not remote.versions and not remote.units
     assert 'test-secret' not in str(error.value)+caplog.text
@@ -455,7 +456,7 @@ def test_visual_workload_metadata_is_validated_and_owner_comes_from_jwt(context:
     monkeypatch.setattr(sources, "get_runtime", lambda: repo.runtime)
     monkeypatch.setattr(sources, "get_current_user", lambda token, runtime: repo.user)
     captured: list[VisualSignals] = []
-    def accepted(repository: SupabaseSourceRepository, path: Path, filename: str, *, routing_signals: VisualSignals) -> dict[str, JsonValue]:
+    def accepted(repository: SupabaseSourceRepository, path: Path, filename: str, *, routing_signals: VisualSignals, file_truth: object = None) -> dict[str, JsonValue]:
         assert repository.owner_id == str(OWNER)
         captured.append(routing_signals)
         return {"source_id": "SRC_fixture", "status": "READY"}
@@ -466,3 +467,68 @@ def test_visual_workload_metadata_is_validated_and_owner_comes_from_jwt(context:
         assert len(captured) == 1 and captured[0].complexity == "COMPLEX"
     else:
         assert captured == []
+
+
+
+def test_ready_duplicate_never_reindexes_or_downgrades(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.db import vector_store
+    remote,repo,path=context
+    monkeypatch.setattr(vector_store,"upsert_chunks",lambda chunks:len(chunks))
+    initial=ingest_source(repo,path,"fixture.txt")
+    def forbidden(chunks: list[RichChunk]) -> int:
+        pytest.fail("READY retry must not write vectors")
+    monkeypatch.setattr(vector_store,"upsert_chunks",forbidden)
+    repeated=ingest_source(repo,path,"fixture.txt")
+    assert initial["source_id"]==repeated["source_id"]
+    assert repeated["understanding_metrics"]["qdrant_writes"]==0
+    assert remote.sources[0]["status"]=="READY" and len(remote.sources)==len(remote.versions)==1
+
+
+def test_source_cancel_waits_for_actual_publication(context: Context,monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    import threading
+    from app.api import source_jobs
+    from app.services.pipeline_tracker import JobManager
+    _,repo,path=context
+    manager=JobManager();monkeypatch.setattr(source_jobs,"job_manager",manager)
+    started=threading.Event();release=threading.Event()
+    def ingest(repository: SupabaseSourceRepository, source: Path, filename: str) -> dict[str,JsonValue]:
+        started.set();assert release.wait(5)
+        return {"source_id":"SRC_cancel","status":"READY","knowledge_state":"READY"}
+    monkeypatch.setattr(source_jobs,"ingest_source",ingest)
+    async def scenario() -> None:
+        job,_=await manager.get_or_create_active_job("cancel",job_type="source_ingestion")
+        job.metadata["source_owner"]=repo.owner_id
+        task=asyncio.create_task(source_jobs.execute_source_job(job.job_id,repo,path,"fixture.txt"))
+        assert await asyncio.to_thread(started.wait,5)
+        await manager.cancel_job(job.job_id)
+        assert not job.is_finished
+        release.set();await task
+        assert job.state=="SUCCEEDED" and job.source_lifecycle=="READY" and job.error is None
+    asyncio.run(scenario())
+
+
+def test_lost_ready_ack_is_reconciled_without_second_index(context: Context,monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from app.api import source_jobs
+    from app.services.pipeline_tracker import JobManager
+    from app.db import vector_store
+    from uuid import NAMESPACE_URL,uuid5
+    remote,repo,path=context
+    manager=JobManager();monkeypatch.setattr(source_jobs,"job_manager",manager)
+    writes: list[int]=[]
+    monkeypatch.setattr(vector_store,"upsert_chunks",lambda chunks:writes.append(len(chunks)) or len(chunks))
+    original=repo.mark_status
+    def lost(record: SourceRecord,status: str,error_message: str | None = None) -> SourceRecord:
+        result=original(record,status,error_message)
+        if status=="READY":raise SupabaseError("acknowledgement unavailable")
+        return result
+    monkeypatch.setattr(repo,"mark_status",lost)
+    async def scenario() -> None:
+        job,_=await manager.get_or_create_active_job("lost",job_type="source_ingestion")
+        digest=hashlib.sha256(path.read_bytes()).hexdigest()
+        job.metadata.update(source_owner=repo.owner_id,source_id="SRC_"+uuid5(NAMESPACE_URL,f"visualai:{repo.owner_id}:fixture.txt:{digest}").hex)
+        await source_jobs.execute_source_job(job.job_id,repo,path,"fixture.txt")
+        assert job.state=="SUCCEEDED" and remote.sources[0]["status"]=="READY"
+        assert len(writes)==1
+    asyncio.run(scenario())

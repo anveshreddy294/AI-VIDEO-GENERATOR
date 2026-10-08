@@ -249,7 +249,7 @@ def test_reject_and_exhaust_bounded_repair(bad: str) -> None:
 
     with pytest.raises(UnderstandingError):
         understand_content(SCOPE, units, generate)
-    assert len(calls) == (2 if bad in {"malformed", "empty", "owner"} else 1)
+    assert len(calls) == 2
 
 
 def test_repair_success_and_no_fallback() -> None:
@@ -576,3 +576,48 @@ def test_repair_identifies_quote_failure_without_revealing_source() -> None:
     assert caught.value.code == "UNSUPPORTED_EVIDENCE"
     assert caught.value.detail == "QUOTE"
     assert "Fabricated" not in str(caught.value)
+
+
+@pytest.mark.parametrize("corrected", [True, False])
+def test_valid_json_hierarchy_gets_exactly_one_repair(corrected: bool) -> None:
+    units = envelopes("multi_topic")
+    good = proposed([{"content_id": u.content_id, "text": u.content.text} for u in units])
+    bad = copy.deepcopy(good)
+    bad["concepts"][0]["subtopic_key"] = "missing_parent"
+    with pytest.raises(UnderstandingError) as error:
+        validate_proposal(SCOPE, units, StructureProposal.model_validate_json(json.dumps(bad)))
+    assert error.value.code == "INVALID_HIERARCHY"
+    calls: list[str] = []
+    def provider(prompt: str) -> str:
+        calls.append(prompt)
+        return json.dumps(good if corrected and len(calls) == 2 else bad)
+    if corrected:
+        result = understand_content(SCOPE, units, provider)
+        assert result.repair_model_calls == 1
+        assert result.snapshot.concepts
+    else:
+        with pytest.raises(UnderstandingError, match="INVALID_HIERARCHY"):
+            understand_content(SCOPE, units, provider)
+    assert len(calls) == 2
+    assert "INVALID_HIERARCHY:PARENT_REFERENCE" in calls[1]
+
+
+@pytest.mark.parametrize("code", ["AUTH_REJECTED", "CONFIGURATION", "REQUEST_REJECTED", "INVALID_RESPONSE"])
+def test_provider_rejections_never_trigger_proposal_repair(code: str) -> None:
+    from app.core.reasoning import ProviderFailure
+    calls: list[str] = []
+    def provider(prompt: str) -> str:
+        calls.append(prompt)
+        raise ProviderFailure(code)
+    with pytest.raises(UnderstandingError):
+        understand_content(SCOPE, envelopes("multi_topic"), provider)
+    assert len(calls) == 1
+
+
+def test_source_size_limit_never_calls_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import content_understanding as module
+    monkeypatch.setattr(module, "MAX_SOURCE_CHARACTERS", 1)
+    def forbidden(prompt: str) -> str:
+        pytest.fail("Oversized source reached provider")
+    with pytest.raises(UnderstandingError, match="SOURCE_TOO_LARGE"):
+        understand_content(SCOPE, envelopes("multi_topic"), forbidden)

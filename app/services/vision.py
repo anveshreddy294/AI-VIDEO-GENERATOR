@@ -24,10 +24,10 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal, cast
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.config import settings
 from .schemas import VisionExtractionData
@@ -44,6 +44,30 @@ VISION_STRUCTURED_OUTPUT_UNAVAILABLE = "VISION_STRUCTURED_OUTPUT_UNAVAILABLE"
 VISION_FALLBACK_UNAVAILABLE = "VISION_FALLBACK_UNAVAILABLE"
 
 # Explicit cache schema versioning
+VisionErrorCode = Literal[
+    "VISION_TIMEOUT", "VISION_RATE_LIMIT", "VISION_AUTH_FAILED", "VISION_INVALID_RESPONSE",
+    "VISION_PROVIDER_FAILED", "VISION_STRUCTURED_OUTPUT_UNAVAILABLE", "VISION_FALLBACK_UNAVAILABLE",
+]
+SAFE_VISION_ERROR_CODES: frozenset[str] = frozenset({
+    VISION_TIMEOUT, VISION_RATE_LIMIT, VISION_AUTH_FAILED, VISION_INVALID_RESPONSE,
+    VISION_PROVIDER_FAILED, VISION_STRUCTURED_OUTPUT_UNAVAILABLE, VISION_FALLBACK_UNAVAILABLE,
+})
+
+
+class VisionRouteFailureTrace(BaseModel):
+    """Fixed operational classifications only; no upstream payload or transport URL."""
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    cloud_failure_category: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "PROVIDER_UNAVAILABLE"] | None = None
+    cloud_attempt_count: int = Field(ge=0, le=2)
+    local_fallback_attempted: bool
+    local_failure_code: VisionErrorCode | None = None
+
+
+def safe_vision_error_code(code: str) -> VisionErrorCode:
+    """Expose only a fixed category; arbitrary provider text never crosses this boundary."""
+    return cast(VisionErrorCode, code if code in SAFE_VISION_ERROR_CODES else VISION_PROVIDER_FAILED)
+
+
 VISION_CACHE_SCHEMA_VERSION = "v2"
 VISION_PROMPT_VERSION = "v2"
 MAX_VISION_RESPONSE_BYTES = 256 * 1024
@@ -151,9 +175,10 @@ class VisionExtractionError(Exception):
 class VisionExtractionFailed(VisionExtractionError):
     """Raised when vision extraction is rejected, malformed, or fails validation."""
 
-    def __init__(self, message: str, error_code: str = VISION_PROVIDER_FAILED):
+    def __init__(self, message: str, error_code: str = VISION_PROVIDER_FAILED, *, route_trace: VisionRouteFailureTrace | None = None):
         super().__init__(message)
         self.error_code = error_code
+        self.route_trace = route_trace
 
 
 _OLLAMA_VISION_PROMPT = """You are the image-ingestion component of an educational RAG system.

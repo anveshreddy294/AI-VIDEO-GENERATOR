@@ -49,7 +49,9 @@ _MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_MB", "200")) * 1024 * 1024
 _MIME_ALLOWLIST: dict[str, set[str]] = {
     "pdf":  {"application/pdf"},
     "txt":  {"text/plain", "application/octet-stream"},
+    "webp": {"image/webp"},
     "png":  {"image/png"},
+    "webp": {"image/webp"},
     "jpg":  {"image/jpeg"},
     "jpeg": {"image/jpeg"},
     "mp4":  {"video/mp4", "application/octet-stream"},
@@ -75,6 +77,9 @@ def _validate_mime(filename: str, content_type: str | None) -> None:
     # Allow generic octet-stream from any uploader
     if ct_base == "application/octet-stream":
         return
+    from ..services.file_truth import IMAGE_SUFFIXES, IMAGE_MIMES
+    if ext in IMAGE_SUFFIXES and ct_base in IMAGE_MIMES:
+        return  # Decoder checks actual bytes before ingestion.
     if ct_base not in allowed_mimes:
         raise HTTPException(
             status_code=415,
@@ -139,6 +144,12 @@ async def upload_file(
         logger.exception("Failed to write uploaded file to temp storage")
         raise HTTPException(status_code=500, detail="Failed to save uploaded file.")
 
+    from ..services.file_truth import inspect_upload, UploadValidationError
+    try:
+        inspect_upload(temp_path, filename, file.content_type)
+    except UploadValidationError as error:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(422, {"code": error.code}) from None
     if repository is not None:
         from ..services.ingestion.source_ingestion import ingest_source
         try:

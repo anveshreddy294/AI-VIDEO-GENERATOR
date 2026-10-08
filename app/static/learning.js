@@ -36,10 +36,25 @@
         default: throw new Error('Invalid knowledge readiness.');
         }
     }
+    /** @type {Record<string,string>} */
+    const uploadValidation = {
+        EMPTY_FILE:'The uploaded file is empty.', EMPTY_CONTENT:'The file contains no readable evidence.',
+        CORRUPT_IMAGE:'The image is damaged or unreadable.', INVALID_TEXT:'Upload a readable UTF-8 text file.',
+        IMAGE_TOO_LARGE:'Images must be at most 8 MB and 16 megapixels.', FILE_TOO_LARGE:'The file exceeds the upload limit.',
+        FILE_TYPE_MISMATCH:'The file contents do not match a supported file type.',
+        UNSUPPORTED_FILE_TYPE:'This file type is not supported.', UNSUPPORTED_IMAGE_FORMAT:'Use a single-frame PNG, JPEG or WEBP image.'
+    };
     /** @param {number} status @param {unknown} value @returns {string} */
     function safeError(status, value) {
         if (status === 404) return 'This source or learning session is unavailable.';
         if (status === 409) return 'This session or material is not ready for that action.';
+        if ((status === 422 || status === 415) && value && typeof value === 'object' && !Array.isArray(value)) {
+            const detail = row(value).detail;
+            if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+                const code = row(detail).code;
+                if (typeof code === 'string' && Object.hasOwn(uploadValidation, code)) return uploadValidation[code];
+            }
+        }
         if (status === 422) return 'The selected learning scope is not valid. Choose it again.';
         if (status === 503 && value && typeof value === 'object') {
             const detail = row(value).detail;
@@ -48,6 +63,57 @@
             }
         }
         return 'Learning is temporarily unavailable. Please try again.';
+    }
+    /** Render only known safe job classifications and messages, never upstream details.
+     * @param {unknown} value @returns {string}
+     */
+    function sourceJobFailure(value) {
+        const fallback = 'Analysis could not finish. Check your source and retry.';
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
+        const failure = row(value);
+        if (failure.code === 'VERIFICATION_REQUIRED') return 'Some image evidence could not be verified. Use a clearer image or upload the original PDF.';
+        if (failure.code === 'VISUAL_EVIDENCE_REJECTED') return 'Image evidence was rejected; no unverified content was published.';
+        const visionCodes = new Set(['VISION_TIMEOUT','VISION_RATE_LIMIT','VISION_AUTH_FAILED','VISION_INVALID_RESPONSE','VISION_PROVIDER_FAILED','VISION_STRUCTURED_OUTPUT_UNAVAILABLE','VISION_FALLBACK_UNAVAILABLE']);
+        if (failure.stage === 'EXTRACTION' && failure.code === 'VISION_EXTRACTION_FAILED' && typeof failure.vision_error_code === 'string' && visionCodes.has(failure.vision_error_code)) {
+            if (failure.vision_error_code === 'VISION_TIMEOUT') return 'Image understanding timed out. Retry this image.';
+            return 'Image understanding failed (' + failure.vision_error_code + ').';
+        }
+        const stages = new Set(['EXTRACTION','VERIFICATION','NORMALIZATION','STRUCTURING','CHUNKING','PERSISTENCE','INDEXING']);
+        const codes = new Set(['INVALID_MODEL_OUTPUT','INVALID_HIERARCHY','DUPLICATE_IDENTITY','UNSUPPORTED_EVIDENCE','UNSUPPORTED_PREREQUISITE','PREREQUISITE_CYCLE','SOURCE_TOO_LARGE','NO_SAFE_CONTENT','MODEL_UNAVAILABLE','AI_AUTH_REJECTED','AI_REQUEST_REJECTED','AI_INVALID_RESPONSE','AI_CONFIGURATION','STRUCTURE_TIMEOUT','STRUCTURE_EXTRACTION_FAILED','QDRANT_INDEX_FAILED','VECTOR_INDEX_FAILED','MODEL_TIMEOUT','VERIFICATION_FAILED','EXTRACTION_FAILED','NORMALIZATION_FAILED','CHUNKING_FAILED','PERSISTENCE_FAILED','INDEXING_FAILED']);
+        if (typeof failure.stage !== 'string' || !stages.has(failure.stage)) return fallback;
+        const code = typeof failure.code === 'string' && codes.has(failure.code) ? failure.code : 'SOURCE_PROCESSING_FAILED';
+        const reason = typeof failure.reason_code === 'string' && codes.has(failure.reason_code) && failure.reason_code !== code ? ' / ' + failure.reason_code : '';
+        const details = new Set(['REFERENCE','QUOTE','ROLE','LABEL','EDGE_ENDPOINTS','EDGE_NAMES','EDGE_ROLE','EDGE_DIRECTION','DEFINITION','PARENT_REFERENCE','EMPTY_REQUIRED_LEVEL','CHILD_SUPPORT']);
+        const validation = typeof failure.validation_detail === 'string' && details.has(failure.validation_detail) ? ' / ' + failure.validation_detail : '';
+        const saved = failure.message === 'Canonical source saved; knowledge preparation failed. Retry this source.';
+        return 'Analysis failed during ' + failure.stage + ' (' + code + reason + validation + ').' +
+            (saved ? ' Your canonical source was saved.' : '') +
+            (failure.retryable === true ? ' You can retry analysis.' : ' Check your source before trying again.');
+    }
+    /** @param {HTMLElement} status @returns {{start:()=>void, progress:(job:Row)=>void, fail:(failure:unknown)=>void, error:(error:unknown)=>void}} */
+    function createUploadStatus(status) {
+        return {
+            start() { status.textContent = "Uploading your material\u2026"; },
+            progress(job) {
+                /** @type {Record<string,string>} */
+                const stages = {'PREPARING_IMAGE':'Preparing image', 'UNDERSTANDING_IMAGE':'Understanding image',
+                    'VALIDATING_VISUAL_EVIDENCE':'Validating visual evidence', 'BUILDING_LEARNING_STRUCTURE':'Building learning structure',
+                    'INDEXING_SOURCE':'Indexing source', 'source_ready':'Ready'};
+                const stage = typeof job.current_stage === 'string' ? job.current_stage : '';
+                status.textContent = (stages[stage] || (stage === 'EXTRACTION' || stage === 'ingesting_source' ? 'Understanding your material' : 'Analyzing your material')) + '\u2026';
+            },
+            fail(failure) { status.textContent = sourceJobFailure(failure); },
+            error(error) {
+                const safe = new Set([...Object.values(uploadValidation), 'Analysis is still running. Refresh your sources before retrying.',
+                    'Your session expired. Please sign in again.', 'Please sign in to continue.',
+                    'Learning is temporarily unavailable. Please try again.',
+                    'Learning returned an invalid response. Please try again.',
+                    'This source or learning session is unavailable.',
+                    'This session or material is not ready for that action.',
+                    'The selected learning scope is not valid. Choose it again.']);
+                status.textContent = error instanceof Error && safe.has(error.message) ? error.message : 'Upload is temporarily unavailable.';
+            }
+        };
     }
     /** @param {string} sessionId @param {string} question @param {string|undefined} conceptId @returns {Row} */
     function qaPayload(sessionId, question, conceptId) {
@@ -173,7 +239,7 @@
         setSession(null);
         return {setSession,ask};
     }
-    if (typeof module !== 'undefined') module.exports = {readiness, safeError, qaPayload, location, row, rows, createAskController};
+    if (typeof module !== 'undefined') module.exports = {readiness, safeError, sourceJobFailure, createUploadStatus, qaPayload, location, row, rows, createAskController};
     if (typeof document === 'undefined') return;
     const auth = /** @type {{protectedFetch:(path:string,options?:RequestInit)=>Promise<Response>, logout:()=>Promise<void>}} */ (Reflect.get(window, 'VisualAIAuth'));
     const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
@@ -348,24 +414,26 @@
     el('ask-form').addEventListener('submit',e => { e.preventDefault(); run(() => ask()); });
     el('complete-session').addEventListener('click',() => run(() => transition('complete')));
     el('abandon-session').addEventListener('click',() => run(() => transition('abandon')));
-    el('upload-form').addEventListener('submit',e => { e.preventDefault(); run(async () => {
+    const uploadStatus = createUploadStatus(el('upload-status'));
+    el('upload-form').addEventListener('submit',e => { e.preventDefault(); (async () => {
         const file = /** @type {HTMLInputElement} */ (el('upload-file')).files?.[0]; if (!file) return;
         const b = /** @type {HTMLButtonElement} */ (el('upload-button')); b.disabled = true;
+        uploadStatus.start();
         const body = new FormData(); body.append('file',file);
         try {
             const job = row(await api('/pipeline/upload-and-assess',{method:'POST',body}));
             for (let i=0; i<MAX_JOB_POLLS; i++) {
                 const current = row(await api('/pipeline/jobs/' + encodeURIComponent(text(job,'job_id'))));
-                el('status').textContent = 'Analyzing your material… ' + (typeof current.progress_percent === 'number' ? current.progress_percent : 0) + '%';
+                uploadStatus.progress(current);
                 if (current.is_finished === true) {
-                    if (current.status !== 'completed') throw new Error('Analysis could not finish. Check your source and retry.');
-                    await loadSources(); return;
+                    if (current.status !== 'completed') { uploadStatus.fail(current.failure); return; }
+                    await loadSources(); uploadStatus.progress({current_stage:'source_ready'}); return;
                 }
                 await new Promise(resolve => setTimeout(resolve,POLL_INTERVAL_MS));
             }
             throw new Error('Analysis is still running. Refresh your sources before retrying.');
-        } finally { b.disabled = false; }
-    }); });
+        } catch (error) { uploadStatus.error(error); } finally { b.disabled = false; }
+    })(); });
     run(async () => {
         const params = new URLSearchParams(window.location.search);
         if (params.has('session')) await openSession(params.get('session') || '',false);

@@ -75,7 +75,7 @@ export default {
         try {
             const parsed = await readBoundedBody(request);
             const body = /** @type {Row} */ (parsed.body);
-            if (body?.task === "vision_extract") return handleVisual(body, env, requestId);
+            if (body?.task === "vision_extract" || body?.task === "vision_verify") return handleVisual(body, env, requestId);
             if (parsed.bytes > MAX_BODY_BYTES || contentLength > MAX_BODY_BYTES) return json({error:"Request too large"}, 413);
 
             const task =
@@ -161,7 +161,7 @@ export default {
                 request_id: requestId,
                 task,
                 model,
-                response: aiResponse.response,
+                response: textResponse(aiResponse),
                 usage: aiResponse.usage || null,
                 latency_ms: latencyMs,
             });
@@ -268,4 +268,20 @@ function json(data, status = 200) {
 function isNonemptyMessage(value) {
     const m = /** @type {Row | null | undefined} */ (value);
     return Boolean(m && typeof m.role === 'string' && typeof m.content === 'string' && m.content.trim().length > 0);
+}
+
+
+/** Normalize documented native chat output and the existing structured-response envelope.
+ * @param {Row} raw @returns {string | Row}
+ */
+function textResponse(raw) {
+    const legacy = raw.response;
+    if (typeof legacy === "string" && legacy.trim()) return legacy;
+    if (legacy && typeof legacy === "object" && !Array.isArray(legacy)) return /** @type {Row} */ (legacy);
+    const choices = raw.choices;
+    if (Array.isArray(choices) && choices.length) {
+        const message = choices[0]?.message;
+        if (message && typeof message === "object" && typeof message.content === "string" && message.content.trim()) return message.content;
+    }
+    throw new Error("Invalid provider response envelope");
 }

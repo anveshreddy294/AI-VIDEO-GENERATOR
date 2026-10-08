@@ -48,7 +48,7 @@ class Settings:
 
         # --- File validation ---
         self.allowed_extensions: set[str] = set(
-            os.getenv("ALLOWED_EXTENSIONS", "pdf,png,jpg,jpeg,txt,mp4,mov,mkv").split(",")
+            os.getenv("ALLOWED_EXTENSIONS", "pdf,png,jpg,jpeg,webp,txt,mp4,mov,mkv").split(",")
         )
         # JPEG arrives as .jpg or .jpeg — normalize to the set above.
 
@@ -125,11 +125,11 @@ class Settings:
         self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
 
-        # --- Cloud-primary visual routing; local Gemma remains explicit/offline/fallback. ---
+        # --- Cloud-primary visual routing; local vision is explicit/offline only. ---
         self.vision_provider: str = os.getenv("VISION_PROVIDER", "cloudflare").strip().lower()
         self.visual_independent_verifier: str = os.getenv("VISUAL_INDEPENDENT_VERIFIER", "none").strip().lower()
-        if self.visual_independent_verifier not in ("none", "ollama"):
-            raise ValueError("VISUAL_INDEPENDENT_VERIFIER must be none or ollama")
+        if self.visual_independent_verifier not in ("none", "ollama", "cloudflare"):
+            raise ValueError("VISUAL_INDEPENDENT_VERIFIER must be none, ollama or cloudflare")
         self.ollama_vision_model: str = os.getenv("OLLAMA_VISION_MODEL", "gemma3:4b").strip()
         self.vision_model: str = (
             os.getenv("VISION_MODEL")

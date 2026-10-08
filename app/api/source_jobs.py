@@ -14,45 +14,81 @@ from ..services.registry import calculate_sha256
 from ..services.repositories.source_repository import SupabaseSourceRepository
 from ..services.schemas import SourceRecord
 from ..services.visual_router import VisualSignals
+from ..services.ingestion.progress import source_progress, IngestionStage
+from ..services.file_truth import FileTruth
 from pydantic import JsonValue
 from ..services.ingestion.failures import SourceFailure, SourceIngestionFailed, SourceIndexFailed
 
 
+async def complete_source_job(job_id: str, result: dict[str, JsonValue]) -> None:
+    """Publish the terminal job only after the canonical operation has completed."""
+    job = job_manager.get_job(job_id)
+    if job:
+        job.metadata['source_id'] = result['source_id']
+        job.result = result
+        job.error = None
+        job.failure = None
+        job.status = 'completed'
+        job.is_finished = True
+    await job_manager.emit_event(job_id=job_id, stage='source_ready', status='completed',
+        message=('Source and knowledge READY; semantic indexing complete.' if result.get('knowledge_state')=='READY'
+                 else 'Canonical source committed and indexed.'), progress_percent=100, terminal=True,
+        metadata={'source_id': result['source_id']})
+
+
 async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: Path | None,
-                             filename: str, record: SourceRecord | None = None, *, routing_signals: VisualSignals | None = None) -> None:
+                             filename: str, record: SourceRecord | None = None, *, routing_signals: VisualSignals | None = None, file_truth: FileTruth | None = None) -> None:
     task = asyncio.current_task()
     if task:
         job_manager.attach_task(job_id, task)
     worker: asyncio.Task[dict[str, JsonValue]] | None = None
+    loop = asyncio.get_running_loop()
+    def progress(stage: IngestionStage) -> None:
+        messages = {"EXTRACTING_SOURCE": "Extracting source", "PERSISTING_SOURCE": "Persisting verified source", "PREPARING_IMAGE": "Preparing image", "UNDERSTANDING_IMAGE": "Understanding image",
+                    "VALIDATING_VISUAL_EVIDENCE": "Validating visual evidence",
+                    "BUILDING_LEARNING_STRUCTURE": "Building learning structure", "INDEXING_SOURCE": "Indexing source"}
+        asyncio.run_coroutine_threadsafe(job_manager.emit_event(job_id=job_id, stage=stage, status="running",
+            message=messages[stage], progress_percent=5), loop).result(timeout=5)
+
     try:
         async with job_manager.get_semaphore():
             await job_manager.emit_event(job_id=job_id, stage='ingesting_source', status='running',
                 message='Extracting and committing canonical source before vector indexing.', progress_percent=5)
-            if record is not None:
-                worker = asyncio.create_task(asyncio.to_thread(index_committed_source, repo, record))
-            elif path is not None:
-                if routing_signals is None:
-                    worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename))
+            with source_progress(progress):
+                if record is not None:
+                    worker = asyncio.create_task(asyncio.to_thread(index_committed_source, repo, record))
+                elif path is not None:
+                    if routing_signals is None and file_truth is None:
+                        worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename))
+                    else:
+                        worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename, routing_signals=routing_signals, file_truth=file_truth))
                 else:
-                    worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename, routing_signals=routing_signals))
-            else:
-                raise ValueError('Source job has no input')
-            result = await asyncio.shield(worker)
-            job = job_manager.get_job(job_id)
-            if job:
-                job.metadata['source_id'] = result['source_id']
-                job.result = result
-                job.status = 'completed'
-                job.is_finished = True
-            await job_manager.emit_event(job_id=job_id, stage='source_ready', status='completed',
-                message=('Source and knowledge READY; semantic indexing complete.' if result.get('knowledge_state')=='READY'
-                         else 'Canonical source committed and indexed.'), progress_percent=100, terminal=True,
-                metadata={'source_id': result['source_id']})
+                    raise ValueError('Source job has no input')
+            try:
+                result = await asyncio.shield(worker)
+            except asyncio.CancelledError:
+                # A thread cannot be cancelled: settle its actual publication outcome.
+                result = await asyncio.shield(worker)
+            await complete_source_job(job_id, result)
     except asyncio.CancelledError:
         # to_thread work may continue; durable INDEXING/FAILED state can be retried independently.
         await job_manager.fail_job(job_id, 'ingesting_source', 'Source job cancelled; check canonical source state')
         raise
     except Exception as error:
+        # A lost READY acknowledgement is reconciled through the owned Data API.
+        job = job_manager.get_job(job_id)
+        source_id = job.metadata.get("source_id") if job else None
+        if isinstance(source_id, str):
+            try:
+                current = await asyncio.to_thread(repo.get_source, source_id)
+                if current is not None and current.status == "READY":
+                    result = await asyncio.to_thread(index_committed_source, repo, current)
+                    await complete_source_job(job_id, result)
+                    return
+                if current is not None:
+                    await asyncio.to_thread(repo.mark_status, current, "FAILED", "SOURCE_PROCESSING_FAILED")
+            except Exception as reconciliation_error:
+                logging.getLogger(__name__).warning("Source reconciliation unavailable: %s", type(reconciliation_error).__name__)
         failure = (error.failure if isinstance(error, (SourceIngestionFailed, SourceIndexFailed)) else
                    SourceFailure(stage='PERSISTENCE', code='SOURCE_STORAGE_FAILED', retryable=True,
                                  message='Could not persist or index the source.'))
@@ -78,7 +114,7 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
 
 
 async def queue_source_job(background: BackgroundTasks, repo: SupabaseSourceRepository,
-                            path: Path, filename: str, *, routing_signals: VisualSignals | None = None) -> JobCreationResponse:
+                            path: Path, filename: str, *, routing_signals: VisualSignals | None = None, file_truth: FileTruth | None = None) -> JobCreationResponse:
     from .pipeline import JobCreationResponse
     digest = calculate_sha256(path)
     key = f'source:{repo.owner_id}:{filename}:{digest}'
@@ -86,7 +122,7 @@ async def queue_source_job(background: BackgroundTasks, repo: SupabaseSourceRepo
     if created:
         job.metadata.update(source_owner=repo.owner_id, filename=filename,
             source_id="SRC_" + uuid5(NAMESPACE_URL, f"visualai:{repo.owner_id}:{filename}:{digest}").hex)
-        background.add_task(execute_source_job, job.job_id, repo, path, filename, routing_signals=routing_signals)
+        background.add_task(execute_source_job, job.job_id, repo, path, filename, routing_signals=routing_signals, file_truth=file_truth)
     else:
         path.unlink(missing_ok=True)
     return JobCreationResponse(job_id=job.job_id, status=job.status, message='Source-only ingestion queued')

@@ -6,14 +6,13 @@ import worker from '../src/index.js';
 import {VISION_MODELS,MAX_VISUAL_BODY_BYTES} from '../src/visual.js';
 globalThis.crypto ??= webcrypto;
 const image='data:image/png;base64,'+fs.readFileSync(new URL('../../../tests/fixtures/multimodal/printed.png',import.meta.url)).toString('base64');
-const body=(tier='fast')=>({task:'vision_extract',tier,image,prompt:'Return visual-v2 JSON. Visible evidence only.',schema_version:'visual-v2'});
-function setup(handler){const calls=[];return {calls,env:{API_KEY:'test',AI:{run:async(model,input)=>{calls.push({model,input});return handler?handler(model,input):model===VISION_MODELS.fast?{answer:'{"visible_text":["Water crosses a membrane"],"confidence":0.9}'}:{model,choices:[{message:{content:'{"visible_text":["Water crosses a membrane"],"confidence":0.9}'}}]};}}}};}
+const body=(tier='general')=>({task:'vision_extract',tier,image,prompt:'Return visual-v2 JSON. Visible evidence only.',schema_version:'visual-v2'});
+function setup(handler){const calls=[];return {calls,env:{API_KEY:'test',AI:{run:async(model,input)=>{calls.push({model,input});return handler?handler(model,input):{model,choices:[{message:{content:'{"visible_text":["Water crosses a membrane"],"confidence":0.9}'}}]};}}}};}
 const req=(data,headers={})=>new Request('https://worker.test/v1/generate',{method:'POST',headers:{Authorization:'Bearer test','Content-Type':'application/json',...headers},body:JSON.stringify(data)});
-for(const tier of ['fast','general','deep'])test('adapter '+tier,async()=>{
+for(const tier of ['general','deep'])test('adapter '+tier,async()=>{
     const {env,calls}=setup();const response=await worker.fetch(req(body(tier)),env);assert.equal(response.status,200);
     const result=await response.json();assert.equal(result.model,VISION_MODELS[tier]);assert.equal(result.task,'vision_extract');assert.equal(calls.length,1);
-    if(tier==='fast'){assert.equal(calls[0].input.task,'query');assert.equal(calls[0].input.image,image);assert.equal(calls[0].input.reasoning,false);assert.match(calls[0].input.question,/untrusted source DATA/);}
-    else {assert.equal(calls[0].input.max_completion_tokens,2048);assert.match(calls[0].input.messages[0].content,/untrusted source DATA/);assert.equal(calls[0].input.messages[1].content[1].image_url.url,image);assert.equal(calls[0].input.image,undefined);}
+    assert.equal(calls[0].input.max_completion_tokens,2048);assert.match(calls[0].input.messages[0].content,/untrusted source DATA/);assert.equal(calls[0].input.messages[1].content[1].image_url.url,image);assert.equal(calls[0].input.image,undefined);
 });
 for(const changes of [{model:'arbitrary'},{tier:'__proto__'},{tier:'unknown'},{schema_version:'fake'},{purpose:'agent'}])test('rejects '+JSON.stringify(changes),async()=>{const {env,calls}=setup();assert.equal((await worker.fetch(req({...body(),...changes}),env)).status,422);assert.equal(calls.length,0);});
 for(const image of ['https://public.test/private.png','data:image/png;base64,eA==','data:image/png;base64,not_base64','data:image/svg+xml;base64,eA=='])test('reject invalid/private URL '+image,async()=>{const {env,calls}=setup();assert.equal((await worker.fetch(req({...body(),image}),env)).status,400);assert.equal(calls.length,0);});
@@ -30,12 +29,13 @@ for(const task of ['__proto__','constructor','toString'])test('prototype task is
     assert.equal(calls.length,0);
 });
 
-for(const native of [{result:{answer:'{}'},usage:{tokens:1}},{answer:'{}'}])test('recognized Moondream envelope '+JSON.stringify(native),async()=>{
- const {env}=setup(()=>native); const r=await worker.fetch(req(body('fast')),env); assert.equal(r.status,200); const d=await r.json();assert.equal(d.model_requested,VISION_MODELS.fast);assert.equal(d.response,'{}');
+test('unqualified fast tier and triage cannot invoke Workers AI',async()=>{
+ for(const changes of [{tier:'fast'},{purpose:'triage'}]){
+  const {env,calls}=setup();assert.equal((await worker.fetch(req({...body(),...changes}),env)).status,422);assert.equal(calls.length,0);
+ }
+ assert.deepEqual(Object.keys(VISION_MODELS).sort(),['deep','general']);
 });
-for(const native of [{},{result:{}},{result:{answer:7}},{foo:{bar:{answer:'{}'}}},{result:null},{result:[]},{answer:null,result:{answer:'{}'}}])test('reject malformed Moondream '+JSON.stringify(native),async()=>{
- const {env}=setup(()=>native); const r=await worker.fetch(req(body('fast')),env);assert.equal(r.status,422);assert.equal((await r.json()).error,'INVALID_VISUAL_RESPONSE');
-});
+
 for(const identity of [VISION_MODELS.general,VISION_MODELS.general+'-external'])test('exact Gemma identity '+identity,async()=>{
  const {env}=setup(()=>({model:identity,choices:[{message:{content:'{}'}}]}));const r=await worker.fetch(req(body('general')),env);assert.equal(r.status,200);const d=await r.json();assert.equal(d.model_requested,VISION_MODELS.general);assert.equal(d.model,identity);
 });
@@ -62,11 +62,11 @@ test('visual inference timeout classified without changing deadline',async()=>{
  }finally{globalThis.setTimeout=originalSet;globalThis.clearTimeout=originalClear;}
 });
 
-test('only structural Gemma profiles disable supported native thinking',async()=>{
+test('all Gemma visual profiles disable native thinking',async()=>{
  for(const workload of ['flowchart','complex_diagram']){
   const {env,calls}=setup();assert.equal((await worker.fetch(req({...body('general'),workload}),env)).status,200);assert.deepEqual(calls[0].input.chat_template_kwargs,{enable_thinking:false});assert.equal(calls[0].input.max_completion_tokens,2048);
  }
- const {env,calls}=setup();await worker.fetch(req({...body('general'),workload:'printed'}),env);assert.equal(calls[0].input.chat_template_kwargs,undefined);
+ const {env,calls}=setup();await worker.fetch(req({...body('general'),workload:'printed'}),env);assert.deepEqual(calls[0].input.chat_template_kwargs,{enable_thinking:false});
 });
 
 for(const [tier,workload,expected] of [['deep','complex_diagram',55000],['general','complex_diagram',45000],['deep','flowchart',45000],['deep','graph',45000]])test('scoped deadline '+tier+' '+workload,async()=>{
@@ -78,4 +78,15 @@ for(const [tier,workload,expected] of [['deep','complex_diagram',55000],['genera
 
 for(const [code,status,category] of [[3036,429,'AI_QUOTA_EXCEEDED'],[3040,429,'AI_CAPACITY_EXCEEDED'],[3007,502,'AI_PROVIDER_TIMEOUT'],[5035,422,'AI_PROVIDER_ACCESS_REJECTED'],[3023,422,'AI_PROVIDER_ACCESS_REJECTED']])test('safe native provider category '+code,async()=>{
  const {env}=setup(()=>{throw new Error(code+': private image API_KEY SECRET');});const response=await worker.fetch(req(body('deep')),env);assert.equal(response.status,status);const output=await response.json();assert.equal(output.error,category);assert.equal(output.native_code,code);assert(!JSON.stringify(output).includes('SECRET'));
+});
+
+test('review contract is separate from extraction and preserves task identity',async()=>{
+ const {env,calls}=setup();
+ const response=await worker.fetch(req({...body('deep'),task:'vision_verify',purpose:'verify',schema_version:'visual-review-v1'}),env);
+ assert.equal(response.status,200);assert.equal((await response.json()).task,'vision_verify');
+ assert.equal(calls.length,1);assert.equal(calls[0].model,VISION_MODELS.deep);
+ assert.match(calls[0].input.messages[0].content,/Independently check/);
+});
+test('review cannot use extraction schema',async()=>{
+ const {env,calls}=setup();assert.equal((await worker.fetch(req({...body(),task:'vision_verify',purpose:'verify'}),env)).status,422);assert.equal(calls.length,0);
 });

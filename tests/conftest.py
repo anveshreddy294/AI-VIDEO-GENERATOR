@@ -124,3 +124,11 @@ def authenticated_client(supabase_storage_mode: None) -> Iterator[TestClient]:
         app.dependency_overrides.clear()
         app.dependency_overrides.update(overrides)
         runtime.close()
+
+
+@pytest.fixture(autouse=True)
+def explicit_fixture_visual_ground_truth(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Offline fixture expectations are injected only by the test harness."""
+    from app.services.visual_verifier import VisualEvidenceVerifier
+    from tests.visual_fixture_oracle import fixture_checks
+    monkeypatch.setattr(VisualEvidenceVerifier,"_source_checks",fixture_checks)

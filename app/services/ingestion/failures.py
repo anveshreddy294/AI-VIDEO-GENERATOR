@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel
 from ...core.supabase import SupabaseResponseError
 from ...core.processing_errors import ProcessingCode, ProcessingError
+from ..vision import VisionErrorCode, VisionRouteFailureTrace, safe_vision_error_code
 
 Stage = Literal['EXTRACTION', 'VERIFICATION', 'NORMALIZATION', 'STRUCTURING', 'CHUNKING', 'PERSISTENCE', 'INDEXING']
 
@@ -15,6 +16,14 @@ class SourceFailure(BaseModel):
     stage: Stage
     code: str
     reason_code: ProcessingCode | None = None
+    vision_error_code: VisionErrorCode | None = None
+    vision_route_trace: VisionRouteFailureTrace | None = None
+    validation_detail: Literal["REFERENCE", "QUOTE", "ROLE", "LABEL", "EDGE_ENDPOINTS", "EDGE_NAMES", "EDGE_ROLE", "EDGE_DIRECTION", "DEFINITION", "PARENT_REFERENCE", "EMPTY_REQUIRED_LEVEL", "CHILD_SUPPORT"] | None = None
+    verification_status: Literal["VERIFIED", "REJECTED", "UNCERTAIN"] | None = None
+    verification_reasons: list[str] | None = None
+    verified_claim_count: int | None = None
+    uncertain_claim_count: int | None = None
+    rejected_claim_count: int | None = None
     retryable: bool
     message: str
 
@@ -46,9 +55,12 @@ def ingestion_stage(stage: Stage) -> Iterator[None]:
         from ..vision import VisionExtractionFailed
         from ..visual_verifier import VisualVerificationFailed
         if isinstance(error, VisualVerificationFailed):
-            raise SourceIngestionFailed(SourceFailure(stage="VERIFICATION", code=error.code, retryable=False,
+            from ..visual_verifier import verification_summary
+            raise SourceIngestionFailed(SourceFailure(stage="VERIFICATION", code=error.code, retryable=False, **verification_summary(error.result),
                 message="Independent visual verification required." if error.result.status == "UNCERTAIN" else "Visual evidence rejected; publication blocked.")) from None
+        vision_error_code: VisionErrorCode | None = None
         if isinstance(error, VisionExtractionFailed):
+            vision_error_code = safe_vision_error_code(error.error_code)
             code = 'VISION_EXTRACTION_FAILED'
             message = 'Visual evidence extraction failed; no fabricated content was accepted.'
         elif stage == 'STRUCTURING':
@@ -59,5 +71,5 @@ def ingestion_stage(stage: Stage) -> Iterator[None]:
             message = 'Source processing failed during ' + stage.lower() + '.'
         reason_code: ProcessingCode | None = ('MODEL_TIMEOUT' if isinstance(error, TimeoutError) else
                                              error.code if isinstance(error, ProcessingError) else None)
-        raise SourceIngestionFailed(SourceFailure(stage=stage, code=code, reason_code=reason_code, retryable=True,
+        raise SourceIngestionFailed(SourceFailure(stage=stage, code=code, reason_code=reason_code, vision_error_code=vision_error_code, vision_route_trace=error.route_trace if isinstance(error, VisionExtractionFailed) else None, retryable=True,
                                                   message=message)) from None

@@ -898,10 +898,17 @@ async def create_upload_job(
         temp_path.unlink(missing_ok=True)
         raise
 
+    from ..services.file_truth import inspect_upload, UploadValidationError
+    try:
+        truth = inspect_upload(temp_path, filename, file.content_type)
+    except UploadValidationError as error:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(422, {"code": error.code}) from None
+
     if repository is not None:
         from .source_jobs import queue_source_job
         return await queue_source_job(
-            background_tasks, repository, temp_path, filename,
+            background_tasks, repository, temp_path, filename, file_truth=truth,
             routing_signals=signals_for_workload(visual_workload) if visual_workload else None,
         )
 
@@ -1015,6 +1022,15 @@ async def get_job_status(job_id: str, repository: SourceDependency = None) -> di
         raise HTTPException(404, "Job not found")
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
+    if repository is not None and job.status == "failed":
+        source_id = job.metadata.get("source_id")
+        if isinstance(source_id, str):
+            current = await asyncio.to_thread(repository.get_source, source_id)
+            if current is not None and current.status == "READY":
+                from .source_jobs import complete_source_job
+                from ..services.ingestion.source_ingestion import index_committed_source
+                result = await asyncio.to_thread(index_committed_source, repository, current)
+                await complete_source_job(job_id, result)
     return job.model_dump()
 
 

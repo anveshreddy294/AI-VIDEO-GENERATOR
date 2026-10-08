@@ -106,6 +106,12 @@ class LearningSessionRepository:
             raise SessionStorageUnavailable("SESSION_STORAGE_UNAVAILABLE") from None
 
     def _decode(self, value: JsonValue) -> LearningSession:
+        # The Phase 10 CAS revision is internal storage metadata, not session scope.
+        if isinstance(value, dict) and "mastery_revision" in value:
+            revision = value["mastery_revision"]
+            if type(revision) is not int or revision < 0:
+                raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
+            value = {key: item for key, item in value.items() if key != "mastery_revision"}
         try:
             row = LearningSession.model_validate_json(json.dumps(value))
         except ValidationError:

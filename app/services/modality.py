@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Literal
 
 Modality = Literal['txt', 'pdf', 'image', 'video']
-IMAGE_EXTENSIONS: set[str] = {'png', 'jpg', 'jpeg'}
+IMAGE_EXTENSIONS: set[str] = {'png', 'jpg', 'jpeg', 'webp'}
 VIDEO_EXTENSIONS: set[str] = {'mp4', 'mov', 'mkv'}
 
 

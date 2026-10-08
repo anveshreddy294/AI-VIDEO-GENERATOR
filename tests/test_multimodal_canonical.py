@@ -279,7 +279,7 @@ def test_visual_database_failure_prevents_vectors(
 
     index = MagicMock()
     monkeypatch.setattr(vector_store, "upsert_chunks", index)
-    with pytest.raises(SupabaseError):
+    with pytest.raises(SourceIngestionFailed):
         ingest_source(repo, path, "printed.png")
     index.assert_not_called()
     assert not remote.units
@@ -454,3 +454,51 @@ def test_streamed_provider_response_budget(monkeypatch: pytest.MonkeyPatch) -> N
             )
         )
     assert caught.value.error_code == vision.VISION_INVALID_RESPONSE
+
+
+def test_authenticated_image_http_reaches_ready_and_deduplicates(
+    context: Context, provider: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.api import sources, pipeline, source_jobs
+    from app.services.pipeline_tracker import JobManager
+    from app.services import structurer
+    from app.db import vector_store
+    remote, repo, _ = context
+    manager = JobManager()
+    monkeypatch.setattr(pipeline, "job_manager", manager)
+    monkeypatch.setattr(source_jobs, "job_manager", manager)
+    monkeypatch.setattr(sources, "get_runtime", lambda: repo.runtime)
+    monkeypatch.setattr(sources, "get_current_user", lambda token, runtime: repo.user)
+    indexed: list[RichChunk] = []
+    def index(chunks: list[RichChunk]) -> int:
+        assert remote.versions[0]["knowledge_state"] == "READY"
+        indexed.extend(chunks)
+        return len(chunks)
+    def proposal(prompt: str) -> str:
+        rows = json.loads(prompt.split("SOURCE_DATA=", 1)[1].split("\nREPAIR:", 1)[0])
+        anchor = next(row for row in rows if "Osmosis is water" in row["text"])
+        evidence = [{"anchor_id": anchor["anchor_id"]}]
+        return json.dumps({
+            "topics": [{"key": "t", "title": "Osmosis", "evidence": evidence}],
+            "subtopics": [{"key": "s", "topic_key": "t", "title": "Osmosis", "evidence": evidence}],
+            "concepts": [{"key": "c", "subtopic_key": "s", "name": "Osmosis", "definition": TEXT, "evidence": evidence}],
+            "prerequisites": [],
+        })
+    monkeypatch.setattr(vector_store, "upsert_chunks", index)
+    monkeypatch.setattr(structurer, "generate_educational_proposal", proposal)
+    client = TestClient(app)
+    headers = {"Authorization": "Bearer test-token"}
+    for _ in range(2):
+        upload = client.post("/pipeline/upload-and-assess", headers=headers,
+            files={"file": ("printed.png", (FIXTURES / "printed.png").read_bytes(), "image/png")})
+        assert upload.status_code == 200
+        job = client.get("/pipeline/jobs/" + upload.json()["job_id"], headers=headers).json()
+        assert job["state"] == "SUCCEEDED" and job["status"] == "completed"
+        assert job["result"]["status"] == job["result"]["knowledge_state"] == "READY"
+        assert job["result"]["chunks_synced"] > 0
+    assert remote.sources[0]["status"] == remote.versions[0]["knowledge_state"] == "READY"
+    assert len(remote.sources) == len(remote.versions) == len(remote.knowledge["concepts"]) == 1
+    assert remote.knowledge["topics"] and remote.knowledge["subtopics"] and indexed
+    assert provider.call_count == 1
