@@ -20,6 +20,8 @@ from .knowledge_service import KnowledgeService
 from .repositories.knowledge_repository import KnowledgeRepository, KnowledgeError
 from .security.source_scope import SourceScope
 
+from .qa.question_validation import LearnerQuestion, MAX_FOLLOWUP_QUESTIONS
+
 SESSION_LIST_LIMIT = 50
 MAX_SESSION_CONCEPTS = 64
 if TYPE_CHECKING:
@@ -61,7 +63,10 @@ class SessionView(Contract):
 
 class SessionQARequest(Contract):
     session_id: UUID
-    question: Annotated[str, Field(min_length=1, max_length=4000)]
+    question: LearnerQuestion
+    previous_questions: Annotated[
+        list[LearnerQuestion], Field(max_length=MAX_FOLLOWUP_QUESTIONS)
+    ] = Field(default_factory=list)
     source_id: Identifier | None = None
     source_version: Annotated[int, Field(ge=1, le=2**31 - 1)] | None = None
     topic_id: Identifier | None = None
@@ -321,6 +326,7 @@ class LearningSessionService:
             source_id=row.source_id,
             source_version=row.source_version,
             question=request.question,
+            previous_questions=request.previous_questions,
             topic_id=row.topic_id,
             subtopic_id=row.subtopic_id,
             concept_ids=concepts,

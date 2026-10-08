@@ -32,6 +32,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "test_evidence_anchors",
     ),
     "RETRIEVAL_RAG": (
+        "test_session_grounded_qa",
         "test_canonical_retrieval",
         "test_secure_rag_qa",
         "test_rag_semantics_and_recovery",
@@ -79,7 +80,12 @@ RULES: dict[str, tuple[str, ...]] = {
         "app/services/evidence_anchors.py",
         "app/services/ingestion/knowledge_publication.py",
     ),
-    "RETRIEVAL_RAG": ("app/services/retrieval.py", "app/services/qa/*"),
+    "RETRIEVAL_RAG": (
+        "app/services/retrieval.py",
+        "app/services/qa/*",
+        "app/api/qa.py",
+        "app/services/learning_session.py",
+    ),
     "SOURCE_INGESTION": (
         "app/services/ingestion/*",
         "app/services/repositories/source_repository.py",

@@ -6,6 +6,7 @@ Endpoints:
 """
 
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, Depends
@@ -26,7 +27,6 @@ from ..services.retrieval import (
     EvidenceBundle,
     IndexUnavailable,
 )
-from ..services.qa.canonical_answer import CanonicalQARequest, generate_canonical_answer
 from ..services.learning_session import (
     SessionQARequest,
     LearningSessionService,
@@ -138,30 +138,30 @@ async def _canonical_answer(request: Request) -> QAResponse:
     context = await _context(request)
     try:
         raw = await request.body()
-        from pydantic import TypeAdapter, JsonValue
-
-        value = TypeAdapter(dict[str, JsonValue]).validate_json(raw)
-        if "session_id" in value:
-            session_request = SessionQARequest.model_validate_json(raw)
-            body = await run_in_threadpool(
-                LearningSessionService(context).qa_request, session_request
-            )
-        else:
-            body = CanonicalQARequest.model_validate_json(raw)
+        resolution_started = time.perf_counter()
+        session_request = SessionQARequest.model_validate_json(raw)
+        body = await run_in_threadpool(
+            LearningSessionService(context).qa_request, session_request
+        )
     except (ValidationError, ValueError):
         raise HTTPException(
             422,
             {
                 "code": "INVALID_SCOPE",
-                "message": "Explicit source version and valid selectors required",
+                "message": "An owned active learning session and valid question are required",
             },
         ) from None
     except KnowledgeError as error:
         raise _safe_error(error) from None
     except SessionStorageUnavailable:
         raise HTTPException(503, {"code": "SESSION_STORAGE_UNAVAILABLE"}) from None
+    resolution_ms = (time.perf_counter() - resolution_started) * 1000
     try:
-        return await generate_grounded_answer(body, context=context)
+        response = await generate_grounded_answer(body, context=context)
+        logger.info(
+            "qa_session_resolution", extra={"session_resolution_ms": resolution_ms}
+        )
+        return response
     except KnowledgeError as error:
         raise _safe_error(error) from None
     except IndexUnavailable as error:

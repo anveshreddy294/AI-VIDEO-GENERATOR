@@ -65,10 +65,119 @@
         if (typeof metadata.sequence_index === 'number') return 'Content ' + (metadata.sequence_index + 1);
         return 'Source evidence';
     }
-    if (typeof module !== 'undefined') module.exports = {readiness, safeError, qaPayload, location, row, rows};
+    const MAX_QUESTION_CHARS = 4000;
+    const MAX_PREVIOUS_QUESTIONS = 3;
+    const MAX_VISIBLE_TURNS = 6;
+    const MAX_ANSWER_CHARS = 20000;
+    const MAX_CITATIONS = 25;
+    const MAX_CITATION_LOCATION_CHARS = 2000;
+    const MAX_UNANSWERED_PARTS = 5;
+    const INSUFFICIENT_MESSAGE = "I couldn't find enough evidence in your selected learning material to answer that reliably.";
+    /** @param {Document} doc @param {(path:string,options?:RequestInit)=>Promise<Response>} fetchProtected */
+    function createAskController(doc, fetchProtected) {
+        /** @param {string} id @returns {HTMLElement} */
+        function element(id) {
+            const found = doc.getElementById(id);
+            if (!found) throw new Error('Learning screen unavailable.');
+            return found;
+        }
+        const output = element('answer');
+        const status = element('ask-status');
+        const button = /** @type {HTMLButtonElement} */ (element('ask-button'));
+        const input = /** @type {HTMLTextAreaElement} */ (element('question'));
+        /** @type {Row|null} */ let scope = null;
+        /** @type {string[]} */ let previous = [];
+        /** @type {HTMLElement[]} */ let turns = [];
+        let revision = 0;
+        let pending = false;
+        /** @param {Row|null} value */
+        function setSession(value) {
+            revision++; pending = false; previous = []; turns = [];
+            scope = value && value.state === 'ACTIVE' ? {...value} : null;
+            output.replaceChildren(); element('citations').replaceChildren(); input.value = '';
+            input.disabled = !scope; button.disabled = !scope;
+            status.textContent = scope ? 'Ask about your selected learning material.' : 'Choose an active learning session first.';
+        }
+        /** @param {string} tag @param {string} value @param {string} [className] */
+        function create(tag, value, className = '') {
+            const node = doc.createElement(tag); node.textContent = value; node.className = className; return node;
+        }
+        /** @param {Row} value @param {string} question @param {Row} current */
+        function render(value, question, current) {
+            const evidence = value.refusal === true ? 'INSUFFICIENT' : value.evidence_status;
+            if (!['SUFFICIENT','PARTIAL','INSUFFICIENT'].includes(/** @type {string} */ (evidence))) throw new Error('Invalid answer status');
+            const turn = create('article', '', 'ask-turn');
+            turn.append(create('h3','You'),create('p',question),create('h3','VisualAI'));
+            const label = evidence === 'PARTIAL' ? 'Some parts could not be answered from the selected material.' : evidence === 'SUFFICIENT' ? 'Grounded in your selected material' : 'Not enough evidence in your selected material';
+            turn.append(create('p',label,'ask-evidence-status'));
+            if (evidence === 'INSUFFICIENT') {
+                turn.append(create('p',INSUFFICIENT_MESSAGE)); return turn;
+            }
+            const answerText = text(value,'answer');
+            if (!answerText.trim() || answerText.length > MAX_ANSWER_CHARS) throw new Error('Invalid answer');
+            const citations = rows(value.citations);
+            if (!citations.length || citations.length > MAX_CITATIONS) throw new Error('Invalid citations');
+            const list = create('ul','','ask-citations');
+            for (const c of citations) {
+                if (c.source_version !== current.source_version || c.source_id !== current.source_id || c.verified !== true) throw new Error('Invalid citation scope');
+                const label = text(c,'location'); const quote = text(c,'quote');
+                if (!label.trim() || label.length > MAX_CITATION_LOCATION_CHARS || quote.length > MAX_QUESTION_CHARS) throw new Error('Invalid citation');
+                list.append(create('li',label + ' · Version ' + c.source_version + ' — ' + quote));
+            }
+            turn.append(create('p',answerText,'ask-answer'),list);
+            if (evidence === 'PARTIAL') {
+                const parts = strings(value.unanswered_parts);
+                if (parts.length > MAX_UNANSWERED_PARTS || parts.some(part => part.length > MAX_QUESTION_CHARS)) throw new Error('Invalid limitations');
+                if (parts.length) {
+                    const limits = create('ul','','ask-limitations');
+                    for (const part of parts) limits.append(create('li',part));
+                    turn.append(create('h4','Still unanswered'),limits);
+                }
+            }
+            return turn;
+        }
+        /** @param {string} [concept] */
+        async function ask(concept) {
+            if (!scope) { status.textContent = 'Choose an active learning session first.'; return; }
+            if (pending) return;
+            const question = input.value.trim();
+            if (!question || question.length > MAX_QUESTION_CHARS) {
+                status.textContent = !question ? 'Enter a question first.' : 'Keep your question within 4,000 characters.'; return;
+            }
+            const current = scope; const ticket = revision;
+            const body = {...qaPayload(text(current,'session_id'),question,concept), previous_questions: previous.slice(-MAX_PREVIOUS_QUESTIONS)};
+            pending = true; button.disabled = true;
+            status.textContent = 'Searching your learning material…';
+            try {
+                const response = await fetchProtected('/qa/answer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+                if (ticket !== revision) return;
+                const value = await response.json();
+                if (ticket !== revision) return;
+                if (!response.ok) {
+                    status.textContent = response.status === 401 ? 'Please sign in again to continue.' : response.status === 503 ? 'Assistant is temporarily unavailable.' : response.status === 422 ? 'Your question or selected learning scope is not valid. Check it and try again.' : safeError(response.status,value);
+                    return;
+                }
+                const turn = render(row(value),question,current);
+                turns = [...turns,turn].slice(-MAX_VISIBLE_TURNS); output.replaceChildren(...turns);
+                previous = [...previous,question].slice(-MAX_PREVIOUS_QUESTIONS);
+                status.textContent = ''; input.value = '';
+            } catch (error) {
+                if (ticket === revision) {
+                    const expired = error instanceof Error && ['Sign in to continue.', 'Your session expired. Please sign in again.'].includes(error.message);
+                    status.textContent = expired ? 'Please sign in again to continue.' : 'Assistant is temporarily unavailable.';
+                }
+            } finally {
+                if (ticket === revision) { pending = false; button.disabled = !scope; }
+            }
+        }
+        setSession(null);
+        return {setSession,ask};
+    }
+    if (typeof module !== 'undefined') module.exports = {readiness, safeError, qaPayload, location, row, rows, createAskController};
     if (typeof document === 'undefined') return;
     const auth = /** @type {{protectedFetch:(path:string,options?:RequestInit)=>Promise<Response>, logout:()=>Promise<void>}} */ (Reflect.get(window, 'VisualAIAuth'));
     const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
+    const askUI = createAskController(document, (path,options) => auth.protectedFetch(path,options));
     /** @param {string} id @returns {HTMLElement} */
     function el(id) {
         const element = document.getElementById(id);
@@ -121,7 +230,7 @@
         return {source_id:text(value,'source_id'), filename:text(value,'filename'),status:text(value,'status'),version:/** @type {number} */ (value.version)};
     }
     async function loadSources() {
-        const ticket = ++navigation; show('sources'); session = null; notesUI.setSession(null);
+        const ticket = ++navigation; show('sources'); session = null; notesUI.setSession(null); askUI.setSession(null);
         el('source-cards').replaceChildren(node('p','Loading your material…','muted'));
         sources = rows(row(await api('/sources')).sources).map(decodeSource);
         if (ticket !== navigation) return;
@@ -150,7 +259,7 @@
     }
     /** @param {Source} item @param {number} version */
     async function openSource(item, version) {
-        const ticket = ++navigation; source = item; session = null; notesUI.setSession(null); knowledge = null; show('explorer');
+        const ticket = ++navigation; source = item; session = null; notesUI.setSession(null); askUI.setSession(null); knowledge = null; show('explorer');
         el('explorer-title').textContent = item.filename;
         el('source-location').textContent = 'YOUR MATERIAL · VERSION ' + version;
         el('readiness').textContent = 'Loading your knowledge map…'; el('topic-cards').replaceChildren();
@@ -190,7 +299,7 @@
     }
     /** @param {string} id @param {boolean} resume */
     async function openSession(id,resume) {
-        const ticket = ++navigation; show('session'); session = null; notesUI.setSession(null);
+        const ticket = ++navigation; show('session'); session = null; notesUI.setSession(null); askUI.setSession(null);
         el('session-title').textContent = 'Loading your focused session…'; el('concept-cards').replaceChildren();
         if (resume) await post('/learning-sessions/' + encodeURIComponent(id) + '/resume');
         const view = row(await api('/learning-sessions/' + encodeURIComponent(id)));
@@ -199,7 +308,7 @@
         const loadedSource = sources.find(s => s.source_id === loadedSession.source_id) || decodeSource(row(await api('/sources/' + encodeURIComponent(text(loadedSession,'source_id')))));
         if (ticket !== navigation) return;
         session = loadedSession; source = loadedSource;
-        notesUI.setSession(session);
+        notesUI.setSession(session); askUI.setSession(session);
         const version = session.source_version;
         el('session-source').textContent = source.filename + ' · Version ' + version;
         el('session-title').textContent = text(view,'topic_title');
@@ -219,23 +328,11 @@
                 await ask(text(c,'concept_id'));
             }); explain.disabled = session.state !== 'ACTIVE'; block.append(explain); el('concept-cards').append(block);
         }
-        el('answer').textContent = ''; el('citations').replaceChildren();
         history.replaceState(null,'','/dashboard?session=' + encodeURIComponent(id));
     }
     /** @param {string} [concept] */
     async function ask(concept) {
-        if (!session || session.state !== 'ACTIVE') throw new Error('Choose an active learning session first.');
-        const id = text(session,'session_id'); const ticket = navigation;
-        const question = /** @type {HTMLTextAreaElement} */ (el('question')).value.trim();
-        if (!question) throw new Error('Enter a question first.');
-        const b = /** @type {HTMLButtonElement} */ (el('ask-button')); b.disabled = true;
-        el('answer').textContent = 'Finding evidence in your selected topic…'; el('citations').replaceChildren();
-        try {
-            const answer = row(await post('/qa/answer',qaPayload(id,question,concept)));
-            if (ticket !== navigation || !session || session.session_id !== id) return;
-            el('answer').textContent = text(answer,'answer');
-            for (const citation of rows(answer.citations)) el('citations').append(node('li',text(citation,'location') + ' — ' + text(citation,'quote')));
-        } finally { if (ticket === navigation) b.disabled = false; }
+        await askUI.ask(concept);
     }
     /** @param {'complete'|'abandon'} action */
     async function transition(action) {

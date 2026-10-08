@@ -355,12 +355,22 @@ class QARequest(BaseModel):
     top_k: int = 5
 
 
+class GroundedQAClaim(BaseModel):
+    """Accepted factual claim and its canonical evidence association."""
+
+    text: str
+    evidence_ids: list[str]
+
+
 class QAResponse(BaseModel):
     answer: str
     citations: list[Citation] = Field(default_factory=list)
     grounding_confidence: float = 1.0
     refusal: bool = False
     refusal_reason: str | None = None
+    evidence_status: Literal["SUFFICIENT", "PARTIAL", "INSUFFICIENT"] | None = None
+    supported_claims: list[GroundedQAClaim] = Field(default_factory=list)
+    unanswered_parts: list[str] = Field(default_factory=list)
     active_scene: dict[str, Any] | None = None
     trace_id: str = Field(default_factory=lambda: f"trace_{uuid4().hex[:12]}")
     diagnostics: StageDiagnostics | None = None

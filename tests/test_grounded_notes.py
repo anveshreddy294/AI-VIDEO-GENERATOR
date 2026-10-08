@@ -159,6 +159,11 @@ def test_owned_active_summary_points_and_citations(
     request = setup[1].retrieve.call_args.args[1]
     assert request.source_version == 7 and request.purpose == "notes"
     assert request.include_prerequisites is False
+    assert "previous_questions" not in request.model_dump()
+    assert request.source_id == setup[3].scope.source_id
+    assert request.topic_id == setup[3].topic_id
+    assert request.subtopic_id == setup[3].subtopic_id
+    assert request.concept_ids == ["c1", "c2"]
     assert setup[2].generate.call_args.args[0].task == "notes"
 
 

@@ -263,9 +263,13 @@ class GroundedNotesService:
         ) != len(request.selected_concept_ids):
             raise KnowledgeError("INVALID_SCOPE")
         retrieval_request = RetrievalRequest(
-            **narrowed.model_dump(
-                exclude={"purpose", "query", "max_items", "include_prerequisites"}
-            ),
+            source_id=narrowed.source_id,
+            source_version=narrowed.source_version,
+            topic_id=narrowed.topic_id,
+            subtopic_id=narrowed.subtopic_id,
+            concept_ids=narrowed.concept_ids,
+            content_ids=narrowed.content_ids,
+            retrieval_mode=narrowed.retrieval_mode,
             query=narrowed.query,
             purpose="notes",
             max_items=DETAIL_ITEMS[request.detail_level],

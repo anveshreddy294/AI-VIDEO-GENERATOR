@@ -25,8 +25,8 @@
 <button disabled title="Coming in a future phase">Visualize · coming next</button></div>
 <div class="learning-columns"><section class="card" aria-labelledby="ask-title"><h2 id="ask-title">Ask about this topic</h2>
 <p class="muted">Answers stay within this session’s selected material.</p>
-<form id="ask-form"><label for="question">Your question</label><textarea id="question" rows="3" maxlength="4000" required placeholder="What would you like to understand?"></textarea>
-<button id="ask-button" type="submit" class="primary">Ask VisualAI</button></form><div id="answer" role="status" aria-live="polite"></div><ul id="citations"></ul></section>
+<form id="ask-form"><label for="question">Your question</label><textarea disabled id="question" rows="3" maxlength="4000" required placeholder="What would you like to understand?"></textarea>
+<button disabled id="ask-button" type="submit" class="primary">Ask VisualAI</button></form><p id="ask-status" role="status" aria-live="polite"></p><div id="answer" role="log" aria-live="polite" aria-label="Current session conversation"></div><ul id="citations"></ul></section>
 <section id="learn-view" class="card" aria-labelledby="learn-title"><h2 id="learn-title">Learn the essentials</h2><p class="muted">Concepts and evidence from your material. No extra generation needed.</p><div id="concept-cards"></div></section></div>
 <section id="notes-panel" class="card notes-panel" hidden aria-labelledby="notes-title">
 <h2 id="notes-title">Notes</h2><div class="notes-controls"><div><label for="notes-detail">Detail level</label>
