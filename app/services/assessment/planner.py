@@ -10,6 +10,10 @@ Implements:
 """
 
 import random
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..retrieval import EvidenceBundle
+    from .schemas import AssessmentPlan
 from typing import Literal
 
 from ...core.config import settings
@@ -215,3 +219,22 @@ def _safe_sample(pool: list, n: int) -> list:
     if not pool:
         return []
     return random.sample(pool, min(n, len(pool)))
+
+
+class AssessmentPlanner:
+    """Deterministic canonical coverage; never add prerequisites outside the session."""
+
+    def plan(self, concepts: list[ConceptNode], evidence: "EvidenceBundle", count: int,
+             preference: Literal["foundational", "intermediate", "advanced"] | None = None) -> "AssessmentPlan":
+        from .schemas import AssessmentPlan
+        if not 1 <= count <= 20:
+            raise ValueError("INVALID_QUESTION_COUNT")
+        covered = {cid for item in evidence.items if item.excerpt.strip() for cid in item.concept_ids}
+        available = sorted((c for c in concepts if c.concept_id in covered), key=lambda c: c.concept_id)
+        selected = available[:count]
+        distribution: dict[str, int] = {}
+        for concept in selected:
+            difficulty = preference or classify_difficulty(concept)
+            distribution[difficulty] = distribution.get(difficulty, 0) + 1
+        return AssessmentPlan(concept_targets=[c.concept_id for c in selected],
+                              question_count=len(selected), difficulty_distribution=distribution)

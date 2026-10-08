@@ -10,9 +10,9 @@ Defines the data structures for:
 
 from datetime import datetime, timezone
 from typing import Annotated, Any, Literal
-from uuid import uuid4
+from uuid import UUID, uuid4
 
-from pydantic import BaseModel, BeforeValidator, Field, model_validator
+from pydantic import BaseModel, BeforeValidator, Field, model_validator, ConfigDict, field_validator
 
 from ..schemas import ConceptNode, KnowledgeGraph, StageDiagnostics
 
@@ -62,6 +62,8 @@ class Question(BaseModel):
     page_end: int | None = Field(default=None, description="Ending page number in source document")
     timestamp_start: float | str | None = Field(default=None, description="Video start timestamp if applicable")
     timestamp_end: float | str | None = Field(default=None, description="Video end timestamp if applicable")
+    source_version: int | None = None
+    evidence_ids: list[str] = Field(default_factory=list)
     source_id: str = Field(description="The source document this question came from")
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
     variant_type: str | None = Field(default=None, description="Pedagogical variant angle: definition, relationship, application, comparison, misconception")
@@ -72,6 +74,7 @@ class SafeQuestion(BaseModel):
     """Frontend-ready question payload: correct_index, correct_answer & explanation are STRIPPED.
     Source provenance (page numbers, chunk IDs) is retained so student can trace back to source.
     """
+    source_version: int | None = None
     question_id: str
     concept_id: str
     concept_name: str
@@ -100,6 +103,9 @@ class ConceptSnapshot(BaseModel):
 class AssessmentSession(BaseModel):
     """A quiz session for a student on a specific source."""
     session_id: str = Field(default_factory=lambda: f"SESS_{uuid4().hex[:12]}")
+    learning_session_id: UUID | None = None
+    source_version: int | None = None
+    request_hash: str | None = None
     student_id: str
     source_id: str
     questions: list[Question] = Field(default_factory=list)
@@ -350,7 +356,9 @@ class AssessmentStartRequest(BaseModel):
 
 class AssessmentStartResponse(BaseModel):
     """Authoritative response schema for POST /assessment/start."""
-    status: Literal["READY", "FAILED"] = "READY"
+    status: Literal["READY", "FAILED", "SUBMITTED"] = "READY"
+    learning_session_id: UUID | None = None
+    source_version: int | None = None
     session_id: str
     student_id: str
     source_id: str
@@ -362,3 +370,56 @@ class AssessmentStartResponse(BaseModel):
     requested_questions: int = Field(description="The authoritative target question count requested")
     generated_questions: int = Field(description="Actual number of distinct grounded questions generated")
     shortfall: int = Field(default=0, description="Difference between requested and generated questions (max(0, requested - generated))")
+
+
+class SessionAssessmentRequest(BaseModel):
+    """Only idempotency, count, difficulty and narrowing are caller-controlled."""
+    model_config = ConfigDict(extra="forbid", strict=True)
+    request_id: UUID
+    question_count: int = Field(default=3, ge=1, le=20)
+    concept_ids: list[str] | None = Field(default=None, min_length=1, max_length=64)
+    difficulty: Literal["foundational", "intermediate", "advanced"] | None = None
+
+
+class AssessmentPlan(BaseModel):
+    concept_targets: list[str]
+    question_count: int
+    difficulty_distribution: dict[str, int]
+
+
+class ConceptPerformance(BaseModel):
+    concept_id: str
+    attempted: int
+    correct: int
+    incorrect: int
+    percentage: float
+
+
+class AssessmentPerformance(BaseModel):
+    """Performance only; contains neither answer keys nor mastery state."""
+    session_id: str
+    learning_session_id: UUID
+    source_id: str
+    source_version: int
+    question_results: list[dict[str, str | int | bool]]
+    concept_results: list[ConceptPerformance]
+    overall_score: float
+
+
+class CanonicalSubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    answers: list[AnswerSubmission] = Field(min_length=1, max_length=20)
+
+    @field_validator("answers", mode="before")
+    @classmethod
+    def strict_answers(cls, value: object) -> object:
+        """Canonical submissions cannot coerce booleans, strings or extra metadata."""
+        if not isinstance(value, list):
+            raise ValueError("INVALID_ANSWERS")
+        for answer in value:
+            if isinstance(answer, AnswerSubmission):
+                continue
+            if (not isinstance(answer, dict) or set(answer) != {"question_id", "selected_index"}
+                or not isinstance(answer["question_id"],str) or type(answer["selected_index"]) is not int):
+                raise ValueError("INVALID_ANSWERS")
+        return value

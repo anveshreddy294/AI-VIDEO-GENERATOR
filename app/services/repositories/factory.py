@@ -40,8 +40,12 @@ def get_source_repository(*, user: AuthenticatedUser | None = None, token: str |
     return FileSourceRepository()
 
 
-def get_assessment_repository() -> AssessmentRepository:
-    """Return the active assessment repository based on database provider configuration."""
+def get_assessment_repository(*, context: KnowledgeRepository | None = None) -> AssessmentRepository:
+    """Canonical mode requires a verified context and cannot fall back to disk."""
+    if settings.database_provider == "supabase":
+        if context is None:
+            raise SupabaseConfigurationError("Verified assessment context required")
+        return SupabaseAssessmentRepository(context)
     require_local_learning_storage()
     return FileAssessmentRepository()
 

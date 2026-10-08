@@ -15,6 +15,7 @@ from collections.abc import Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS: dict[str, tuple[str, ...]] = {
+    "ASSESSMENT": ("test_canonical_assessment", "test_canonical_assessment_database"),
     "NOTES": ("test_grounded_notes", "test_canonical_retrieval"),
     "TOOLING": ("test_verify_changed",),
     "PROVIDERS": ("test_reasoning_provider", "test_embedding_configuration"),
@@ -62,6 +63,8 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
 }
 RULES: dict[str, tuple[str, ...]] = {
+    "ASSESSMENT": ("app/services/assessment/*", "app/services/repositories/supabase_repository.py",
+                   "app/services/repositories/factory.py", "migrations/*session_assessments.sql"),
     "NOTES": ("app/services/grounded_notes.py", "app/api/learning_sessions.py"),
     "TOOLING": ("scripts/verify_changed.py",),
     "PROVIDERS": ("app/core/reasoning.py", "app/core/config.py"),

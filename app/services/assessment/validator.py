@@ -4,6 +4,9 @@ Ensures every question is structurally perfect before dispatching to the student
 """
 
 import re
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..retrieval import EvidenceBundle
 
 from .schemas import Question
 
@@ -155,3 +158,29 @@ def is_duplicate(
             return True
 
     return False
+
+
+def validate_canonical_question(question: Question, bundle: "EvidenceBundle", allowed: list[str], existing: list[Question]) -> None:
+    """Strict verbatim cloze contract; vocabulary overlap alone is never entailment."""
+    from ..qa.canonical_answer import AnswerProposal, SupportedClaim, validate_proposal
+    from ..repositories.knowledge_repository import KnowledgeError
+    evidence = {item.evidence_id: item for item in bundle.items}
+    valid, _ = validate_question(question, bundle.scope.source_id)
+    if not valid or question.source_version != bundle.scope.source_version or question.concept_id not in allowed:
+        raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
+    if not question.evidence_ids or len(set(question.evidence_ids)) != len(question.evidence_ids):
+        raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
+    if any(eid not in evidence or question.concept_id not in evidence[eid].concept_ids for eid in question.evidence_ids):
+        raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
+    try:
+        validate_proposal(AnswerProposal(refusal=False, claims=[SupportedClaim(text=question.evidence_quote, evidence_ids=question.evidence_ids)]), bundle)
+    except ValueError:
+        raise KnowledgeError("INVALID_PROVIDER_RESPONSE") from None
+    correct = next(option.text for option in question.options if option.index == question.correct_index)
+    quote = question.evidence_quote
+    expected = "Complete this source statement verbatim: " + quote.replace(correct, "____", 1)
+    if (quote.count(correct) != 1 or question.stem != expected or correct.casefold() in question.stem.casefold()
+        or correct.casefold() in question.concept_name.casefold()
+        or sum(option.text in quote for option in question.options) != 1
+        or is_duplicate(question, existing)):
+        raise KnowledgeError("INVALID_PROVIDER_RESPONSE")

@@ -136,3 +136,56 @@ async def generate_session_notes(session_id: UUID, request: Request) -> Grounded
         raise HTTPException(
             422 if error.code == "INVALID_NOTES" else 409, {"code": error.code}
         ) from None
+
+
+from typing import Literal
+from ..core.reasoning import ProviderFailure
+from ..services.assessment.schemas import SessionAssessmentRequest, CanonicalSubmission, AssessmentStartResponse, AssessmentPerformance
+from ..services.assessment.session_assessment import SessionAssessmentService, AssessmentInsufficientEvidence
+
+
+async def _assessment_action(request: Request, learning_session_id: UUID,
+                             action: Literal["start", "get", "submit", "result"],
+                             assessment_id: str = "") -> AssessmentStartResponse | AssessmentPerformance:
+    context = await _context(request)
+    service = SessionAssessmentService(context)
+    try:
+        if action == "start":
+            body = SessionAssessmentRequest.model_validate_json(await request.body())
+            return await run_in_threadpool(service.start,learning_session_id,body)
+        if action == "submit":
+            submission = CanonicalSubmission.model_validate_json(await request.body())
+            return await run_in_threadpool(service.submit,learning_session_id,assessment_id,submission)
+        if action == "result":
+            return await run_in_threadpool(service.result,learning_session_id,assessment_id)
+        return await run_in_threadpool(service.get,learning_session_id,assessment_id)
+    except ValidationError:
+        raise HTTPException(422,{"code":"INVALID_ASSESSMENT_REQUEST"}) from None
+    except AssessmentInsufficientEvidence:
+        raise HTTPException(409,{"code":"INSUFFICIENT_EVIDENCE"}) from None
+    except KnowledgeError as error:
+        raise _safe_error(error) from None
+    except SessionStorageUnavailable:
+        raise storage_error() from None
+    except ProviderFailure:
+        raise HTTPException(503,{"code":"ASSESSMENT_PROVIDER_UNAVAILABLE"}) from None
+
+
+@router.post("/{session_id}/assessment", response_model=AssessmentStartResponse)
+async def start_session_assessment(session_id: UUID, request: Request) -> AssessmentStartResponse | AssessmentPerformance:
+    return await _assessment_action(request,session_id,"start")
+
+
+@router.get("/{session_id}/assessments/{assessment_id}",response_model=AssessmentStartResponse)
+async def get_session_assessment(session_id: UUID, assessment_id: str, request: Request) -> AssessmentStartResponse | AssessmentPerformance:
+    return await _assessment_action(request,session_id,"get",assessment_id)
+
+
+@router.post("/{session_id}/assessments/{assessment_id}/submit",response_model=AssessmentPerformance)
+async def submit_session_assessment(session_id: UUID, assessment_id: str, request: Request) -> AssessmentStartResponse | AssessmentPerformance:
+    return await _assessment_action(request,session_id,"submit",assessment_id)
+
+
+@router.get("/{session_id}/assessments/{assessment_id}/result",response_model=AssessmentPerformance)
+async def get_session_assessment_result(session_id: UUID, assessment_id: str, request: Request) -> AssessmentStartResponse | AssessmentPerformance:
+    return await _assessment_action(request,session_id,"result",assessment_id)

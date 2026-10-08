@@ -12,6 +12,9 @@ Implements:
 """
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .schemas import AnswerSubmission, AssessmentPerformance
 
 from ...core.config import settings
 from ..schemas import ConceptNode, KnowledgeGraph
@@ -187,3 +190,26 @@ def grade_submission(
         prerequisite_gaps=prerequisite_gaps,
         graded_at=now,
     )
+
+
+def grade_canonical_submission(session: AssessmentSession, answers: list["AnswerSubmission"]) -> "AssessmentPerformance":
+    """Deterministic, complete MCQ submission. No profile/mastery side effects."""
+    from .schemas import AssessmentPerformance, ConceptPerformance
+    if session.learning_session_id is None or session.source_version is None:
+        raise ValueError("INVALID_ASSESSMENT_SCOPE")
+    selected = {a.question_id: a.selected_index for a in answers}
+    if len(selected) != len(answers) or set(selected) != {q.question_id for q in session.questions}:
+        raise ValueError("INVALID_ANSWERS")
+    totals: dict[str, list[bool]] = {}
+    results: list[dict[str, str | int | bool]] = []
+    for question in session.questions:
+        correct = selected[question.question_id] == question.correct_index
+        totals.setdefault(question.concept_id, []).append(correct)
+        results.append({"question_id": question.question_id, "concept_id": question.concept_id,
+                        "selected_index": selected[question.question_id], "correct": correct})
+    concepts = [ConceptPerformance(concept_id=cid, attempted=len(values), correct=sum(values),
+                incorrect=len(values)-sum(values), percentage=100.0*sum(values)/len(values))
+                for cid, values in sorted(totals.items())]
+    return AssessmentPerformance(session_id=session.session_id, learning_session_id=session.learning_session_id,
+        source_id=session.source_id, source_version=session.source_version, question_results=results,
+        concept_results=concepts, overall_score=100.0*sum(r["correct"] is True for r in results)/len(results))
