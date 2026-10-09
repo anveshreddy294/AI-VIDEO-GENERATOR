@@ -32,6 +32,7 @@ FailureCategory = Literal[
     "NETWORK",
     "TIMEOUT",
     "RATE_LIMIT",
+    "QUOTA_EXHAUSTED",
     "PROVIDER_UNAVAILABLE",
     "AUTH_REJECTED",
     "REQUEST_REJECTED",
@@ -294,8 +295,28 @@ class CloudflareProvider:
                 ) as response:
                     if response.status_code in (401, 403):
                         raise ProviderFailure("AUTH_REJECTED")
-                    if response.status_code == 429:
-                        raise ProviderFailure("RATE_LIMIT", True)
+                    if response.status_code in (400, 429):
+                        bounded = bytearray()
+                        async for chunk in response.aiter_bytes():
+                            bounded.extend(chunk)
+                            if len(bounded) > MAX_RESPONSE_BYTES:
+                                raise ProviderFailure("INVALID_RESPONSE")
+                        try:
+                            failure = json.loads(bounded)
+                        except (ValueError, UnicodeDecodeError):
+                            failure = None
+                        codes: list[object] = []
+                        if isinstance(failure, dict):
+                            codes.append(failure.get("code"))
+                            error = failure.get("error")
+                            if isinstance(error, dict):
+                                codes.append(error.get("code"))
+                            errors = failure.get("errors")
+                            if isinstance(errors, list):
+                                codes.extend(item.get("code") for item in errors if isinstance(item, dict))
+                        if any(str(code) in {"4006", "3036"} for code in codes):
+                            raise ProviderFailure("QUOTA_EXHAUSTED")
+                        raise ProviderFailure("RATE_LIMIT", True) if response.status_code == 429 else ProviderFailure("REQUEST_REJECTED")
                     if 500 <= response.status_code <= 599:
                         if (
                             payload.get("task") == "vision_extract"
@@ -341,6 +362,7 @@ class OllamaReasoningProvider:
             response, model = model_manager.generate_with_fallback(
                 json.dumps([m.model_dump() for m in request.messages]),
                 reasoning_only=True,
+                messages=[{"role": m.role, "content": m.content} for m in request.messages],
                 is_json=True,
                 json_schema=request.response_schema,
                 max_output_tokens=request.max_tokens,
@@ -490,6 +512,9 @@ class ReasoningProviderRouter:
                         },
                     )
                     if not error.retryable:
+                        if error.category == "QUOTA_EXHAUSTED":
+                            self.circuit.failed(reason)
+                            break
                         self.circuit.succeeded()
                         raise
                     if (

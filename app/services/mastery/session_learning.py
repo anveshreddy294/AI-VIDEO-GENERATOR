@@ -132,7 +132,6 @@ class SupabaseLearningRepository:
             if (
                 job.concept_id not in records
                 or plan.target_concept_ids != [job.concept_id]
-                or job.video_job_id is not None
                 or job.video_path is not None
             ):
                 raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
@@ -454,6 +453,11 @@ class SessionLearningService:
             raise KnowledgeError("CONFLICT")
         if record.mastery_state != MasteryState.REMEDIATING:
             raise KnowledgeError("CONFLICT")
+        if job.video_job_id is not None:
+            from ..video.session_video import SessionVideo
+            video = SessionVideo(self.context, sid, job_id).get()
+            if video.get("job_id") != job.video_job_id or video.get("status") != "COMPLETED":
+                raise KnowledgeError("CONFLICT")
         self.machine.confirm_remediation(record)
         job.metadata["completed"] = True
         job.completed_at = datetime.now(timezone.utc)

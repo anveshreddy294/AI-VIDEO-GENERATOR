@@ -183,7 +183,7 @@ def test_formatter_subtopic_caption_normalizes_only_explicit_visual_parent() -> 
         understand_content(SCOPE, units, lambda _: json.dumps(body))
 
 
-def test_single_visual_request_constrains_literal_label_without_changing_canonical_schema(
+def test_visual_request_preserves_full_resource_bounds_without_label_enums(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.core import reasoning
@@ -215,19 +215,9 @@ def test_single_visual_request_constrains_literal_label_without_changing_canonic
     )
     schema = captured[0].response_schema
     assert schema is not None
-    assert schema["properties"]["concepts"]["maxItems"] == 1
-    assert schema["$defs"]["AnchoredConcept"]["properties"]["name"]["enum"] == [
-        "Photosynthesis"
-    ]
-    assert schema["$defs"]["AnchoredConcept"]["properties"]["definition"]["enum"] == [
-        None
-    ]
-    assert (
-        "enum"
-        not in AnchoredStructureProposal.model_json_schema()["$defs"][
-            "AnchoredConcept"
-        ]["properties"]["name"]
-    )
+    assert schema == AnchoredStructureProposal.model_json_schema()
+    assert schema["properties"]["concepts"]["maxItems"] > 1
+    assert "enum" not in schema["$defs"]["AnchoredConcept"]["properties"]["name"]
 
 
 def test_verified_handwriting_is_a_literal_visual_hierarchy_label() -> None:
@@ -239,7 +229,8 @@ def test_verified_handwriting_is_a_literal_visual_hierarchy_label() -> None:
     content = units[0].content.model_copy(update={"provenance": provenance})
     units = [units[0].model_copy(update={"content": content, "provenance": provenance})]
     def model(prompt: str) -> str:
-        assert 'SOURCE_VISUAL_LABEL="Osmosis"' in prompt
+        assert "SOURCE_VISUAL_LABEL" not in prompt
+        assert "Osmosis" in prompt
         return json.dumps(body)
     result = understand_content(SCOPE, units, model)
     assert result.snapshot.topics[0].title == label
@@ -255,7 +246,7 @@ def test_verified_slide_regions_keep_separate_literal_topics() -> None:
     for i,label in enumerate(labels):
         provenance=copy.deepcopy(source.content.provenance)
         provenance.update(region_policy="repeated-slide-footers-v1",visual_verification={"status":"VERIFIED"})
-        provenance["extraction"].update(headings=[label],visible_text=[label],labels=[],diagram_entities=[],relationships=[])
+        provenance["extraction"].update(headings=[label],visible_text=[label],paragraphs=[],bullet_points=[],handwriting_text=[],labels=[],diagram_entities=[],relationships=[],arrows=[])
         content=source.content.model_copy(update={"content_id":"region"+str(i),"text":label,"provenance":provenance,"sequence_index":i})
         regions.append(source.model_copy(update={"content_id":content.content_id,"content":content,"provenance":provenance}))
     anchors=build_anchors(SCOPE,regions)
@@ -271,3 +262,65 @@ def test_verified_slide_regions_keep_separate_literal_topics() -> None:
     result=understand_content(SCOPE,regions,model)
     assert {t.title for t in result.snapshot.topics}==set(labels)
     assert len(result.snapshot.content_concepts)==3
+
+
+
+def test_one_verified_image_retains_distinct_grounded_concepts() -> None:
+    units, body = accepted("SIMPLE")
+    provenance = copy.deepcopy(units[0].content.provenance)
+    provenance["visual_verification"] = {"status":"VERIFIED"}
+    visual = provenance["extraction"]
+    visual["headings"] = ["Osmosis"]
+    visual["labels"] = ["Water", "Cell membrane", "Cell"]
+    content = units[0].content.model_copy(update={"provenance":provenance})
+    units = [units[0].model_copy(update={"content":content,"provenance":provenance})]
+    anchors = build_anchors(SCOPE,units)
+    body["concepts"] = [{"key":f"c{i}","subtopic_key":"s1","name":name,"definition":None,
+        "evidence":[{"anchor_id":next(a.anchor_id for a in anchors if name in a.text)}]}
+        for i,name in enumerate(("Water","Cell membrane","Cell"))]
+    def model(prompt: str) -> str:
+        assert "exactly one topic" not in prompt and "single concept" not in prompt
+        return json.dumps(body)
+    result = understand_content(SCOPE,units,model)
+    assert {c.name for c in result.snapshot.concepts} == {"Water","Cell membrane","Cell"}
+    assert len(result.snapshot.content_concepts) == 3
+    assert not result.snapshot.relationships
+
+
+def test_numbered_visual_headings_keep_literal_children_without_word_reordering():
+    from app.services.content_understanding import visual_literal_supported
+    assert visual_literal_supported("Data Processing & Storage",["2. DATA PROCESSING & STORAGE"])
+    assert visual_literal_supported("Solar Panels",["Solar Panels, Wind Turbines"])
+    assert not visual_literal_supported("Storage Processing",["2. DATA PROCESSING & STORAGE"])
+    assert not visual_literal_supported("Nuclear Reactor",["Solar Panels, Wind Turbines"])
+
+
+def test_verified_literal_rebinding_never_repairs_invention_or_foreign_reference():
+    from app.services.evidence_anchors import bind_verified_visual_labels,AnchoredStructureProposal,AnchorReference
+    units,body=accepted("SIMPLE")
+    provenance=copy.deepcopy(units[0].provenance);provenance["visual_verification"]={"status":"VERIFIED"}
+    content=units[0].content.model_copy(update={"provenance":provenance})
+    units=[units[0].model_copy(update={"content":content,"provenance":provenance})]
+    proposal=AnchoredStructureProposal.model_validate_json(json.dumps(body))
+    foreign=proposal.topics[0].model_copy(update={"evidence":[AnchorReference(anchor_id="EA_foreign")]})
+    result,repairs=bind_verified_visual_labels(SCOPE,units,proposal.model_copy(update={"topics":[foreign]}))
+    assert result.topics[0]==foreign and not repairs
+    invented=proposal.topics[0].model_copy(update={"title":"Nuclear Reactor"})
+    result,repairs=bind_verified_visual_labels(SCOPE,units,proposal.model_copy(update={"topics":[invented]}))
+    assert result.topics[0]==invented and not repairs
+
+
+def test_omitted_verified_component_inventory_is_retained_without_new_claims() -> None:
+    units, body = accepted("SIMPLE")
+    provenance = copy.deepcopy(units[0].content.provenance)
+    provenance["visual_verification"] = {"status": "VERIFIED"}
+    visual = provenance["extraction"]
+    visual.update(headings=["Osmosis"], labels=["Water", "Cell membrane", "Cell"],
+                  diagram_entities=[], visible_text=["Osmosis", "Water", "Cell membrane", "Cell"])
+    content = units[0].content.model_copy(update={"provenance": provenance})
+    units = [units[0].model_copy(update={"content": content, "provenance": provenance})]
+    result = understand_content(SCOPE, units, lambda _prompt: json.dumps(body))
+    names = {c.name for c in result.snapshot.concepts}
+    assert {"Water", "Cell membrane", "Cell"} <= names
+    assert all(c.definition is None for c in result.snapshot.concepts if c.name != "Osmosis")
+    assert not result.snapshot.relationships

@@ -6,7 +6,7 @@ import re
 from typing import Annotated
 from uuid import NAMESPACE_URL, uuid5
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from .knowledge_models import Contract, Identifier, ScopedContentUnit
 from .security.source_scope import SourceScope
 from .content_understanding import (
@@ -36,13 +36,22 @@ class AnchorReference(Contract):
     anchor_id: Identifier
 
 
-AnchorEvidence = Annotated[list[AnchorReference], Field(min_length=1, max_length=64)]
+from typing import Literal
+
+AnchorEvidence = Annotated[list[AnchorReference], Field(max_length=64)]
 
 
 class AnchoredTopic(Contract):
     key: Identifier
     title: Annotated[str, Field(min_length=2, max_length=120)]
-    evidence: AnchorEvidence
+    evidence: AnchorEvidence = Field(default_factory=list)
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
+
+    @model_validator(mode="after")
+    def require_evidence_if_source_grounded(self) -> AnchoredTopic:
+        if self.provenance_kind == "SOURCE_GROUNDED" and not self.evidence:
+            raise ValueError("SOURCE_GROUNDED topics must cite at least one evidence anchor")
+        return self
 
 
 class AnchoredSubtopic(AnchoredTopic):
@@ -54,7 +63,14 @@ class AnchoredConcept(Contract):
     subtopic_key: Identifier
     name: Annotated[str, Field(min_length=2, max_length=120)]
     definition: Annotated[str, Field(min_length=1, max_length=16384)] | None = None
-    evidence: AnchorEvidence
+    evidence: AnchorEvidence = Field(default_factory=list)
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
+
+    @model_validator(mode="after")
+    def require_evidence_if_source_grounded(self) -> AnchoredConcept:
+        if self.provenance_kind == "SOURCE_GROUNDED" and not self.evidence:
+            raise ValueError("SOURCE_GROUNDED concepts must cite at least one evidence anchor")
+        return self
 
 
 class AnchoredRelationship(Contract):
@@ -64,7 +80,8 @@ class AnchoredRelationship(Contract):
     prerequisite_key: Identifier = Field(
         description="Exact temporary concept.key of the required concept, e.g. c1; never a name or subtopic key"
     )
-    evidence: AnchorEvidence
+    evidence: AnchorEvidence = Field(default_factory=list)
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
 
 class AnchoredStructureProposal(Contract):
@@ -72,6 +89,7 @@ class AnchoredStructureProposal(Contract):
     subtopics: Annotated[list[AnchoredSubtopic], Field(min_length=1, max_length=512)]
     concepts: Annotated[list[AnchoredConcept], Field(min_length=1, max_length=1024)]
     prerequisites: Annotated[list[AnchoredRelationship], Field(max_length=4096)]
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
 
 def build_anchors(
@@ -107,6 +125,21 @@ def build_anchors(
                 )
                 if len(result) > MAX_ANCHORS:
                     raise UnderstandingError("SOURCE_TOO_LARGE")
+    from .verified_inventory import verified_inventory
+    existing = {(a.content_id, a.char_start, a.char_end) for a in result}
+    for entry in verified_inventory(scope, units):
+        span = (entry.content_id, entry.char_start, entry.char_end)
+        if span in existing:
+            continue
+        piece = next(u.content.text[entry.char_start:entry.char_end] for u in units if u.content_id == entry.content_id)
+        if len(piece) > MAX_ANCHOR_CHARACTERS:
+            raise UnderstandingError("SOURCE_TOO_LARGE")
+        identity = f"{scope.user_id}:{scope.source_id}:{scope.source_version}:{entry.content_id}:{entry.char_start}:{entry.char_end}:{piece}:{ANCHOR_POLICY_VERSION}"
+        result.append(EvidenceAnchor(anchor_id="EA_" + uuid5(NAMESPACE_URL, identity).hex,
+            content_id=entry.content_id, char_start=entry.char_start, char_end=entry.char_end, text=piece))
+        existing.add(span)
+        if len(result) > MAX_ANCHORS:
+            raise UnderstandingError("SOURCE_TOO_LARGE")
     if not result:
         raise UnderstandingError("NO_SAFE_CONTENT")
     return result
@@ -171,7 +204,12 @@ def resolve_proposal(
 
     return StructureProposal(
         topics=[
-            TopicProposal(key=t.key, title=t.title, evidence=evidence(t.evidence))
+            TopicProposal(
+                key=t.key,
+                title=t.title,
+                evidence=evidence(t.evidence),
+                provenance_kind=getattr(t, "provenance_kind", "SOURCE_GROUNDED"),
+            )
             for t in proposal.topics
         ],
         subtopics=[
@@ -180,6 +218,7 @@ def resolve_proposal(
                 title=s.title,
                 topic_key=s.topic_key,
                 evidence=evidence(s.evidence),
+                provenance_kind=getattr(s, "provenance_kind", "SOURCE_GROUNDED"),
             )
             for s in proposal.subtopics
         ],
@@ -190,6 +229,7 @@ def resolve_proposal(
                 name=c.name,
                 definition=c.definition,
                 evidence=evidence(c.evidence),
+                provenance_kind=getattr(c, "provenance_kind", "SOURCE_GROUNDED"),
             )
             for c in proposal.concepts
         ],
@@ -198,7 +238,111 @@ def resolve_proposal(
                 dependent_key=r.dependent_key,
                 prerequisite_key=r.prerequisite_key,
                 evidence=evidence(r.evidence),
+                provenance_kind=getattr(r, "provenance_kind", "SOURCE_GROUNDED"),
             )
             for r in proposal.prerequisites
         ],
+        provenance_kind=getattr(proposal, "provenance_kind", "SOURCE_GROUNDED"),
     )
+
+
+def bind_verified_visual_labels(
+    scope: SourceScope, units: list[ScopedContentUnit], proposal: AnchoredStructureProposal,
+) -> tuple[AnchoredStructureProposal,list[str]]:
+    """Rebind a literal independently verified label to its exact owned source anchor."""
+    from .content_understanding import visual_literal_supported
+    from .visual_contracts import VisionExtractionData
+    anchors=build_anchors(scope,units)
+    lookup={anchor.anchor_id:anchor for anchor in anchors}
+    labels: dict[str,list[str]]={}
+    from .verified_inventory import verified_inventory
+    for entry in verified_inventory(scope, units):
+        labels.setdefault(entry.content_id, []).append(entry.label)
+    repaired=[]
+    def rebind(node: AnchoredTopic | AnchoredSubtopic | AnchoredConcept) -> AnchoredTopic | AnchoredSubtopic | AnchoredConcept:
+        name=node.name if isinstance(node,AnchoredConcept) else node.title
+        definition=node.definition if isinstance(node,AnchoredConcept) else None
+        if any(ref.anchor_id not in lookup for ref in node.evidence):
+            return node
+        if any(visual_literal_supported(name,[lookup[ref.anchor_id].text]) and (definition is None or definition in lookup[ref.anchor_id].text) for ref in node.evidence):
+            return node
+        candidates=[a for a in anchors if a.content_id in labels and visual_literal_supported(name,labels[a.content_id])
+            and visual_literal_supported(name,[a.text]) and (definition is None or definition in a.text)]
+        from .verified_inventory import display_label
+        shortest = min((len(a.text) for a in candidates), default=0)
+        precise = [a for a in candidates if len(a.text) == shortest]
+        if candidates:
+            if not precise or len({(a.content_id, display_label(a.text)) for a in precise}) != 1:
+                return node
+            chosen=min(precise,key=lambda a:(a.char_start,a.anchor_id))
+            repaired.append("verified_literal_anchor:"+node.key)
+            return node.model_copy(update={"evidence":[AnchorReference(anchor_id=chosen.anchor_id)]})
+        from .content_understanding import label_supported
+        ev_text = " ".join(lookup[ref.anchor_id].text for ref in node.evidence)
+        if not label_supported(name, ev_text, derived=True):
+            grounding_cands = [a for a in anchors if label_supported(name, a.text, derived=True)]
+            if grounding_cands:
+                same_unit = [a for a in grounding_cands if any(lookup[ref.anchor_id].content_id == a.content_id for ref in node.evidence)]
+                pool = same_unit if same_unit else (grounding_cands if len(units) == 1 else [])
+                if pool and len({a.content_id for a in pool}) == 1:
+                    chosen = min(pool, key=lambda a: (len(a.text), a.char_start))
+                    if not any(ref.anchor_id == chosen.anchor_id for ref in node.evidence):
+                        repaired.append("grounded_name_anchor:" + node.key)
+                        return node.model_copy(update={"evidence": list(node.evidence) + [AnchorReference(anchor_id=chosen.anchor_id)]})
+        return node
+    return proposal.model_copy(update={
+        "topics":[rebind(t) for t in proposal.topics],
+        "subtopics":[rebind(s) for s in proposal.subtopics],
+        "concepts":[rebind(c) for c in proposal.concepts],
+    }),repaired
+
+
+def retain_verified_visual_labels(
+    scope: SourceScope, units: list[ScopedContentUnit], proposal: AnchoredStructureProposal,
+) -> tuple[AnchoredStructureProposal,list[str]]:
+    """Retain omitted literal components; organizational placement asserts no dependency."""
+    from .content_understanding import visual_literal_supported
+    from .visual_contracts import VisionExtractionData
+    anchors=build_anchors(scope,units)
+    lookup={a.anchor_id:a for a in anchors}
+    concepts=list(proposal.concepts)
+    names=[t.title for t in proposal.topics]+[s.title for s in proposal.subtopics]+[c.name for c in concepts]
+    retained=[]
+    visual_primitives={"box","node","component","label","container","shape"}
+    def already_named(label: str) -> bool:
+        words=set(re.findall(r"\w+",label.casefold()))
+        for name in names:
+            existing=set(re.findall(r"\w+",name.casefold()))
+            if visual_literal_supported(name,[label]) and (words-existing)<=visual_primitives:
+                return True
+        return False
+    from .verified_inventory import verified_inventory, display_label
+    inventory = verified_inventory(scope, units)
+    for unit in units:
+        verification=unit.provenance.get("visual_verification")
+        if unit.provenance.get("visual_schema_version")!="visual-v2" or not isinstance(verification,dict) or verification.get("status")!="VERIFIED":
+            continue
+        visual=VisionExtractionData.model_validate(unit.provenance.get("extraction"))
+        literal=[entry.label for entry in inventory if entry.content_id == unit.content_id]
+        parents=[s for s in proposal.subtopics if visual_literal_supported(s.title,literal)
+            and any(ref.anchor_id in lookup and lookup[ref.anchor_id].content_id==unit.content_id for ref in s.evidence)]
+        for literal_label in dict.fromkeys(entry.label for entry in inventory if entry.content_id == unit.content_id and entry.required_label):
+            label=display_label(literal_label)
+            if not 2<=len(label)<=120 or already_named(label):
+                continue
+            candidates=[a for a in anchors if a.content_id==unit.content_id and visual_literal_supported(label,[a.text])]
+            if not candidates:
+                raise UnderstandingError("UNSUPPORTED_EVIDENCE","LABEL")
+            if not parents:
+                raise UnderstandingError("INVALID_HIERARCHY","CHILD_SUPPORT")
+            # A source-visible overall heading is preferred to a narrower grouping.
+            first_heading=visual.headings[0] if visual.headings else ""
+            parent=min(parents,key=lambda s:(not (visual_literal_supported(s.title,[first_heading]) and visual_literal_supported(first_heading,[s.title])),s.key))
+            anchor=min(candidates,key=lambda a:(len(a.text),a.char_start,a.anchor_id))
+            identity=f"{scope.user_id}:{scope.source_id}:{scope.source_version}:{unit.content_id}:{label}"
+            key="c_visual_"+uuid5(NAMESPACE_URL,identity).hex
+            concepts.append(AnchoredConcept(key=key,subtopic_key=parent.key,name=label,definition=None,evidence=[AnchorReference(anchor_id=anchor.anchor_id)]))
+            names.append(label);retained.append("verified_literal_retained:"+key)
+    result=proposal.model_copy(update={"concepts":concepts})
+    # Reapply resource bounds after deterministic inventory expansion.
+    return AnchoredStructureProposal.model_validate_json(result.model_dump_json()),retained

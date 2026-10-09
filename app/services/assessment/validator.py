@@ -179,8 +179,9 @@ def validate_canonical_question(question: Question, bundle: "EvidenceBundle", al
     correct = next(option.text for option in question.options if option.index == question.correct_index)
     quote = question.evidence_quote
     expected = "Complete this source statement verbatim: " + quote.replace(correct, "____", 1)
-    if (quote.count(correct) != 1 or question.stem != expected or correct.casefold() in question.stem.casefold()
-        or correct.casefold() in question.concept_name.casefold()
+    stem_without_blank = question.stem.replace("____", "")
+    answer_leaked = bool(re.search(r"\b" + re.escape(correct.strip().casefold()) + r"\b", stem_without_blank.casefold()))
+    if (quote.count(correct) != 1 or question.stem != expected or answer_leaked
         or sum(option.text in quote for option in question.options) != 1
         or is_duplicate(question, existing)):
         raise KnowledgeError("INVALID_PROVIDER_RESPONSE")

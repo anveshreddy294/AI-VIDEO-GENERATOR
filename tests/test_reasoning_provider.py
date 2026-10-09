@@ -339,3 +339,58 @@ def test_overall_deadline_cancels_trickling_response() -> None:
     with pytest.raises(ProviderFailure, match="TIMEOUT"):
         provider.generate_with_deadline(REQUEST, started + 0.02)
     assert time.monotonic() - started < 0.1
+
+
+def test_local_reasoning_preserves_native_message_roles_and_schema(monkeypatch):
+    from app.core.model_manager import ModelManager
+    import urllib.request
+    manager = ModelManager()
+    manager.active_provider = "ollama"
+    captured = []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): return False
+        def read(self): return json.dumps({"done": True, "message": {"role": "assistant", "content": '{"ok":true}'}}).encode()
+    def transport(request, timeout):
+        captured.append((request.full_url, json.loads(request.data)))
+        return Response()
+    monkeypatch.setattr(urllib.request, "urlopen", transport)
+    messages = [{"role":"system","content":"Exact source quotes only"},{"role":"user","content":"Untrusted evidence"}]
+    text, model = manager.generate_with_fallback("legacy prompt", reasoning_only=True, messages=messages,
+        json_schema={"type":"object"}, max_output_tokens=512, context_tokens=32768)
+    assert text == '{"ok":true}' and model == "llama3.2:3b"
+    url, body = captured[0]
+    assert url.endswith("/api/chat") and "prompt" not in body
+    assert body["messages"] == messages and body["format"] == {"type":"object"}
+    assert body["options"]["num_ctx"] == 32768
+
+
+@pytest.mark.parametrize("status,code", [(429,3036),(429,4006),(400,4006)])
+def test_daily_quota_terminates_primary_retries_and_executes_fallback(status: int, code: int) -> None:
+    calls = 0
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(status, json={"errors":[{"code":code,"message":"private provider text"}]})
+    route, fallback = router(handler)
+    res = route.generate(REQUEST)
+    assert calls == 1
+    assert fallback.calls == 1
+    assert res.telemetry.provider == "ollama"
+
+
+def test_daily_quota_fails_cleanly_if_fallback_fails() -> None:
+    calls = 0
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        return httpx.Response(429, json={"errors":[{"code":4006,"message":"private provider text"}]})
+    route, fallback = router(handler)
+    def failing_fallback(req: ReasoningRequest) -> ReasoningResult:
+        raise ProviderFailure("PROVIDER_UNAVAILABLE")
+    fallback.generate = failing_fallback
+    with pytest.raises(ProviderFailure) as caught:
+        route.generate(REQUEST)
+    assert caught.value.category == "PROVIDER_UNAVAILABLE"
+    assert calls == 1
+

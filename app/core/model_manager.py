@@ -169,6 +169,7 @@ class ModelManager:
         reasoning_only: bool = False,
         json_schema: dict[str, object] | None = None,
         context_tokens: int | None = None,
+        messages: list[dict[str, str]] | None = None,
     ) -> tuple[str, str]:
         """Attempt generation using active model; automatically falls back through chain if failure occurs.
 
@@ -181,6 +182,12 @@ class ModelManager:
             chain = ([{"model": "mock", "provider": "mock"}] if self.active_provider == "mock"
                      else [{"model": "llama3.2:3b", "provider": "ollama"}])
         last_err: Exception | None = None
+        if messages is not None and (not 1 <= len(messages) <= 4 or any(
+            set(message) != {"role", "content"} or message["role"] not in {"system", "user", "assistant"}
+            or not isinstance(message["content"], str) or not message["content"].strip()
+            for message in messages
+        )):
+            raise ValueError("Invalid reasoning messages")
 
         for candidate in chain:
             m_name = candidate["model"]
@@ -204,6 +211,10 @@ class ModelManager:
                         "stream": False,
                         "think": False,
                     }
+                    if messages is not None:
+                        url = f"{base_url}/api/chat"
+                        req_data.pop("prompt")
+                        req_data["messages"] = messages
                     if max_output_tokens is not None:
                         req_data["options"] = {"num_predict": max_output_tokens, "temperature": 0}
                     if context_tokens is not None:
@@ -229,7 +240,7 @@ class ModelManager:
                         data = json.loads(resp.read().decode("utf-8"))
                         if data.get("error"):
                             raise RuntimeError(data.get("error"))
-                        raw = data.get("response", "")
+                        raw = data.get("message", {}).get("content", "") if messages is not None else data.get("response", "")
                         if data.get("done") is False or data.get("done_reason") == "length":
                             raise ValueError("Incomplete model output")
                         if raw and raw.strip():

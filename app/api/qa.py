@@ -140,6 +140,10 @@ async def _canonical_answer(request: Request) -> QAResponse:
         raw = await request.body()
         resolution_started = time.perf_counter()
         session_request = SessionQARequest.model_validate_json(raw)
+        if "allow_ai_supplemental" not in session_request.model_fields_set:
+            session_request = session_request.model_copy(
+                update={"allow_ai_supplemental": True}
+            )
         body = await run_in_threadpool(
             LearningSessionService(context).qa_request, session_request
         )

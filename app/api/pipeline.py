@@ -1054,6 +1054,13 @@ async def retry_failed_job(
             detail=f"Only failed jobs can be retried. Job '{job_id}' is currently '{old_job.status}'.",
         )
 
+    retry_count = old_job.metadata.get("retry_count", 0)
+    if retry_count >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Retry limit reached for job '{job_id}' (maximum 3 attempts).",
+        )
+
     # Resolve source_id and filename from job events metadata
     source_id: str | None = None
     original_filename: str | None = None
@@ -1072,6 +1079,44 @@ async def retry_failed_job(
     source_record = get_source_record(source_id)
     if not source_record:
         raise HTTPException(status_code=404, detail=f"Source record '{source_id}' not found in registry.")
+
+    # Operation-specific retry eligibility: if job was a video generation job, retry video without re-extracting source
+    if old_job.job_type in ("video", "video_generation", "remedial_video", "retry_video"):
+        from ..services.video.engine import get_video_job, execute_video_generation_job
+        from ..services.assessment.schemas import VideoTarget
+        v_art = get_video_job(old_job.job_id)
+        cid = old_job.metadata.get("concept_id") or (v_art.concept_id if v_art else "CONCEPT_DEFAULT")
+        cname = old_job.metadata.get("concept_name") or (v_art.concept_name if v_art else cid)
+        sec = int(old_job.metadata.get("target_seconds", 25))
+        new_vjob = job_manager.create_job(job_type="retry_video")
+        new_vjob.metadata["retry_count"] = retry_count + 1
+        new_vjob.metadata["prior_job_id"] = old_job.job_id
+        new_vjob.metadata["source_id"] = source_id
+        new_vjob.metadata["concept_id"] = cid
+        target = VideoTarget(
+            concept_id=cid,
+            concept_name=cname,
+            difficulty="intermediate",
+            score=0.0,
+            target_seconds=sec,
+            chunk_ids=old_job.metadata.get("chunk_ids", []),
+            student_id=old_job.metadata.get("student_id", "student_default"),
+            source_id=source_id,
+        )
+        target.retry_count = retry_count + 1
+        target.prior_job_id = old_job.job_id
+        background_tasks.add_task(
+            execute_video_generation_job,
+            target=target,
+            job_id=new_vjob.job_id,
+            mock_mode=(getattr(settings, "llm_provider", "") in ("mock", "test")),
+            force=True,
+        )
+        return JobCreationResponse(
+            job_id=new_vjob.job_id,
+            status="pending",
+            message=f"Video retry job queued for source {source_id} (source is READY, re-rendering video).",
+        )
 
     if source_record.status == "READY":
         raise HTTPException(status_code=400, detail=f"Source '{source_id}' is already successfully processed.")
@@ -1123,6 +1168,8 @@ async def retry_failed_job(
         )
 
     new_job = job_manager.create_job(job_type="retry_extraction")
+    new_job.metadata["retry_count"] = retry_count + 1
+    new_job.metadata["prior_job_id"] = old_job.job_id
     job_manager.register_dedup_key(dedup_key, new_job.job_id)
 
     # Reset source status to UPLOADED

@@ -18,6 +18,7 @@ Sequence = Annotated[int, Field(strict=True, ge=0)]
 SchemaVersion = Annotated[int, Field(strict=True, ge=1, le=1)]
 KnowledgeState = Literal["LEGACY_UNMAPPED", "PENDING", "FAILED", "READY"]
 SupportKind = Literal["definition", "explanation", "example", "prerequisite_evidence"]
+ContentProvenanceKind = Literal["SOURCE_GROUNDED", "AI_ENRICHED"]
 
 
 class Contract(BaseModel):
@@ -168,6 +169,7 @@ class ConceptView(Contract):
     evidence: list[EvidenceSummary]
     prerequisite_concept_ids: list[Identifier]
     related_concept_ids: list[Identifier]
+    provenance_kind: ContentProvenanceKind = "SOURCE_GROUNDED"
 
 
 class SubtopicView(Contract):
@@ -176,6 +178,7 @@ class SubtopicView(Contract):
     description: str | None
     sequence: Sequence
     concepts: list[ConceptView]
+    provenance_kind: ContentProvenanceKind = "SOURCE_GROUNDED"
 
 
 class TopicView(Contract):
@@ -184,6 +187,7 @@ class TopicView(Contract):
     description: str | None
     sequence: Sequence
     subtopics: list[SubtopicView]
+    provenance_kind: ContentProvenanceKind = "SOURCE_GROUNDED"
 
 
 class KnowledgeMap(SourceScope):
@@ -231,7 +235,7 @@ class SnapshotRelationship(Contract):
     related_concept_id: Identifier
     relationship_type: Literal["prerequisite", "related"]
     evidence_content_ids: Annotated[
-        list[Identifier], Field(min_length=1, max_length=64)
+        list[Identifier], Field(min_length=0, max_length=64)
     ]
     provenance: dict[str, JsonValue]
 
@@ -242,7 +246,7 @@ class KnowledgeSnapshot(Contract):
     subtopics: Annotated[list[SnapshotSubtopic], Field(min_length=1, max_length=512)]
     concepts: Annotated[list[SnapshotConcept], Field(min_length=1, max_length=1024)]
     content_concepts: Annotated[
-        list[SnapshotEvidence], Field(min_length=1, max_length=8192)
+        list[SnapshotEvidence], Field(min_length=0, max_length=8192)
     ]
     relationships: Annotated[list[SnapshotRelationship], Field(max_length=4096)]
 

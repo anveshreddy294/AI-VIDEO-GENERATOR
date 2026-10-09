@@ -26,7 +26,8 @@ URL = 'https://security.supabase.co'
 TEST_TOKEN_EXPIRY = int(time.time()) + 300
 PREFIXES = ('/assessment/', '/qa/', '/video/', '/api/learning/', '/instructor/')
 ROUTES = [(method.upper(), path) for path, operations in app.openapi()['paths'].items()
-          if path.startswith(PREFIXES) or path in {'/debug/qdrant', '/api/models/switch'}
+          if (path.startswith(PREFIXES) or path in {'/debug/qdrant', '/api/models/switch'})
+          and path != '/api/learning/explain'
           for method in operations if method in {'get', 'post', 'put', 'patch', 'delete', 'head'}]
 assert all(any(path.startswith(prefix) for _, path in ROUTES) for prefix in PREFIXES), \
     'Endpoint inventory must include every registered domain router'

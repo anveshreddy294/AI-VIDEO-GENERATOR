@@ -490,6 +490,7 @@ def test_authenticated_image_http_reaches_ready_and_deduplicates(
     monkeypatch.setattr(structurer, "generate_educational_proposal", proposal)
     client = TestClient(app)
     headers = {"Authorization": "Bearer test-token"}
+    first_knowledge: str | None = None
     for _ in range(2):
         upload = client.post("/pipeline/upload-and-assess", headers=headers,
             files={"file": ("printed.png", (FIXTURES / "printed.png").read_bytes(), "image/png")})
@@ -498,7 +499,82 @@ def test_authenticated_image_http_reaches_ready_and_deduplicates(
         assert job["state"] == "SUCCEEDED" and job["status"] == "completed"
         assert job["result"]["status"] == job["result"]["knowledge_state"] == "READY"
         assert job["result"]["chunks_synced"] > 0
+        serialized = json.dumps(remote.knowledge, sort_keys=True)
+        if first_knowledge is None:
+            first_knowledge = serialized
+        else:
+            assert serialized == first_knowledge
     assert remote.sources[0]["status"] == remote.versions[0]["knowledge_state"] == "READY"
-    assert len(remote.sources) == len(remote.versions) == len(remote.knowledge["concepts"]) == 1
+    assert len(remote.sources) == len(remote.versions) == 1
+    concepts = remote.knowledge["concepts"]
+    assert {concept["name"] for concept in concepts} == {"Osmosis", "Water", "Cell membrane", "Cell"}
+    assert len({concept["concept_id"] for concept in concepts}) == len(concepts) == 4
     assert remote.knowledge["topics"] and remote.knowledge["subtopics"] and indexed
     assert provider.call_count == 1
+
+
+def test_equation_integrity_operator_quantity_direction_and_case() -> None:
+    # 1. Negative test: a+b differs from a-b (operator preserved)
+    with pytest.raises(VisionExtractionFailed):
+        _validate_vision_extraction(
+            {
+                "visible_text": ["The sum is expressed as a + b on the board"],
+                "formulas": ["a - b"],
+                "confidence": 0.9,
+            },
+            "equation.png",
+        )
+
+    # 2. Negative test: x=2 differs from x=3 (quantity preserved)
+    with pytest.raises(VisionExtractionFailed):
+        _validate_vision_extraction(
+            {
+                "visible_text": ["Given x = 2 in the diagram solution"],
+                "formulas": ["x = 3"],
+                "confidence": 0.9,
+            },
+            "equation.png",
+        )
+
+    # 3. Negative test: Reactant -> Product differs from Product -> Reactant (arrow direction preserved)
+    with pytest.raises(VisionExtractionFailed):
+        _validate_vision_extraction(
+            {
+                "visible_text": ["Process flow: Reactant -> Product"],
+                "formulas": ["Product -> Reactant"],
+                "confidence": 0.9,
+            },
+            "equation.png",
+        )
+
+    # 4. Negative test: E=mc^2 differs from e=mc^2 (formula case preserved)
+    with pytest.raises(VisionExtractionFailed):
+        _validate_vision_extraction(
+            {
+                "visible_text": ["Einstein energy relation: E = mc^2"],
+                "formulas": ["e = mc^2"],
+                "confidence": 0.9,
+            },
+            "equation.png",
+        )
+
+    # 5. Positive test: presentation whitespace and math delimiters normalize cleanly
+    valid_result = _validate_vision_extraction(
+        {
+            "visible_text": ["Einstein energy relation: E = mc^2"],
+            "formulas": ["$E = mc^2$"],
+            "confidence": 0.9,
+        },
+        "equation.png",
+    )
+    assert valid_result.formulas == ["$E = mc^2$"]
+
+
+def test_missing_confidence_is_unreported_not_invented() -> None:
+    data = {
+        "visible_text": ["A detailed diagram showing cell mitosis stages with spindle fibers"],
+        "confidence": 0.0,
+    }
+    result = _validate_vision_extraction(data, "cell.png")
+    assert result.confidence == 0.0
+    assert result._routing_provenance.get("confidence_status") == "unreported"

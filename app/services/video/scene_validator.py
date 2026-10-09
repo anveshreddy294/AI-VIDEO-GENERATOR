@@ -27,7 +27,18 @@ _DANGEROUS_SUBSTRINGS = (
     "locals()",
     "<script",
     "shutil",
+    "__class__",
+    "__bases__",
+    "__subclasses__",
+    "builtins",
 )
+
+MAX_TITLE_LENGTH = 150
+MAX_SUBTITLE_LENGTH = 200
+MAX_TEXT_LENGTH = 600
+MAX_EQUATION_LENGTH = 200
+MAX_LABEL_LENGTH = 150
+MAX_NARRATION_LENGTH = 1000
 
 
 class SceneValidationError(ValueError):
@@ -48,6 +59,13 @@ def validate_latex(equation: str | None) -> None:
         raise SceneValidationError(f"Invalid LaTeX syntax: trailing backslash in '{equation}'")
 
 
+def _check_string_for_code_injection(val: str, field_name: str = "field") -> None:
+    """Detect arbitrary code execution attempts."""
+    low = val.lower()
+    for dangerous in _DANGEROUS_SUBSTRINGS:
+        if dangerous in low:
+            raise SceneValidationError(f"Security violation: dangerous substring '{dangerous}' detected in {field_name}")
+
 
 def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
     """Validate a single scene plan."""
@@ -60,29 +78,67 @@ def validate_scene_plan(scene: ScenePlan) -> ScenePlan:
     if scene.duration_seconds <= 0 or scene.duration_seconds > 300:
         raise SceneValidationError(f"Scene duration {scene.duration_seconds}s is outside valid range (1–300s)")
 
+    # Bounded length enforcement
+    if scene.title and len(scene.title) > MAX_TITLE_LENGTH:
+        raise SceneValidationError(f"Scene title exceeds maximum allowed length ({len(scene.title)} > {MAX_TITLE_LENGTH})")
+    if scene.subtitle and len(scene.subtitle) > MAX_SUBTITLE_LENGTH:
+        raise SceneValidationError(f"Scene subtitle exceeds maximum allowed length ({len(scene.subtitle)} > {MAX_SUBTITLE_LENGTH})")
+    if scene.text and len(scene.text) > MAX_TEXT_LENGTH:
+        raise SceneValidationError(f"Scene text exceeds maximum allowed length ({len(scene.text)} > {MAX_TEXT_LENGTH})")
+    if scene.equation and len(scene.equation) > MAX_EQUATION_LENGTH:
+        raise SceneValidationError(f"Scene equation exceeds maximum allowed length ({len(scene.equation)} > {MAX_EQUATION_LENGTH})")
+    if scene.label and len(scene.label) > MAX_LABEL_LENGTH:
+        raise SceneValidationError(f"Scene label exceeds maximum allowed length ({len(scene.label)} > {MAX_LABEL_LENGTH})")
+    if scene.narration and len(scene.narration) > MAX_NARRATION_LENGTH:
+        raise SceneValidationError(f"Scene narration exceeds maximum allowed length ({len(scene.narration)} > {MAX_NARRATION_LENGTH})")
+
     # Validate LaTeX equation if present
     if scene.equation:
         validate_latex(scene.equation)
 
     # Security check all text and equation fields
     check_fields = [
-        scene.title,
-        scene.subtitle,
-        scene.text,
-        scene.narration,
-        scene.equation,
-        scene.label,
-        scene.object_label,
-        scene.force_label,
-        scene.acceleration_label,
-    ] + (scene.summary_points or [])
+        ("title", scene.title),
+        ("subtitle", scene.subtitle),
+        ("text", scene.text),
+        ("narration", scene.narration),
+        ("equation", scene.equation),
+        ("label", scene.label),
+        ("object_label", scene.object_label),
+        ("force_label", scene.force_label),
+        ("acceleration_label", scene.acceleration_label),
+    ]
 
-    for val in check_fields:
+    for fname, val in check_fields:
         if val and isinstance(val, str):
-            lower_val = val.lower()
-            for dangerous in _DANGEROUS_SUBSTRINGS:
-                if dangerous in lower_val:
-                    raise SceneValidationError(f"Security violation: dangerous substring '{dangerous}' detected in scene content")
+            _check_string_for_code_injection(val, fname)
+
+    for pt in (scene.summary_points or []):
+        if pt and isinstance(pt, str):
+            if len(pt) > MAX_TEXT_LENGTH:
+                raise SceneValidationError(f"Summary point exceeds maximum allowed length ({len(pt)} > {MAX_TEXT_LENGTH})")
+            _check_string_for_code_injection(pt, "summary_points")
+
+    # Deep-check visual_payload against code injection
+    if scene.visual_payload and isinstance(scene.visual_payload, dict):
+        def _check_payload_dict(d: dict[str, Any]) -> None:
+            for k, v in d.items():
+                if isinstance(k, str):
+                    _check_string_for_code_injection(k, "visual_payload key")
+                if isinstance(v, str):
+                    if len(v) > 2000:
+                        raise SceneValidationError(f"visual_payload value exceeds maximum length of 2000 chars")
+                    _check_string_for_code_injection(v, "visual_payload value")
+                elif isinstance(v, dict):
+                    _check_payload_dict(v)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, str):
+                            _check_string_for_code_injection(item, "visual_payload item")
+                        elif isinstance(item, dict):
+                            _check_payload_dict(item)
+
+        _check_payload_dict(scene.visual_payload)
 
     return scene
 

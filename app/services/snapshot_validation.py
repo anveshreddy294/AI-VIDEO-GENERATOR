@@ -19,12 +19,11 @@ from .repositories.knowledge_repository import KnowledgeError
 from .security.source_scope import SourceScope, vector_version
 
 
-def validate_snapshot_chunks(
+def snapshot_knowledge(
     scope: SourceScope,
     units: list[ScopedContentUnit],
     snapshot: KnowledgeSnapshot,
-    policy: ChunkPolicy | None = None,
-) -> ChunkQuality:
+) -> CanonicalKnowledge:
     """No generated readiness/hash/timestamp and no database/vector side effects."""
     lookup = {unit.content_id: unit for unit in units}
     evidence: list[ConceptEvidence] = []
@@ -84,5 +83,16 @@ def validate_snapshot_chunks(
             for e in snapshot.relationships
         ],
     )
+    return data
+
+
+def validate_snapshot_chunks(
+    scope: SourceScope,
+    units: list[ScopedContentUnit],
+    snapshot: KnowledgeSnapshot,
+    policy: ChunkPolicy | None = None,
+) -> ChunkQuality:
+    """Validate derived evidence boundaries without database/vector side effects."""
+    data = snapshot_knowledge(scope, units, snapshot)
     _, quality = create_educational_chunks(scope, units, data, policy, published=False)
     return quality

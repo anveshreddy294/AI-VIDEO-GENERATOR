@@ -122,7 +122,12 @@ async def generate_session_notes(session_id: UUID, request: Request) -> Grounded
     context = await _context(request)
     try:
         options = NotesOptions.model_validate_json((await request.body()) or b"{}")
-        body = NotesRequest(session_id=session_id, **options.model_dump())
+        tolerant = options.tolerant_diagrams if "tolerant_diagrams" in options.model_fields_set else True
+        ai_supp = options.include_ai_supplemental if "include_ai_supplemental" in options.model_fields_set else True
+        dump = options.model_dump()
+        dump["tolerant_diagrams"] = tolerant
+        dump["include_ai_supplemental"] = ai_supp
+        body = NotesRequest(session_id=session_id, **dump)
         return await run_in_threadpool(GroundedNotesService(context).generate, body)
     except ValidationError:
         raise HTTPException(422, {"code": "INVALID_NOTES_REQUEST"}) from None
@@ -239,3 +244,43 @@ async def complete_session_remediation(session_id: UUID,job_id: str,request: Req
 @router.post("/{session_id}/remediation/{job_id}/reassessment",response_model=AssessmentStartResponse)
 async def reassess_session_remediation(session_id: UUID,job_id: str,request: Request) -> LearningProgress | AssessmentStartResponse:
     return await _learning_action(request,session_id,"reassess",job_id)
+
+
+from fastapi import BackgroundTasks
+from fastapi.responses import FileResponse
+from ..services.video.session_video import SessionVideo, SessionVideoStatus, render_session_video
+
+
+@router.post("/{session_id}/remediation/{job_id}/video", response_model=SessionVideoStatus)
+async def start_remediation_video(session_id: UUID, job_id: str, request: Request, background_tasks: BackgroundTasks) -> SessionVideoStatus:
+    context = await _context(request)
+    if (await request.body()) not in (b"", b"{}"):
+        raise HTTPException(422, {"code": "INVALID_LEARNING_REQUEST"})
+    adapter = SessionVideo(context, session_id, job_id)
+    try:
+        status, target = await run_in_threadpool(adapter.prepare)
+        if target is not None:
+            background_tasks.add_task(render_session_video, adapter, target, status.job_id)
+        return status
+    except KnowledgeError as error:
+        raise _safe_error(error) from None
+
+
+@router.get("/{session_id}/remediation/{job_id}/video", response_model=SessionVideoStatus)
+async def read_remediation_video(session_id: UUID, job_id: str, request: Request) -> SessionVideoStatus:
+    context = await _context(request)
+    adapter = SessionVideo(context, session_id, job_id)
+    try:
+        return await run_in_threadpool(adapter.status)
+    except KnowledgeError as error:
+        raise _safe_error(error) from None
+
+
+@router.get("/{session_id}/remediation/{job_id}/video/stream")
+async def stream_remediation_video(session_id: UUID, job_id: str, request: Request) -> FileResponse:
+    context = await _context(request)
+    try:
+        path = await run_in_threadpool(SessionVideo(context, session_id, job_id).stream_path)
+        return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": "private, no-store"})
+    except KnowledgeError as error:
+        raise _safe_error(error) from None

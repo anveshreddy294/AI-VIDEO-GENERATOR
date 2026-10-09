@@ -126,8 +126,9 @@ class LocalTTSProvider:
 class EdgeTTSProvider:
     """High-quality Microsoft Edge neural voice synthesis."""
 
-    def __init__(self, voice: str = "en-US-ChristopherNeural") -> None:
+    def __init__(self, voice: str = "en-US-ChristopherNeural", *, allow_fallback: bool = True) -> None:
         self.voice = voice
+        self.allow_fallback = allow_fallback
         self.fallback = LocalTTSProvider()
 
     async def generate_audio(self, text: str, output_path: Path, target_seconds: float = 0.0) -> Path:
@@ -167,14 +168,22 @@ class EdgeTTSProvider:
                 else:
                     return tmp_mp3
         except Exception as exc:
+            if not self.allow_fallback:
+                raise RuntimeError("SPOKEN_TTS_UNAVAILABLE") from None
             logger.warning(f"[tts] EdgeTTS generation failed ({exc}); falling back to local TTS")
 
+        if not self.allow_fallback:
+            raise RuntimeError("SPOKEN_TTS_UNAVAILABLE")
         return await self.fallback.generate_audio(text, output_path, target_seconds=target_seconds)
 
 
-def get_tts_provider(provider_name: str | None = None) -> TTSProvider:
+def get_tts_provider(provider_name: str | None = None, *, require_spoken: bool = False) -> TTSProvider:
     """Factory to get the configured TTS provider."""
     name = (provider_name or getattr(settings, "tts_provider", "edge_tts")).lower().strip()
+    if require_spoken:
+        if name == "edge_tts":
+            return EdgeTTSProvider(allow_fallback=False)
+        raise RuntimeError("SPOKEN_TTS_UNAVAILABLE")
     if name in ("mock", "test"):
         return MockTTSProvider()
     elif name in ("local", "say"):

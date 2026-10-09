@@ -308,3 +308,106 @@ def get_remediation_status(
         )
     except Exception as exc:
         _handle_domain_exception(exc)
+
+
+# =============================================================================
+# 8. AI-First Content Explanation (Arbitrary Topic or Source-Assisted)
+# =============================================================================
+from starlette.concurrency import run_in_threadpool
+from fastapi.security import HTTPAuthorizationCredentials
+from ..core.config import settings
+from ..core.supabase import SupabaseError
+from ..services.security.auth import bearer_scheme, get_current_user, get_runtime, auth_http_error
+from ..services.repositories.factory import get_source_repository
+from ..services.ai_explanation import (
+    AIExplanationRequest,
+    AIExplanationResponse,
+    AIExplanationService,
+    PromptInjectionError,
+)
+
+
+@router.post(
+    "/explain",
+    response_model=AIExplanationResponse,
+    summary="AI-First Educational Explanation",
+    description="Explain arbitrary educational topics or uploaded source observations using the reasoning model without requiring uploads, Qdrant vectors, or web search.",
+)
+async def explain_topic(
+    request: AIExplanationRequest,
+    user_id: Annotated[str, Depends(resolve_user_id)],
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)] = None,
+) -> AIExplanationResponse:
+    # 1. Resolve student identity
+    effective_user_id = user_id
+    supabase_user = None
+    if credentials is not None:
+        try:
+            runtime = get_runtime()
+            supabase_user = await run_in_threadpool(get_current_user, credentials.credentials, runtime)
+            effective_user_id = str(supabase_user.user_id)
+        except SupabaseError as error:
+            raise auth_http_error(error) from None
+    elif settings.database_provider == "supabase":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Bearer access token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # 2. If source_id is requested, enforce access control and extract source observations
+    source_observations: list[str] | None = None
+    if request.source_id:
+        if settings.database_provider == "supabase":
+            if supabase_user is None or credentials is None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Authentication required to access saved source observations.",
+                )
+            runtime = get_runtime()
+            repo = get_source_repository(user=supabase_user, token=credentials.credentials, runtime=runtime)
+            record = repo.get_source(request.source_id)
+            if record is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"error_code": "SOURCE_NOT_FOUND", "message": f"Source {request.source_id} not found or access denied."},
+                )
+            units = repo.get_content_units(request.source_id, request.source_version)
+            source_observations = [u.text for u in units if u.text]
+            if not request.topic:
+                request.topic = record.title or record.filename or f"Source {request.source_id}"
+        else:
+            from ..services.registry import get_source_record, load_content_units
+            record = get_source_record(request.source_id)
+            if record is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"error_code": "SOURCE_NOT_FOUND", "message": f"Source {request.source_id} not found."},
+                )
+            owner = getattr(record, "user_id", None) or getattr(record, "owner_user_id", None) or getattr(record, "uploaded_by", None)
+            if owner and owner not in (effective_user_id, "student_default", "default", "") and effective_user_id != "student_default" and effective_user_id != owner:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"error_code": "ACCESS_DENIED_OR_ISOLATION_VIOLATION", "message": f"User {effective_user_id} is not authorized to access source {request.source_id}."},
+                )
+            units = load_content_units(request.source_id)
+            source_observations = [u.text for u in units if u.text]
+            if not request.topic:
+                request.topic = record.title or record.filename or f"Source {request.source_id}"
+
+    try:
+        service = AIExplanationService()
+        return await run_in_threadpool(service.explain, request, source_observations=source_observations)
+    except PromptInjectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error_code": "PROMPT_INJECTION_DETECTED", "message": str(exc)},
+        ) from None
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("[learning] Error generating educational explanation")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate explanation. Please try again.",
+        ) from exc

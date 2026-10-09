@@ -19,6 +19,7 @@ from .api.sources import router as sources_router, SourceDependency
 from .api.knowledge import router as knowledge_router
 from .api.learning_sessions import router as learning_sessions_router
 from .api.learner import router as learner_router
+from .api.educational_content import router as educational_content_router
 from .core.supabase import SupabaseError
 from .services.ingestion.failures import SourceIngestionFailed
 from .services.security.auth import auth_http_error
@@ -100,6 +101,7 @@ app.include_router(sources_router)
 app.include_router(knowledge_router)
 app.include_router(learning_sessions_router)
 app.include_router(learner_router)
+app.include_router(educational_content_router)
 
 
 @app.exception_handler(SourceIngestionFailed)
@@ -202,9 +204,23 @@ def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str,
     from .services.registry import _load_sources_index, load_knowledge_graph
 
     if repository is not None:
-        return {"sources": [{"source_id": row.source_id, "filename": row.filename,
-                 "status": row.status, "modality": row.source_type,
-                 "created_at": row.created_at, "version": row.version} for row in repository.list_sources()]}
+        sources_list = []
+        for row in repository.list_sources():
+            has_units = False
+            try:
+                has_units = bool(repository.get_content_units(row.source_id, row.version))
+            except Exception:
+                has_units = False
+            sources_list.append({
+                "source_id": row.source_id,
+                "filename": row.filename,
+                "status": row.status,
+                "modality": row.source_type,
+                "created_at": row.created_at,
+                "version": row.version,
+                "content_ready": has_units or (row.status == "READY"),
+            })
+        return {"sources": sources_list}
     index = _load_sources_index()
     results = []
     for sid, rec in index.items():
@@ -216,6 +232,7 @@ def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str,
             "modality": rec.get("source_type"),
             "concepts_count": len(kg.concepts) if kg and kg.concepts else 0,
             "created_at": rec.get("created_at"),
+            "content_ready": rec.get("status") in ("READY", "CONTENT_READY") or bool(rec.get("content_units") or rec.get("extracted_text")),
         })
     results.sort(key=lambda x: (x["status"] == "READY", x.get("created_at") or ""), reverse=True)
     return {"sources": results}

@@ -49,7 +49,8 @@ def verified_subset(data: VisionExtractionData, result: VisualVerificationResult
         clean.visual_structure = ""
     clean.uncertain_elements = []
     lines = {" ".join(line.casefold().split()) for field in LITERAL_FIELDS for line in getattr(clean, field)}
-    if len(lines) < MIN_VERIFIED_LINES or sum(sum(c.isalnum() for c in line) for line in lines) < MIN_VERIFIED_CHARACTERS:
+    has_structural = bool(clean.tables or clean.graphs or clean.formulas or (clean.diagram_entities and clean.relationships))
+    if not has_structural and (len(lines) < MIN_VERIFIED_LINES or sum(sum(c.isalnum() for c in line) for line in lines) < MIN_VERIFIED_CHARACTERS):
         return None
     retained = set(extraction_claims(clean))
     checks = [c for c in result.checks if (c.claim_type, c.claim) in retained]

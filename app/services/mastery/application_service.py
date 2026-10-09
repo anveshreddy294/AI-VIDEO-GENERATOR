@@ -527,6 +527,7 @@ class AdaptiveLearningService:
             concept_id=clean_concept,
             question_id=submission.question_id.strip(),
             selected_answer=submission.selected_answer,
+            text_answer=submission.text_answer,
             assessment_type=submission.assessment_type,
         )
 
@@ -557,6 +558,10 @@ class AdaptiveLearningService:
             reassessment_attempt_count=m.reassessment_attempt_count,
             remediation_attempt_count=m.remediation_attempt_count,
             next_action=self._to_next_action_dto(next_action),
+            text_answer=result.attempt.text_answer,
+            feedback=result.attempt.feedback,
+            explanation=result.attempt.explanation,
+            score=result.attempt.score,
         )
 
     # -------------------------------------------------------------------------

@@ -561,6 +561,7 @@ def _synthesize_grounded_fallback_plan(
             "content_ids": target.source_content_ids or [],
             "pages": [target.page_start, target.page_end] if target.page_start else [],
         },
+        provenance_kind="SOURCE_GROUNDED" if (chunk_ids or evidence_chunks) else "AI_ENRICHED",
     )
 
 
@@ -695,6 +696,7 @@ def plan_video_for_target(
                 "content_ids": target.source_content_ids or [],
                 "pages": [target.page_start, target.page_end] if target.page_start else [],
             },
+            provenance_kind="SOURCE_GROUNDED" if (chunk_ids or evidence) else "AI_ENRICHED",
         )
         # Normalize and auto-repair plan (scales durations to target_seconds and budgets narration rate)
         plan = normalize_and_repair_video_plan(plan, dur)
@@ -711,6 +713,7 @@ def plan_video_for_target(
         fallback_plan.source_content_ids = target.source_content_ids or []
         fallback_plan.source_chunk_ids = [cid for cid in chunk_ids if cid]
         fallback_plan.provenance_chunks = [cid for cid in chunk_ids if cid]
+        fallback_plan.provenance_kind = "SOURCE_GROUNDED" if (chunk_ids or evidence) else "AI_ENRICHED"
         fallback_plan = normalize_and_repair_video_plan(fallback_plan, dur)
         validated = validate_video_plan(fallback_plan)
         save_video_plan(validated)

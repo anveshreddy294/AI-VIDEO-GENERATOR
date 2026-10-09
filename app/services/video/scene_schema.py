@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -121,6 +121,7 @@ class VideoPlan(BaseModel):
     timestamp_start: float | str | None = None
     timestamp_end: float | str | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -157,6 +158,10 @@ class VideoArtifact(BaseModel):
     page_start: int | None = None
     page_end: int | None = None
     error: str | None = None
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
+    preview: dict[str, Any] | None = None
+    retry_count: int = 0
+    prior_job_id: str | None = None
     created_at: str = Field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )

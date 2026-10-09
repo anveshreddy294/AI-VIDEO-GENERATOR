@@ -19,6 +19,10 @@ class SourceFailure(BaseModel):
     vision_error_code: VisionErrorCode | None = None
     vision_route_trace: VisionRouteFailureTrace | None = None
     validation_detail: Literal["REFERENCE", "QUOTE", "ROLE", "LABEL", "EDGE_ENDPOINTS", "EDGE_NAMES", "EDGE_ROLE", "EDGE_DIRECTION", "DEFINITION", "PARENT_REFERENCE", "EMPTY_REQUIRED_LEVEL", "CHILD_SUPPORT"] | None = None
+    failed_object_type: Literal["TOPIC", "SUBTOPIC", "CONCEPT", "INVENTORY"] | None = None
+    structural_reason: Literal["HALLUCINATED_LABEL", "WRONG_EVIDENCE_ANCHOR", "RENDERER_CAPTION_MISMATCH"] | None = None
+    label_reference: str | None = None
+    repair_attempted: bool | None = None
     verification_status: Literal["VERIFIED", "REJECTED", "UNCERTAIN"] | None = None
     verification_reasons: list[str] | None = None
     verified_claim_count: int | None = None

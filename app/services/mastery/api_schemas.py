@@ -108,7 +108,8 @@ class AssessmentSubmissionRequestDTO(BaseModel):
     attempt_id: str = Field(min_length=1)
     concept_id: str = Field(min_length=1)
     question_id: str = Field(min_length=1)
-    selected_answer: int = Field(ge=0, le=10)
+    selected_answer: int = Field(default=-1, ge=-1, le=10)
+    text_answer: str | None = None
     session_id: str | None = None
     assessment_type: AssessmentType = AssessmentType.DIAGNOSTIC
 
@@ -131,6 +132,10 @@ class AssessmentSubmissionResponseDTO(BaseModel):
     reassessment_attempt_count: int
     remediation_attempt_count: int
     next_action: NextActionResponse
+    text_answer: str | None = None
+    feedback: str | None = None
+    explanation: str | None = None
+    score: float | None = None
 
 
 class SafeReassessmentQuestionResponse(BaseModel):

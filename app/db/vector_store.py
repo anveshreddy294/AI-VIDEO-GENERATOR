@@ -149,6 +149,14 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     return vec
 
 
+_QUERY_EMBED_CACHE: dict[tuple[str, str, str], list[float]] = {}
+_QUERY_EMBED_CACHE_MAX = 512
+
+
+def clear_embed_cache() -> None:
+    _QUERY_EMBED_CACHE.clear()
+
+
 def _embedding_failed(code: ProcessingCode) -> None:
     """Record a safe failure for the legacy optional-vector boundary."""
     _embed_diagnostics_var.set(StageDiagnostics(provider_used='ollama', error_code=code,
@@ -163,6 +171,10 @@ def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> li
     import urllib.request
     if not texts:
         return []
+    if len(texts) == 1 and task_type == "retrieval_query" and "PYTEST_CURRENT_TEST" not in os.environ:
+        cache_key = (texts[0], task_type, settings.embedding_model)
+        if cache_key in _QUERY_EMBED_CACHE:
+            return [_QUERY_EMBED_CACHE[cache_key]]
     global _resolved_ollama_model
     _resolved_ollama_model = None
     primary = settings.embedding_model
@@ -224,6 +236,14 @@ def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> li
             fallback_reason='Configured model unavailable' if index > 0 else None,
             grounding_verified=True, dimension_validated=True, configured_model=primary,
             model_used=resolved, vector_dimension=len(clean[0])))
+        if len(texts) == 1 and len(clean) == 1 and task_type == "retrieval_query" and "PYTEST_CURRENT_TEST" not in os.environ:
+            cache_key = (texts[0], task_type, settings.embedding_model)
+            if len(_QUERY_EMBED_CACHE) >= _QUERY_EMBED_CACHE_MAX:
+                try:
+                    _QUERY_EMBED_CACHE.pop(next(iter(_QUERY_EMBED_CACHE)))
+                except KeyError:
+                    pass
+            _QUERY_EMBED_CACHE[cache_key] = clean[0]
         return clean
     _embedding_failed('EMBEDDING_MODEL_UNAVAILABLE')
     return None

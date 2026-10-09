@@ -74,6 +74,7 @@ class SessionQARequest(Contract):
     concept_ids: (
         Annotated[list[Identifier], Field(min_length=1, max_length=64)] | None
     ) = None
+    allow_ai_supplemental: bool = False
 
 
 class SessionStorageUnavailable(RuntimeError):
@@ -336,4 +337,6 @@ class LearningSessionService:
             topic_id=row.topic_id,
             subtopic_id=row.subtopic_id,
             concept_ids=concepts,
+            retrieval_mode="exact",
+            allow_ai_supplemental=request.allow_ai_supplemental,
         )

@@ -161,6 +161,7 @@ def visual_content_unit(
             "image_sha256": hashlib.sha256(image_bytes).hexdigest(),
             "extraction": _object.validate_python(data.model_dump(mode="json")),
             "routing": data._routing_provenance,
+            "confidence_status": data._routing_provenance.get("confidence_status", "reported" if data.confidence > 0 else "unreported"),
         }
         return ContentUnit(
             source_id=source_id,

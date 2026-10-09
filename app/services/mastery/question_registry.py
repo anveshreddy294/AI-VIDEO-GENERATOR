@@ -20,11 +20,14 @@ class AuthoritativeQuestion(BaseModel):
     session_id: str | None = None
     user_id: str | None = None
     stem: str
-    options: list[str]
-    correct_index: int = Field(ge=0, le=10)
+    options: list[str] = Field(default_factory=list)
+    correct_index: int = Field(default=0, ge=0, le=10)
     difficulty: str = "intermediate"
     explanation: str = ""
     status: str = "PENDING"  # PENDING or ANSWERED
+    question_type: str = "mcq"  # "mcq" or "descriptive"
+    rubric_criteria: list[dict[str, Any]] = Field(default_factory=list)
+    expected_keywords: list[str] = Field(default_factory=list)
     distractor_misconceptions: dict[int, Any] = Field(
         default_factory=dict,
         description="Diagnostic misconception metadata mapped by distractor option index",

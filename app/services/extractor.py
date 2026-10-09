@@ -67,6 +67,17 @@ def extract_from_pdf(
             )
             for image in visual_inputs:
                 if calls >= PDF_MAX_VISION_CALLS:
+                    if units and has_text:
+                        logger.warning("PDF visual extraction budget reached; proceeding with native text.")
+                        for u in units:
+                            if u.page_number == page_number:
+                                missing = u.provenance.setdefault("missing_visual_content", [])
+                                missing.append({
+                                    "xref": image.get("xref"),
+                                    "reason": "PDF visual extraction budget exceeded",
+                                    "status": "UNEXTRACTED_BUDGET_EXCEEDED",
+                                })
+                        break
                     raise VisionExtractionFailed(
                         "PDF visual extraction budget exceeded"
                     )
@@ -88,28 +99,43 @@ def extract_from_pdf(
                     bbox=tuple(float(v) for v in image["bbox"]) if image["bbox"] else None)
                 source_anchors = (SourceAnchor(origin="pdf_native", context=anchor_context, text=anchor_text),) if anchor_text else ()
 
-                unit = visual_content_unit(
-                    image["bytes"],
-                    source_id=source_id,
-                    asset_id=asset_id,
-                    source=f"{pdf_path.name} p.{page_number}",
-                    modality="pdf",
-                    page_number=page_number,
-                    source_anchors=source_anchors,
-                    visual_index=calls - 1,
-                    bbox=image["bbox"],
-                    image_path=str(image_path),
-                    routing_signals=VisualSignals(visual_region_count=len(visual_inputs),native_pdf_text=has_text),
-                )
-                unit.sequence_index = len(units)
-                if unit.bbox:
-                    unit.provenance["normalized_bbox"] = [
-                        unit.bbox[0] / page.rect.width,
-                        unit.bbox[1] / page.rect.height,
-                        unit.bbox[2] / page.rect.width,
-                        unit.bbox[3] / page.rect.height,
-                    ]
-                units.append(unit)
+                try:
+                    unit = visual_content_unit(
+                        image["bytes"],
+                        source_id=source_id,
+                        asset_id=asset_id,
+                        source=f"{pdf_path.name} p.{page_number}",
+                        modality="pdf",
+                        page_number=page_number,
+                        source_anchors=source_anchors,
+                        visual_index=calls - 1,
+                        bbox=image["bbox"],
+                        image_path=str(image_path),
+                        routing_signals=VisualSignals(visual_region_count=len(visual_inputs),native_pdf_text=has_text),
+                    )
+                    unit.sequence_index = len(units)
+                    if unit.bbox:
+                        unit.provenance["normalized_bbox"] = [
+                            unit.bbox[0] / page.rect.width,
+                            unit.bbox[1] / page.rect.height,
+                            unit.bbox[2] / page.rect.width,
+                            unit.bbox[3] / page.rect.height,
+                        ]
+                    units.append(unit)
+                except Exception as exc:
+                    if units and has_text:
+                        logger.warning("Embedded image extraction failed on page %d, continuing with text units: %s", page_number, exc)
+                        for u in units:
+                            if u.page_number == page_number:
+                                missing = u.provenance.setdefault("missing_visual_content", [])
+                                missing.append({
+                                    "image_id": image_id,
+                                    "xref": image.get("xref"),
+                                    "reason": f"Embedded image extraction failed: {type(exc).__name__}",
+                                    "status": "UNEXTRACTED_IMAGE_ERROR",
+                                })
+                        continue
+                    raise
     return units
 
 

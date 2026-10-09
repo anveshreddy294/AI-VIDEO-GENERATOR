@@ -28,10 +28,12 @@ test('private calls use protectedFetch and safe text rendering',()=>{
     assert(!script.includes('innerHTML'));
     for(const forbidden of ['/assessment/','/video/generate','service_role','cloudflare_worker_secret'])assert(!script.includes(forbidden));
 });
-test('future actions disabled and learner controls have labels',()=>{
+test('Practice is session-gated and unsupported Visualize remains honest',()=>{
     const html=fs.readFileSync(path.join(__dirname,'../app/static/learning.html'),'utf8');
     assert.match(html,/button id="notes-tab"[^>]*disabled/);
-    assert.match(html,/button disabled[^>]*>Practice/);
+    assert.match(html,/button id="practice-tab"[^>]*disabled[^>]*>Practice/);
+    assert(!html.includes("Practice · coming next"));
+    assert(html.includes('id="source-history"') && !html.includes('id="source-history" open'));
     assert.match(html,/button disabled[^>]*>Visualize/);
     assert(html.includes('label for="question"')&&html.includes('aria-live="polite"'));
 });

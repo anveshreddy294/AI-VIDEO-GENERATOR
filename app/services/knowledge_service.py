@@ -147,6 +147,7 @@ class KnowledgeService:
                 evidence=evidence[c.concept_id],
                 prerequisite_concept_ids=sorted(prerequisites[c.concept_id]),
                 related_concept_ids=sorted(related[c.concept_id]),
+                provenance_kind=c.provenance.get("provenance_kind", "SOURCE_GROUNDED"),
             )
         return result
 
@@ -180,6 +181,7 @@ class KnowledgeService:
                             description=sub.description,
                             sequence=sub.sequence,
                             concepts=[views[c.concept_id] for c in ordered],
+                            provenance_kind=sub.provenance.get("provenance_kind", "SOURCE_GROUNDED"),
                         )
                     )
                 for topic in sorted(
@@ -192,6 +194,7 @@ class KnowledgeService:
                             description=topic.description,
                             sequence=topic.sequence,
                             subtopics=subs_by_topic[topic.topic_id],
+                            provenance_kind=topic.provenance.get("provenance_kind", "SOURCE_GROUNDED"),
                         )
                     )
             result = KnowledgeMap(

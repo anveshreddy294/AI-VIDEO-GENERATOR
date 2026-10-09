@@ -71,7 +71,8 @@ def prepare_knowledge_index(
         "structuring_latency_seconds": 0.0,
     }
     service = KnowledgeService(knowledge)
-    if state.knowledge_state != "READY" and record.status == "READY":
+    if (state.knowledge_state != "READY" and record.status == "READY"
+        and version.provenance.get("downstream_optional") is not True):
         raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
     if state.knowledge_state != "READY":
         result = understand_content(scope, envelopes)

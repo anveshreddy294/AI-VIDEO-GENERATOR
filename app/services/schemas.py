@@ -104,6 +104,7 @@ class ConceptNode(BaseModel):
     source_content_ids: list[str] = Field(
         default_factory=list, description="ContentUnit IDs where this concept is defined"
     )
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
     @field_validator("concept_id")
     @classmethod
@@ -374,6 +375,7 @@ class QAResponse(BaseModel):
     active_scene: dict[str, Any] | None = None
     trace_id: str = Field(default_factory=lambda: f"trace_{uuid4().hex[:12]}")
     diagnostics: StageDiagnostics | None = None
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
 
 class QAAnswerTrace(BaseModel):

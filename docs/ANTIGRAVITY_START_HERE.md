@@ -1,0 +1,33 @@
+# Antigravity — start here
+
+Use the SAME local folder `C:\Users\ANVESH\Desktop\AI-VIDEO-GENERATOR`; do not clone GitHub or change branches.
+
+1. In PowerShell run `Get-Location`, `git branch --show-current`, `git rev-parse HEAD`, `git status --short`, `git diff --stat`. Expected branch `phase10-mastery-remediation`, captured HEAD `d7bf07a67c39d030ae6bcfecce2b434790d84735`. If different, investigate; never reset to the expected value.
+2. Read `docs/ANTIGRAVITY_HANDOFF.md`, `docs/AUTONOMOUS_LEARNER_LOOP_PROGRESS.md`, and `docs/KNOWLEDGE_STRUCTURING_CLOSURE.md`. Current code and latest ledger take precedence over older README/phase reports.
+3. Preserve all modified/untracked files. Secured recovery baseline: `C:\Users\ANVESH\Documents\Codex\2026-10-06\you-are-working-on-the-visualai\phase0-baseline-20261009-043746`. Read EXECUTION_MAP.md and manifest there; never copy private configuration into docs. No stash/reset/clean/checkout/commit/push/merge or overwrite.
+4. Begin ONLY approved Phase 1 in Antigravity: PROJECT-WIDE validator removal and core unblocking, the highest priority. Audit real production callers across ingestion/vision/structuring, Notes/ASK, assessment, video and job paths; remove redundant approval loops and optional blocking quality checks. Preserve Auth/RLS, owner/version isolation, citations, prompt-injection defense, assessment correctness, database safety and job idempotency. Do not narrow this to one structuring module. This handoff performs no implementation.
+5. Modify the existing implementation incrementally. Use the project-wide validator register and exact candidate modules/tests in handoff sections F and I; make only justified incremental changes. Do not replace Supabase, Qdrant, Worker or inference architecture. Keep SOURCE_GROUNDED facts separate from optional AI_ENRICHED explanations.
+6. Run affected offline tests, preview `python scripts/verify_changed.py --plan`, then run the fast verifier as required by the approved Phase1 scope. Full suite is a separate phase-close gate, not a default repeated operation. Keep private credentials out of test logs.
+7. Stop after Phase1 and report changes, tests, compatibility/security outcomes and blockers. Do not automatically begin Phase2 or deploy/migrate.
+
+## Evidence boundaries
+
+Fresh Phase0: correct branch, restricted recoverable snapshot, unchanged1,945 file hashes,52 deterministic tests passed. This addendum is documentation only; it does not rerun tests or models.
+
+Historical: earlier dense-image learner loop passed API/DOM checks. Latest difficult source SRC_ad3e1c3e2ba85259ac5346396fc80abe v1/job JOB_16cff9ede6d2 failed publication despite verified extraction and successful structuring transports. The final vocabulary fix was offline-only; no post-fix live PASS. Prior full regression reported1279 passed/137 skipped/1 failed then targeted correction; do not claim a fresh green full suite.
+
+VERIFIED CURRENT IMPLEMENTATION is distinct from HISTORICAL FAILURE EVIDENCE and APPROVED FUTURE IMPLEMENTATION. Unknown: exact current remote rows, deployed routing parity, arbitrary-image accuracy, complete descriptive assessment, goal-aware canonical roadmap, and pixel-browser acceptance. Do not infer them from historical filenames or service health.
+
+## Approved Phase 1–7 plan — future work, not completed capabilities
+
+The PS Problem Description, objectives and all seven Online Round Requirements are reproduced from the authoritative user-supplied text in handoff section A. No missing original-upload text is reconstructed. The following phase plan was explicitly supplied and approved by the user, not inferred from repository filenames.
+
+1. **Phase 1 — Project-Wide Validator Removal and Core Unblocking:** audit actual production validators/reviewers; remove redundant validator agents, unnecessary blocking quality checks and repeated AI approvals; fix cascading source failures. Preserve authentication/RLS, citations, assessment correctness and database safety. HIGHEST priority. Cover the entire production pipeline, not only structuring. Run affected regression tests and fast verifier; STOP and report Phase 1.
+2. **Phase 2 — AI-First Content Understanding:** separate SOURCE_GROUNDED and AI_ENRICHED; useful explanations beyond exact text; arbitrary topics without preloaded syllabus; honest attribution and essential correctness. Depends on Phase 1. Gate: mode/output contracts and grounded-vs-enriched regressions.
+3. **Phase 3 — RAG, ASK, Notes and Visual Study Materials:** retain Supabase/Qdrant/RetrievalService; real source-backed citations and clearly identified supplemental explanations; usable notes, flowcharts and concept maps. Depends on Phase 2. Gate: retrieval/isolation/citation and learner-material acceptance.
+4. **Phase 4 — Performance and Progressive Learning:** reduce sequential work/repeated calls; first useful explanation promptly; optional work nonblocking; durable jobs, correct statuses and restart recovery. Depends on stable output contracts. Gate: measured latency/calls, failure/restart/idempotency tests. Existing in-memory job registry is not durable recovery.
+5. **Phase 5 — Animated Educational Videos and Narration:** reuse video engine/templates; approximately20–30-second explanatory animation; synchronized narration/visuals; remove redundant quality reviews while retaining playable-media/safety checks. Depends on content/job contracts. Gate: real media/duration/synchronization acceptance and video regressions.
+6. **Phase 6 — Adaptive Assessments, Agentic AI and Personalized Roadmaps:** preserve Phase9/10; complete generation/scoring/feedback; meaningful orchestration/remediation; mastery/reassessment and visible personalized roadmaps. Depends on stable learning/video contracts. Gate: assessment integrity, bounded mastery/remediation, roadmap/API/UI acceptance.
+7. **Phase 7 — Final Hackathon Acceptance and Main-Merge Preparation:** verify all seven PS requirements; real learner E2E; targeted tests, fast verifier and full regression; performance/data/security/branch checks; assess main-merge readiness without merging. Depends on all earlier phases accepted. No deterministic-only live PASS claim.
+
+Full approved wording, module dependencies and phase stop/go gates are in handoff section I. Execute ONE phase at a time. No web research/Tavily/Brave, new paid services, vector replacement or backend rewrite. Keep Cloudflare Workers AI, Supabase, Qdrant and video infrastructure. Stay on phase10-mastery-remediation; preserve every existing modification. No commits, pushes, resets, branch changes, automatic migrations or deployments. Phase 1 starts in Antigravity; Codex stops after this Phase 0 handoff.

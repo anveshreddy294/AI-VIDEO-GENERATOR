@@ -167,7 +167,7 @@ def test_commit_before_qdrant_and_no_source_json(context: Context, monkeypatch: 
         seen.extend(chunks)
         return len(chunks)
     monkeypatch.setattr(vector_store,'upsert_chunks',index)
-    result=ingest_source(repo,path,'fixture.txt')
+    result=ingest_source(repo,path,'fixture.txt', enrich=True)
     assert result['status']=='READY' and seen
     assert not list(settings.registry_dir.rglob('sources_index.json'))
     assert not list(settings.registry_dir.rglob('content_units.json'))
@@ -183,7 +183,7 @@ def test_commit_failure_never_calls_qdrant_or_local_fallback(context: Context, m
         pytest.fail('Qdrant called before successful canonical commit')
     monkeypatch.setattr(vector_store,'upsert_chunks',forbidden)
     with pytest.raises(SourceIngestionFailed) as error:
-        ingest_source(repo,path,'fixture.txt')
+        ingest_source(repo,path,'fixture.txt', enrich=True)
     assert not remote.sources and not remote.versions and not remote.units
     assert 'test-secret' not in str(error.value)+caplog.text
     assert not (settings.registry_dir/'sources_index.json').exists()
@@ -196,7 +196,7 @@ def test_qdrant_failure_and_deterministic_retry_without_extraction(context: Cont
         raise RuntimeError('secret should not appear in persisted failure')
     monkeypatch.setattr(vector_store,'upsert_chunks',fail)
     with pytest.raises(SupabaseError,match='retry this source'):
-        ingest_source(repo,path,'fixture.txt')
+        ingest_source(repo,path,'fixture.txt', enrich=True)
     assert len(remote.sources)==len(remote.versions)==1 and remote.units
     assert remote.sources[0]['status']=='FAILED'
     assert remote.sources[0]['error_message']=='QDRANT_INDEX_FAILED:RuntimeError'
@@ -204,7 +204,7 @@ def test_qdrant_failure_and_deterministic_retry_without_extraction(context: Cont
     from app.services.ingestion import source_ingestion
     monkeypatch.setattr(source_ingestion,'dispatch',lambda *args,**kwargs: pytest.fail('Retry extracted again'))
     monkeypatch.setattr(vector_store,'upsert_chunks',lambda chunks:len(chunks))
-    result=ingest_source(repo,path,'fixture.txt')
+    result=ingest_source(repo,path,'fixture.txt', enrich=True)
     assert result['status']=='READY'
     assert len(remote.sources)==len(remote.versions)==1
     assert old_ids==[row['content_id'] for row in remote.units]
@@ -214,7 +214,7 @@ def test_fresh_repository_reads_canonical_rows(context: Context, monkeypatch: py
     remote,repo,path=context
     from app.db import vector_store
     monkeypatch.setattr(vector_store,'upsert_chunks',lambda chunks:len(chunks))
-    result=ingest_source(repo,path,'fixture.txt')
+    result=ingest_source(repo,path,'fixture.txt', enrich=True)
     fresh=SupabaseSourceRepository(repo.user,'test-token',repo.runtime)
     assert fresh.get_source(result['source_id']).status=='READY'
     assert fresh.get_source_version(result['source_id']).version==1
@@ -264,7 +264,7 @@ def test_partial_vector_count_never_ready(context: Context, monkeypatch: pytest.
     from app.db import vector_store
     monkeypatch.setattr(vector_store,'upsert_chunks',lambda chunks:0)
     with pytest.raises(SupabaseError):
-        ingest_source(repo,path,'fixture.txt')
+        ingest_source(repo,path,'fixture.txt', enrich=True)
     assert remote.sources[0]['status']=='FAILED'
 
 
@@ -296,7 +296,9 @@ def test_background_source_job_has_no_assessment_or_token_leak(context: Context,
     job_id = response.json()['job_id']
     snapshot = client.get('/pipeline/jobs/' + job_id, headers={'Authorization': 'Bearer test-token'})
     assert snapshot.json()['status'] == 'completed'
-    assert snapshot.json()['current_stage'] == 'source_ready'
+    assert snapshot.json()['current_stage'] == 'content_ready'
+    assert snapshot.json()['result']['content_ready'] is True
+    assert snapshot.json()['result']['downstream']['indexing'] == 'NOT_REQUESTED'
     assert 'assessment' not in snapshot.json()['result']
     assert 'test-token' not in snapshot.text and 'public-test-key' not in snapshot.text
     assert client.get('/pipeline/jobs/' + job_id, headers={'Authorization': 'Bearer other-token'}).status_code == 404
@@ -312,7 +314,7 @@ def test_graph_artifact_is_not_needed_for_canonical_ready(context: Context, monk
     from app.services import registry
     monkeypatch.setattr(registry, 'save_knowledge_graph', artifact_failure)
     monkeypatch.setattr(vector_store, 'upsert_chunks', lambda chunks: len(chunks))
-    assert ingest_source(repo,path,'fixture.txt')['knowledge_state']=='READY'
+    assert ingest_source(repo,path,'fixture.txt', enrich=True)['knowledge_state']=='READY'
     assert remote.sources[0]['status']=='READY'
     assert not list(settings.registry_dir.rglob('knowledge_graph.json'))
     record = repo.get_source(str(remote.sources[0]['source_id']))
@@ -344,7 +346,7 @@ def test_repaired_small_txt_job_succeeds_without_vision(context: Context, monkey
     monkeypatch.setattr(extractor, 'describe_image', forbidden)
     monkeypatch.setattr(vector_store, 'upsert_chunks', lambda chunks: len(chunks))
     job = manager.create_job('source_ingestion')
-    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt'))
+    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt', enrich=True))
     assert job.state == 'SUCCEEDED' and job.result['status'] == 'READY'
     assert len(remote.sources) == len(remote.versions) == 1 and remote.units
     assert remote.sources[0]['status'] == 'READY'
@@ -362,7 +364,7 @@ def test_structuring_timeout_fails_job_without_persisting_concepts(context: Cont
         raise TimeoutError('secret password raw model prompt')
     monkeypatch.setattr(structurer, 'generate_educational_proposal', timeout)
     job = manager.create_job('source_ingestion')
-    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt'))
+    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt', enrich=True))
     assert job.state == 'FAILED' and job.is_finished
     assert job.failure.stage == 'STRUCTURING'
     assert job.failure.code == 'MODEL_TIMEOUT' and job.failure.retryable
@@ -389,7 +391,7 @@ def test_large_grounded_txt_commits_all_units(context: Context, monkeypatch: pyt
         return educational_response(prompt)
     monkeypatch.setattr(structurer, 'generate_educational_proposal', generate)
     monkeypatch.setattr(vector_store, 'upsert_chunks', lambda chunks: len(chunks))
-    result = ingest_source(repo, path, 'large_grounded.txt')
+    result = ingest_source(repo, path, 'large_grounded.txt', enrich=True)
     assert result['status'] == 'READY' and len(calls) == 1
     assert len(remote.units) == len([part for part in text.split('\n\n') if part.strip()])
     assert all(row['text'] in text for row in remote.units)
@@ -414,7 +416,7 @@ def test_index_failure_reason_is_durable_and_observable(context: Context, monkey
         raise ProcessingError(code, 'Safe embedding failure')
     monkeypatch.setattr(vector_store, 'upsert_chunks', fail)
     job = manager.create_job('source_ingestion')
-    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt'))
+    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt', enrich=True))
     assert job.state == 'FAILED' and job.failure.stage == 'INDEXING'
     assert job.failure.reason_code == code
     assert remote.sources[0]['status'] == 'FAILED' and remote.sources[0]['error_message'] == code
@@ -436,7 +438,7 @@ def test_structuring_failure_reasons_stay_distinct(context: Context, monkeypatch
         raise ProcessingError('MODEL_UNAVAILABLE', 'Reasoning model unavailable')
     monkeypatch.setattr(structurer, 'generate_educational_proposal', generate)
     job = manager.create_job('source_ingestion')
-    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt'))
+    asyncio.run(source_jobs.execute_source_job(job.job_id, repo, path, 'fixture.txt', enrich=True))
     assert job.state=='FAILED'
     assert (job.failure.reason_code==code if code=='MODEL_UNAVAILABLE' else job.failure.code=='INVALID_MODEL_OUTPUT')
     assert remote.sources and remote.versions and remote.units
@@ -456,7 +458,7 @@ def test_visual_workload_metadata_is_validated_and_owner_comes_from_jwt(context:
     monkeypatch.setattr(sources, "get_runtime", lambda: repo.runtime)
     monkeypatch.setattr(sources, "get_current_user", lambda token, runtime: repo.user)
     captured: list[VisualSignals] = []
-    def accepted(repository: SupabaseSourceRepository, path: Path, filename: str, *, routing_signals: VisualSignals, file_truth: object = None) -> dict[str, JsonValue]:
+    def accepted(repository: SupabaseSourceRepository, path: Path, filename: str, *, routing_signals: VisualSignals, file_truth: object = None, enrich: bool = False) -> dict[str, JsonValue]:
         assert repository.owner_id == str(OWNER)
         captured.append(routing_signals)
         return {"source_id": "SRC_fixture", "status": "READY"}
@@ -474,11 +476,11 @@ def test_ready_duplicate_never_reindexes_or_downgrades(context: Context, monkeyp
     from app.db import vector_store
     remote,repo,path=context
     monkeypatch.setattr(vector_store,"upsert_chunks",lambda chunks:len(chunks))
-    initial=ingest_source(repo,path,"fixture.txt")
+    initial=ingest_source(repo,path,"fixture.txt", enrich=True)
     def forbidden(chunks: list[RichChunk]) -> int:
         pytest.fail("READY retry must not write vectors")
     monkeypatch.setattr(vector_store,"upsert_chunks",forbidden)
-    repeated=ingest_source(repo,path,"fixture.txt")
+    repeated=ingest_source(repo,path,"fixture.txt", enrich=True)
     assert initial["source_id"]==repeated["source_id"]
     assert repeated["understanding_metrics"]["qdrant_writes"]==0
     assert remote.sources[0]["status"]=="READY" and len(remote.sources)==len(remote.versions)==1
@@ -492,14 +494,14 @@ def test_source_cancel_waits_for_actual_publication(context: Context,monkeypatch
     _,repo,path=context
     manager=JobManager();monkeypatch.setattr(source_jobs,"job_manager",manager)
     started=threading.Event();release=threading.Event()
-    def ingest(repository: SupabaseSourceRepository, source: Path, filename: str) -> dict[str,JsonValue]:
+    def ingest(repository: SupabaseSourceRepository, source: Path, filename: str, *, enrich: bool = False) -> dict[str,JsonValue]:
         started.set();assert release.wait(5)
         return {"source_id":"SRC_cancel","status":"READY","knowledge_state":"READY"}
     monkeypatch.setattr(source_jobs,"ingest_source",ingest)
     async def scenario() -> None:
         job,_=await manager.get_or_create_active_job("cancel",job_type="source_ingestion")
         job.metadata["source_owner"]=repo.owner_id
-        task=asyncio.create_task(source_jobs.execute_source_job(job.job_id,repo,path,"fixture.txt"))
+        task=asyncio.create_task(source_jobs.execute_source_job(job.job_id,repo,path,"fixture.txt", enrich=True))
         assert await asyncio.to_thread(started.wait,5)
         await manager.cancel_job(job.job_id)
         assert not job.is_finished
@@ -528,7 +530,7 @@ def test_lost_ready_ack_is_reconciled_without_second_index(context: Context,monk
         job,_=await manager.get_or_create_active_job("lost",job_type="source_ingestion")
         digest=hashlib.sha256(path.read_bytes()).hexdigest()
         job.metadata.update(source_owner=repo.owner_id,source_id="SRC_"+uuid5(NAMESPACE_URL,f"visualai:{repo.owner_id}:fixture.txt:{digest}").hex)
-        await source_jobs.execute_source_job(job.job_id,repo,path,"fixture.txt")
+        await source_jobs.execute_source_job(job.job_id,repo,path,"fixture.txt", enrich=True)
         assert job.state=="SUCCEEDED" and remote.sources[0]["status"]=="READY"
         assert len(writes)==1
     asyncio.run(scenario())

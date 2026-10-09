@@ -25,6 +25,8 @@ async def legacy_learning_boundary(
     """Authenticate before rejecting unsupported handlers; never inspect local resources."""
     if settings.database_provider in {'file', 'local'}:
         return
+    if request.url.path == "/api/learning/explain":
+        return
     if settings.database_provider != 'supabase':
         raise HTTPException(503, detail={'code': 'INVALID_DATABASE_PROVIDER',
                                        'message': 'Database provider is unavailable.'})

@@ -30,6 +30,7 @@ class SourceVersion(BaseModel):
     quarantined_content: list[dict[str, JsonValue]] = Field(default_factory=list)
     rich_chunks: list[dict[str, JsonValue]] = Field(default_factory=list)
     topic_blueprint: dict[str, JsonValue] | None = None
+    knowledge_diagnostics: dict[str, JsonValue] = Field(default_factory=dict)
 
 
 class SupabaseSourceRepository:

@@ -3,7 +3,7 @@
 (() => {
     'use strict';
     /** @typedef {Record<string, unknown>} Row */
-    /** @typedef {{source_id:string, filename:string, status:string, version:number}} Source */
+    /** @typedef {{source_id:string, filename:string, status:string, version:number, modality:string, content_ready?:boolean}} Source */
     const POLL_INTERVAL_MS = 2000;
     const MAX_JOB_POLLS = 120;
     /** @param {unknown} value @returns {Row} */
@@ -53,9 +53,13 @@
             if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
                 const code = row(detail).code;
                 if (typeof code === 'string' && Object.hasOwn(uploadValidation, code)) return uploadValidation[code];
+                if (code === 'EDUCATIONAL_CONTENT_INVALID') return 'Could not generate educational lesson for this topic. Please try again.';
+                if (code === 'LESSON_NOT_FOUND') return 'The requested educational lesson was not found.';
             }
+            if (Array.isArray(detail)) return 'Invalid input format. Please check your topic and try again.';
+            if (typeof detail === 'string') return detail;
         }
-        if (status === 422) return 'The selected learning scope is not valid. Choose it again.';
+        if (status === 422) return 'The input topic or selected learning scope is not valid. Try another topic.';
         if (status === 503 && value && typeof value === 'object') {
             const detail = row(value).detail;
             if (detail && typeof detail === 'object' && row(detail).code === 'SESSION_STORAGE_UNAVAILABLE') {
@@ -174,7 +178,14 @@
             if (!['SUFFICIENT','PARTIAL','INSUFFICIENT'].includes(/** @type {string} */ (evidence))) throw new Error('Invalid answer status');
             const turn = create('article', '', 'ask-turn');
             turn.append(create('h3','You'),create('p',question),create('h3','VisualAI'));
-            const label = evidence === 'PARTIAL' ? 'Some parts could not be answered from the selected material.' : evidence === 'SUFFICIENT' ? 'Grounded in your selected material' : 'Not enough evidence in your selected material';
+            const isEnriched = value.provenance_kind === 'AI_ENRICHED';
+            const label = isEnriched
+                ? 'AI-enriched supplemental explanation'
+                : evidence === 'PARTIAL'
+                    ? 'Some parts could not be answered from the selected material.'
+                    : evidence === 'SUFFICIENT'
+                        ? 'Grounded in your selected material'
+                        : 'Not enough evidence in your selected material';
             turn.append(create('p',label,'ask-evidence-status'));
             if (evidence === 'INSUFFICIENT') {
                 turn.append(create('p',INSUFFICIENT_MESSAGE)); return turn;
@@ -182,7 +193,8 @@
             const answerText = text(value,'answer');
             if (!answerText.trim() || answerText.length > MAX_ANSWER_CHARS) throw new Error('Invalid answer');
             const citations = rows(value.citations);
-            if (!citations.length || citations.length > MAX_CITATIONS) throw new Error('Invalid citations');
+            if (!isEnriched && (!citations.length || citations.length > MAX_CITATIONS)) throw new Error('Invalid citations');
+            if (citations.length > MAX_CITATIONS) throw new Error('Invalid citations');
             const list = create('ul','','ask-citations');
             for (const c of citations) {
                 if (c.source_version !== current.source_version || c.source_id !== current.source_id || c.verified !== true) throw new Error('Invalid citation scope');
@@ -190,7 +202,11 @@
                 if (!label.trim() || label.length > MAX_CITATION_LOCATION_CHARS || quote.length > MAX_QUESTION_CHARS) throw new Error('Invalid citation');
                 list.append(create('li',label + ' · Version ' + c.source_version + ' — ' + quote));
             }
-            turn.append(create('p',answerText,'ask-answer'),list);
+            if (citations.length > 0) {
+                turn.append(create('p',answerText,'ask-answer'),list);
+            } else {
+                turn.append(create('p',answerText,'ask-answer'));
+            }
             if (evidence === 'PARTIAL') {
                 const parts = strings(value.unanswered_parts);
                 if (parts.length > MAX_UNANSWERED_PARTS || parts.some(part => part.length > MAX_QUESTION_CHARS)) throw new Error('Invalid limitations');
@@ -243,6 +259,7 @@
     if (typeof document === 'undefined') return;
     const auth = /** @type {{protectedFetch:(path:string,options?:RequestInit)=>Promise<Response>, logout:()=>Promise<void>}} */ (Reflect.get(window, 'VisualAIAuth'));
     const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
+    const practiceUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,store:Storage)=>{setSession:(session:Row|null,concepts?:Row[])=>void}}} */ (Reflect.get(window,"VisualAIPractice")).createController(document,(path,options)=>auth.protectedFetch(path,options),window.sessionStorage);
     const askUI = createAskController(document, (path,options) => auth.protectedFetch(path,options));
     /** @param {string} id @returns {HTMLElement} */
     function el(id) {
@@ -263,7 +280,7 @@
     }
     /** @param {()=>Promise<void>} action @returns {Promise<void>} */
     async function run(action) {
-        try { await action(); } catch (error) {
+        try { el('status').textContent = ''; await action(); } catch (error) {
             el('status').textContent = error instanceof Error ? error.message : 'Learning is unavailable.';
         }
     }
@@ -281,6 +298,7 @@
         return api(path, {method:'POST', ...(body ? {headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {})});
     }
     let navigation = 0;
+    let recentSourceId = '';
     /** @type {Source[]} */ let sources = [];
     /** @type {Source|null} */ let source = null;
     /** @type {Row|null} */ let session = null;
@@ -293,155 +311,833 @@
     /** @param {Row} value @returns {Source} */
     function decodeSource(value) {
         if (!Number.isInteger(value.version) || /** @type {number} */ (value.version) < 1) throw new Error('Invalid source version.');
-        return {source_id:text(value,'source_id'), filename:text(value,'filename'),status:text(value,'status'),version:/** @type {number} */ (value.version)};
+        return {
+            source_id: text(value, 'source_id'),
+            filename: text(value, 'filename'),
+            modality: typeof value.source_type === 'string' ? value.source_type : 'material',
+            status: text(value, 'status'),
+            version: /** @type {number} */ (value.version),
+            content_ready: Boolean(value.content_ready),
+        };
     }
+    /** @param {Row[]} saved */
+    function renderRecent(saved) {
+        el('recent-source-card').replaceChildren();
+        const recent = sources.find(s => s.source_id === recentSourceId && s.status === 'READY') || sources.find(s => s.status === 'READY') || sources.find(s => s.content_ready);
+        if (recent) {
+            el('recent-source').hidden = false;
+            const card = node('article', '', 'card');
+            card.append(node('span', recent.status, 'badge'), node('h3', recent.filename), node('p', recent.modality + ' · Version ' + recent.version, 'muted'));
+            const active = saved.find(s => s.source_id === recent.source_id && s.source_version === recent.version && s.state === 'ACTIVE');
+            if (active) {
+                card.append(button('Continue learning', () => openSession(text(active, 'session_id'), true)));
+            } else if (recent.content_ready || recent.status === 'CONTENT_READY') {
+                card.append(button('Learn with VisualAI', async () => {
+                    el('status').textContent = 'Preparing lesson for ' + recent.filename + '…';
+                    const res = row(await post('/educational-content', { source_id: recent.source_id, source_version: recent.version }));
+                    await openEducationalLesson(text(res, 'content_id'));
+                }));
+            } else {
+                card.append(button('Explore topics', () => openSource(recent, recent.version)));
+            }
+            el('recent-source-card').append(card);
+        }
+    }
+
+    // Active educational lesson state
+    /** @type {Row|null} */ let currentEducationalLesson = null;
+    /** @type {ReturnType<typeof setInterval>|null} */ let videoPollInterval = null;
+
+    /** @param {'learn'|'notes'|'diagram'|'practice'|'video'} tab */
+    function switchLessonTab(tab) {
+        const tabs = ['learn', 'notes', 'diagram', 'practice', 'video'];
+        for (const t of tabs) {
+            const btn = document.getElementById(t + '-tab');
+            if (btn) {
+                if (t === tab) {
+                    btn.classList.add('primary');
+                } else if (t !== 'video') {
+                    btn.classList.remove('primary');
+                }
+            }
+        }
+        const mainCols = el('learning-main-columns');
+        const notesPanel = el('notes-panel');
+        const diagramPanel = el('diagram-panel');
+        const practicePanel = el('practice-panel');
+        const videoPanel = el('video-panel');
+
+        mainCols.style.display = (tab === 'learn') ? 'grid' : 'none';
+        notesPanel.hidden = (tab !== 'notes');
+        diagramPanel.hidden = (tab !== 'diagram');
+        practicePanel.hidden = (tab !== 'practice');
+        videoPanel.hidden = (tab !== 'video');
+    }
+
+    /** @param {Row} notesData */
+    function renderEducationalNotes(notesData) {
+        const container = el('notes-content');
+        container.replaceChildren();
+
+        const summaryBlock = node('div', '', 'card');
+        summaryBlock.append(node('h3', 'Summary'));
+        summaryBlock.append(node('p', text(notesData, 'summary')));
+        container.append(summaryBlock);
+
+        const takeaways = strings(notesData.key_takeaways || notesData.key_points || []);
+        if (takeaways.length) {
+            const tBlock = node('div', '', 'card');
+            tBlock.append(node('h3', 'Key Takeaways'));
+            const ul = document.createElement('ul');
+            for (const t of takeaways) ul.append(node('li', t));
+            tBlock.append(ul);
+            container.append(tBlock);
+        }
+
+        const detailed = text(notesData, 'detailed_notes');
+        if (detailed) {
+            const dBlock = node('div', '', 'card');
+            dBlock.append(node('h3', 'Detailed Study Notes'));
+            const p = node('p', detailed);
+            p.style.whiteSpace = 'pre-wrap';
+            dBlock.append(p);
+            container.append(dBlock);
+        }
+
+        const examples = strings(notesData.examples || []);
+        if (examples.length) {
+            const eBlock = node('div', '', 'card');
+            eBlock.append(node('h3', 'Illustrative Examples'));
+            const ul = document.createElement('ul');
+            for (const ex of examples) ul.append(node('li', ex));
+            eBlock.append(ul);
+            container.append(eBlock);
+        }
+
+        const formulas = strings(notesData.formula_sheet || []);
+        if (formulas.length) {
+            const fBlock = node('div', '', 'card');
+            fBlock.append(node('h3', 'Formula Sheet'));
+            const ul = document.createElement('ul');
+            for (const f of formulas) ul.append(node('li', f));
+            fBlock.append(ul);
+            container.append(fBlock);
+        }
+    }
+
+    /** @param {Row} diagramData */
+    function renderEducationalDiagram(diagramData) {
+        const container = el('diagram-content');
+        container.replaceChildren();
+
+        const card = node('article', '', 'notes-diagram flowchart');
+        const titleText = diagramData.title && typeof diagramData.title === 'object' ? text(row(diagramData.title), 'text') : (typeof diagramData.title === 'string' ? diagramData.title : 'Process Flowchart');
+        card.append(node('h3', titleText));
+
+        const nodesCollection = node('div', '', 'notes-diagram-nodes');
+        const nodes = rows(diagramData.nodes || []);
+        const nodeLabels = new Map();
+        for (const n of nodes) {
+            const id = typeof n.node_id === 'string' ? n.node_id : (typeof n.id === 'string' ? n.id : 'node');
+            const item = n.item && typeof n.item === 'object' ? row(n.item) : null;
+            const label = item && typeof item.text === 'string' ? item.text : (typeof n.label === 'string' ? n.label : id);
+            nodeLabels.set(id, label);
+            const chip = node('div', '', 'notes-diagram-node');
+            chip.append(node('strong', label));
+            if (typeof n.description === 'string' && n.description) {
+                chip.append(node('p', n.description, 'muted'));
+            }
+            nodesCollection.append(chip);
+        }
+        card.append(nodesCollection);
+
+        const edges = rows(diagramData.edges || []);
+        if (edges.length) {
+            const edgesTitle = node('h4', 'Connections & Transitions');
+            edgesTitle.style.marginTop = '20px';
+            card.append(edgesTitle);
+            for (const e of edges) {
+                const fromId = text(e, 'from_node');
+                const toId = text(e, 'to_node');
+                const fromLabel = nodeLabels.get(fromId) || fromId;
+                const toLabel = nodeLabels.get(toId) || toId;
+                const item = e.item && typeof e.item === 'object' ? row(e.item) : null;
+                const edgeLabel = item && typeof item.text === 'string' ? item.text : (typeof e.label === 'string' ? e.label : '');
+                const edgeDiv = node('div', '', 'notes-diagram-edge');
+                edgeDiv.append(
+                    node('span', fromLabel, 'notes-edge-node'),
+                    node('span', '→', 'notes-arrow'),
+                    node('span', toLabel, 'notes-edge-node')
+                );
+                if (edgeLabel) {
+                    edgeDiv.append(node('p', edgeLabel, 'notes-edge-label'));
+                }
+                card.append(edgeDiv);
+            }
+        }
+        container.append(card);
+    }
+
+    /** @param {Row} assessmentData */
+    function renderEducationalAssessment(assessmentData) {
+        const container = el('practice-content');
+        container.replaceChildren();
+
+        const mcqs = rows(assessmentData.mcqs || []);
+        const descs = rows(assessmentData.descriptive_questions || []);
+
+        const form = document.createElement('form');
+        form.id = 'educational-assessment-form';
+
+        if (mcqs.length) {
+            form.append(node('h3', 'Multiple Choice Questions'));
+            for (let i = 0; i < mcqs.length; i++) {
+                const q = mcqs[i];
+                const qId = text(q, 'question_id');
+                const fieldset = document.createElement('fieldset');
+                fieldset.style.margin = '16px 0';
+                fieldset.style.padding = '16px';
+                fieldset.style.borderRadius = '8px';
+                fieldset.style.border = '1px solid var(--line)';
+
+                const legend = node('legend', 'Question ' + (i + 1) + ' (' + (q.points || 1) + ' pt)');
+                legend.style.fontWeight = 'bold';
+                fieldset.append(legend);
+
+                const prompt = node('p', text(q, 'prompt'));
+                prompt.style.fontWeight = '600';
+                fieldset.append(prompt);
+
+                const options = strings(q.options || []);
+                for (let optIdx = 0; optIdx < options.length; optIdx++) {
+                    const label = document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '8px';
+                    label.style.margin = '8px 0';
+                    label.style.cursor = 'pointer';
+
+                    const radio = document.createElement('input');
+                    radio.type = 'radio';
+                    radio.name = 'mcq_' + qId;
+                    radio.value = String(optIdx);
+                    radio.required = true;
+
+                    label.append(radio, node('span', options[optIdx]));
+                    fieldset.append(label);
+                }
+                form.append(fieldset);
+            }
+        }
+
+        if (descs.length) {
+            const descHeader = node('h3', 'Descriptive Questions');
+            descHeader.style.marginTop = '24px';
+            form.append(descHeader);
+
+            for (let i = 0; i < descs.length; i++) {
+                const dq = descs[i];
+                const dqId = text(dq, 'question_id');
+                const fieldset = document.createElement('fieldset');
+                fieldset.style.margin = '16px 0';
+                fieldset.style.padding = '16px';
+                fieldset.style.borderRadius = '8px';
+                fieldset.style.border = '1px solid var(--line)';
+
+                const legend = node('legend', 'Descriptive Question ' + (i + 1) + ' (' + (dq.points || 2) + ' pts)');
+                legend.style.fontWeight = 'bold';
+                fieldset.append(legend);
+
+                const prompt = node('p', text(dq, 'prompt'));
+                prompt.style.fontWeight = '600';
+                fieldset.append(prompt);
+
+                if (typeof dq.context === 'string' && dq.context) {
+                    fieldset.append(node('p', dq.context, 'muted'));
+                }
+
+                const textarea = document.createElement('textarea');
+                textarea.name = 'desc_' + dqId;
+                textarea.rows = 4;
+                textarea.placeholder = 'Write your explanation here...';
+                textarea.required = true;
+                textarea.style.width = '100%';
+                fieldset.append(textarea);
+
+                form.append(fieldset);
+            }
+        }
+
+        const submitBtn = button('Submit Assessment', async () => {
+            if (!currentEducationalLesson) return;
+            /** @type {Record<string, number>} */ const mcqAnswers = {};
+            for (const q of mcqs) {
+                const qId = text(q, 'question_id');
+                const selected = form.querySelector('input[name="mcq_' + qId + '"]:checked');
+                if (selected) {
+                    mcqAnswers[qId] = parseInt(/** @type {HTMLInputElement} */ (selected).value, 10);
+                }
+            }
+            /** @type {Record<string, string>} */ const descAnswers = {};
+            for (const dq of descs) {
+                const dqId = text(dq, 'question_id');
+                const ta = form.querySelector('textarea[name="desc_' + dqId + '"]');
+                if (ta) {
+                    descAnswers[dqId] = /** @type {HTMLTextAreaElement} */ (ta).value;
+                }
+            }
+
+            el('practice-status').textContent = 'Submitting answers and evaluating…';
+            const result = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/assessment' + '/submit', {
+                mcq_answers: mcqAnswers,
+                descriptive_answers: descAnswers,
+            }));
+
+            renderAssessmentResults(result);
+        });
+        submitBtn.classList.add('primary');
+        submitBtn.style.marginTop = '16px';
+        form.append(submitBtn);
+
+        container.append(form);
+    }
+
+    /** @param {Row} result */
+    function renderAssessmentResults(result) {
+        const container = el('mastery-content');
+        container.replaceChildren();
+
+        const banner = node('div', '', 'card');
+        const score = result.score;
+        const total = result.total_points;
+        const pct = result.percentage;
+        banner.append(node('h3', 'Assessment Result: ' + score + ' / ' + total + ' (' + pct + '%)'));
+        banner.style.background = (Number(pct) >= 70) ? '#edf4e9' : '#fff3cd';
+        banner.style.borderColor = (Number(pct) >= 70) ? 'var(--green)' : '#ffeeba';
+        container.append(banner);
+
+        const mcqResults = rows(result.mcq_results || []);
+        if (mcqResults.length) {
+            const section = node('div', '', 'card');
+            section.append(node('h4', 'Multiple Choice Feedback'));
+            for (const mr of mcqResults) {
+                const item = node('div', '', 'concept');
+                const isCorrect = mr.is_correct === true;
+                item.append(node('span', isCorrect ? 'CORRECT' : 'INCORRECT', 'badge'));
+                item.append(node('p', text(mr, 'explanation')));
+                section.append(item);
+            }
+            container.append(section);
+        }
+
+        const descFeedback = rows(result.descriptive_feedback || []);
+        if (descFeedback.length) {
+            const dSection = node('div', '', 'card');
+            dSection.append(node('h4', 'Descriptive Feedback'));
+            for (const df of descFeedback) {
+                const item = node('div', '', 'concept');
+                item.append(node('span', 'Score: ' + df.points_awarded + ' pts', 'badge'));
+                item.append(node('p', text(df, 'rubric_feedback')));
+                dSection.append(item);
+            }
+            container.append(dSection);
+        }
+        el('practice-status').textContent = 'Assessment completed! See your feedback below.';
+    }
+
+    /** @param {Row} lesson */
+    function setupEducationalVideoState(lesson) {
+        const videoStatus = el('video-status');
+        const playerContainer = el('video-player-container');
+        const player = /** @type {HTMLVideoElement} */ (el('video-player'));
+        const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
+
+        if (lesson.video_status === 'COMPLETED') {
+            videoStatus.textContent = 'Animated narrated video is ready!';
+            playerContainer.style.display = 'block';
+            player.src = '/educational-content/' + encodeURIComponent(text(lesson, 'lesson_id')) + '/video/stream';
+            player.load();
+            startBtn.textContent = 'Regenerate Video';
+        } else if (lesson.video_status === 'RUNNING') {
+            videoStatus.textContent = 'Video is currently rendering…';
+            pollVideoStatus(text(lesson, 'lesson_id'));
+        } else {
+            videoStatus.textContent = 'Click to render a 20–30-second animated video with Manim visuals and Edge-TTS narration.';
+            playerContainer.style.display = 'none';
+            startBtn.textContent = 'Generate Educational Video';
+        }
+    }
+
+    /** @param {string} lessonId */
+    async function startEducationalVideo(lessonId) {
+        const videoStatus = el('video-status');
+        const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
+        startBtn.disabled = true;
+        videoStatus.textContent = 'Starting video generation pipeline…';
+
+        try {
+            await post('/educational-content/' + encodeURIComponent(lessonId) + '/video');
+            pollVideoStatus(lessonId);
+        } catch (err) {
+            videoStatus.textContent = err instanceof Error ? err.message : 'Failed to start video.';
+            startBtn.disabled = false;
+        }
+    }
+
+    /** @param {string} lessonId */
+    function pollVideoStatus(lessonId) {
+        if (videoPollInterval) clearInterval(videoPollInterval);
+        const videoStatus = el('video-status');
+        const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
+        const playerContainer = el('video-player-container');
+        const player = /** @type {HTMLVideoElement} */ (el('video-player'));
+
+        videoPollInterval = setInterval(async () => {
+            try {
+                const statusData = row(await api('/educational-content/' + encodeURIComponent(lessonId) + '/video/status'));
+                const stage = text(statusData, 'current_stage');
+                const pct = statusData.progress_percent;
+                videoStatus.textContent = 'Rendering video: ' + stage + ' (' + pct + '%)…';
+
+                if (statusData.is_finished === true) {
+                    if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
+                    startBtn.disabled = false;
+
+                    if (statusData.status === 'completed') {
+                        videoStatus.textContent = 'Animated narrated video generated successfully!';
+                        playerContainer.style.display = 'block';
+                        player.src = '/educational-content/' + encodeURIComponent(lessonId) + '/video/stream';
+                        player.load();
+                        startBtn.textContent = 'Regenerate Video';
+                    } else {
+                        videoStatus.textContent = 'Video generation failed: ' + (text(statusData, 'error') || 'Unknown error');
+                    }
+                }
+            } catch (e) {
+                if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
+                startBtn.disabled = false;
+                videoStatus.textContent = 'Failed checking video progress.';
+            }
+        }, 1500);
+    }
+
+    async function askEducationalLesson() {
+        if (!currentEducationalLesson) return;
+        const input = /** @type {HTMLTextAreaElement} */ (el('question'));
+        const question = input.value.trim();
+        if (!question) { el('ask-status').textContent = 'Enter a question first.'; return; }
+
+        const status = el('ask-status');
+        const button = /** @type {HTMLButtonElement} */ (el('ask-button'));
+        const output = el('answer');
+
+        button.disabled = true;
+        status.textContent = 'Generating educational response…';
+        try {
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/ask', { question }));
+            const turn = document.createElement('article');
+            turn.className = 'ask-turn';
+            turn.append(node('h3', 'You'), node('p', question), node('h3', 'VisualAI'), node('p', 'AI Educational Tutor', 'ask-evidence-status'), node('p', text(res, 'answer'), 'ask-answer'));
+            const keyPoints = strings(res.key_points || []);
+            if (keyPoints.length) {
+                const kpUl = document.createElement('ul');
+                for (const kp of keyPoints) kpUl.append(node('li', kp));
+                turn.append(node('h4', 'Key Concepts'), kpUl);
+            }
+            output.prepend(turn);
+            status.textContent = '';
+            input.value = '';
+        } catch (e) {
+            status.textContent = e instanceof Error ? e.message : 'Failed to ask question.';
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    /** @param {string} lessonId */
+    async function openEducationalLesson(lessonId) {
+        const ticket = ++navigation;
+        show('session');
+        session = null;
+        currentEducationalLesson = null;
+        if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
+
+        switchLessonTab('learn');
+
+        el('session-title').textContent = 'Loading your educational lesson…';
+        el('concept-cards').replaceChildren();
+        el('session-state').textContent = 'LOADING';
+
+        const lesson = row(await api('/educational-content/' + encodeURIComponent(lessonId)));
+        if (ticket !== navigation) return;
+        currentEducationalLesson = lesson;
+
+        const topic = typeof lesson.topic === 'string' ? lesson.topic : 'Educational Lesson';
+        el('session-source').textContent = lesson.source_scope ? ('Source: ' + text(row(lesson.source_scope), 'source_id')) : 'Independent Topic Lesson';
+        el('session-title').textContent = topic;
+        el('session-subtitle').textContent = 'Interactive AI-generated lesson: explanation, notes, flowcharts, assessments, and video';
+        el('session-state').textContent = typeof lesson.status === 'string' ? lesson.status : 'READY';
+        el('new-version').hidden = true;
+
+        for (const name of [
+            'learn-tab', 'notes-tab', 'diagram-tab', 'practice-tab', 'video-tab',
+            'generate-notes', 'notes-detail', 'generate-diagram', 'start-practice', 'start-video-btn',
+            'ask-button'
+        ]) {
+            const btn = document.getElementById(name);
+            if (btn && 'disabled' in btn) btn.disabled = false;
+        }
+        /** @type {HTMLTextAreaElement} */ (el('question')).disabled = false;
+
+        const teaching = row(lesson.content || lesson.teaching || lesson);
+        el('concept-cards').replaceChildren();
+
+        const overviewBlock = node('article', '', 'concept');
+        overviewBlock.append(node('h3', 'Core Explanation'));
+        overviewBlock.append(node('p', typeof teaching.explanation === 'string' ? teaching.explanation : ''));
+        el('concept-cards').append(overviewBlock);
+
+        const concepts = rows(teaching.key_concepts || []);
+        if (concepts.length) {
+            const conceptsSection = node('article', '', 'concept');
+            conceptsSection.append(node('h3', 'Key Concepts'));
+            const list = document.createElement('ul');
+            for (const c of concepts) {
+                const li = document.createElement('li');
+                const strong = document.createElement('strong');
+                strong.textContent = typeof c.name === 'string' ? c.name : 'Concept';
+                li.append(strong, ': ' + (typeof c.explanation === 'string' ? c.explanation : ''));
+                list.append(li);
+            }
+            conceptsSection.append(list);
+            el('concept-cards').append(conceptsSection);
+        }
+
+        const examples = strings(teaching.examples || []);
+        if (examples.length) {
+            const exSection = node('article', '', 'concept');
+            exSection.append(node('h3', 'Worked Examples'));
+            const list = document.createElement('ul');
+            for (const ex of examples) {
+                const li = document.createElement('li');
+                li.textContent = ex;
+                list.append(li);
+            }
+            exSection.append(list);
+            el('concept-cards').append(exSection);
+        }
+
+        const equations = strings(teaching.equations || []);
+        if (equations.length) {
+            const eqSection = node('article', '', 'concept');
+            eqSection.append(node('h3', 'Key Equations & Formulas'));
+            const list = document.createElement('ul');
+            for (const eq of equations) {
+                const li = document.createElement('li');
+                li.textContent = eq;
+                list.append(li);
+            }
+            eqSection.append(list);
+            el('concept-cards').append(eqSection);
+        }
+
+        if (lesson.notes) {
+            renderEducationalNotes(row(lesson.notes));
+        } else {
+            el('notes-content').replaceChildren();
+            el('notes-status').textContent = 'Click "Generate Notes" to create comprehensive structured notes.';
+        }
+
+        if (lesson.diagram) {
+            renderEducationalDiagram(row(lesson.diagram));
+        } else {
+            el('diagram-content').replaceChildren();
+            el('diagram-status').textContent = 'Click "Generate Diagram" to render an algorithmic flowchart.';
+        }
+
+        if (lesson.assessment) {
+            renderEducationalAssessment(row(lesson.assessment));
+        } else {
+            el('practice-content').replaceChildren();
+            el('practice-status').textContent = 'Click "Start assessment" to test your knowledge with MCQs and descriptive questions.';
+        }
+
+        setupEducationalVideoState(lesson);
+        history.replaceState(null, '', '/dashboard?lesson=' + encodeURIComponent(lessonId));
+    }
+
     async function loadSources() {
-        const ticket = ++navigation; show('sources'); session = null; notesUI.setSession(null); askUI.setSession(null);
-        el('source-cards').replaceChildren(node('p','Loading your material…','muted'));
-        sources = rows(row(await api('/sources')).sources).map(decodeSource);
+        const ticket = ++navigation; show('sources'); session = null; currentEducationalLesson = null;
+        if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
+        notesUI.setSession(null); askUI.setSession(null); practiceUI.setSession(null);
+        el('source-cards').replaceChildren(node('p', 'Loading your material…', 'muted'));
+        sources = rows(row(await api('/sources')).sources).sort((a, b) => String(b.created_at || b.uploaded_at || '').localeCompare(String(a.created_at || a.uploaded_at || ''))).map(decodeSource);
         if (ticket !== navigation) return;
         el('source-cards').replaceChildren();
-        if (!sources.length) el('source-cards').append(node('p','Your learning space is ready. Add your first source above.','muted'));
+        el('source-count').textContent = 'My sources (' + sources.length + ')';
+        el('recent-source-card').replaceChildren();
+        el('recent-source').hidden = true;
+        if (!sources.length) el('source-cards').append(node('p', 'Your learning space is ready. Add your first source above.', 'muted'));
         for (const item of sources) {
-            const card = node('article','','card'); card.append(node('span',item.status,'badge'),node('h3',item.filename),node('p','Version ' + item.version,'muted'));
-            card.append(button('Explore topics',() => openSource(item,item.version))); el('source-cards').append(card);
+            const card = node('article', '', 'card');
+            const isReady = item.status === 'READY';
+            const isContentReady = item.content_ready || item.status === 'CONTENT_READY' || isReady;
+            card.append(node('span', item.status, 'badge'), node('h3', item.filename), node('p', 'Version ' + item.version, 'muted'));
+            if (isContentReady) {
+                card.append(button('Learn with VisualAI', async () => {
+                    el('status').textContent = 'Preparing lesson for ' + item.filename + '…';
+                    const res = row(await post('/educational-content', { source_id: item.source_id, source_version: item.version }));
+                    await openEducationalLesson(text(res, 'content_id'));
+                }));
+            }
+            if (isReady) {
+                card.append(button('Explore topics', () => openSource(item, item.version)));
+            }
+            el('source-cards').append(card);
         }
-        el('session-cards').replaceChildren(node('p','Loading your sessions…','muted'));
+        el('session-cards').replaceChildren(node('p', 'Loading your sessions…', 'muted'));
         try {
             const saved = rows(await api('/learning-sessions'));
+            let educationalLessons = [];
+            try {
+                const edRes = row(await api('/educational-content'));
+                educationalLessons = rows(edRes.lessons);
+            } catch {
+                educationalLessons = [];
+            }
             if (ticket !== navigation) return;
             el('session-cards').replaceChildren();
-            if (!saved.length) el('session-cards').append(node('p','Choose a topic to start your first focused session.','muted'));
+            renderRecent(saved);
+
+            if (!saved.length && !educationalLessons.length) {
+                el('session-cards').append(node('p', 'Enter a topic above or choose a source to start learning.', 'muted'));
+            }
+            for (const ed of educationalLessons) {
+                const card = node('article', '', 'card');
+                const topicText = typeof ed.topic === 'string' ? ed.topic : 'Untitled Lesson';
+                const statusText = typeof ed.status === 'string' ? ed.status : 'READY';
+                const lessonId = typeof ed.lesson_id === 'string' ? ed.lesson_id : (typeof ed.content_id === 'string' ? ed.content_id : '');
+                card.append(node('span', 'AI LESSON', 'badge'), node('h3', topicText), node('p', 'Status: ' + statusText, 'muted'));
+                if (lessonId) {
+                    card.append(button('Open lesson', () => openEducationalLesson(lessonId)));
+                }
+                el('session-cards').append(card);
+            }
             for (const s of saved) {
-                const card = node('article','','card'); const title = sources.find(v => v.source_id === s.source_id)?.filename || 'Your learning material';
-                card.append(node('h3',title),node('p',text(s,'state') + ' · Version ' + s.source_version,'muted'));
-                card.append(button(s.state === 'ACTIVE' ? 'Resume learning' : 'View session', () => openSession(text(s,'session_id'),s.state === 'ACTIVE')));
+                const card = node('article', '', 'card');
+                const title = sources.find(v => v.source_id === s.source_id)?.filename || 'Your learning material';
+                card.append(node('h3', title), node('p', text(s, 'state') + ' · Version ' + s.source_version, 'muted'));
+                card.append(button(s.state === 'ACTIVE' ? 'Resume learning' : 'View session', () => openSession(text(s, 'session_id'), s.state === 'ACTIVE')));
                 el('session-cards').append(card);
             }
         } catch (error) {
-            if (ticket === navigation) el('session-cards').replaceChildren(node('p',error instanceof Error ? error.message : 'Sessions unavailable.','muted'));
+            if (ticket === navigation) el('session-cards').replaceChildren(node('p', error instanceof Error ? error.message : 'Sessions unavailable.', 'muted'));
         }
-        history.replaceState(null,'','/dashboard');
+        history.replaceState(null, '', '/dashboard');
     }
+
     /** @param {Source} item @param {number} version */
     async function openSource(item, version) {
-        const ticket = ++navigation; source = item; session = null; notesUI.setSession(null); askUI.setSession(null); knowledge = null; show('explorer');
+        const ticket = ++navigation; source = item; session = null; currentEducationalLesson = null;
+        notesUI.setSession(null); askUI.setSession(null); practiceUI.setSession(null); knowledge = null; show('explorer');
         el('explorer-title').textContent = item.filename;
         el('source-location').textContent = 'YOUR MATERIAL · VERSION ' + version;
         el('readiness').textContent = 'Loading your knowledge map…'; el('topic-cards').replaceChildren();
         const map = row(await api('/sources/' + encodeURIComponent(item.source_id) + '/versions/' + version + '/knowledge'));
         if (ticket !== navigation) return;
         knowledge = map; el('readiness').textContent = readiness(map.knowledge_state);
-        history.replaceState(null,'','/dashboard?source=' + encodeURIComponent(item.source_id) + '&version=' + version);
+        history.replaceState(null, '', '/dashboard?source=' + encodeURIComponent(item.source_id) + '&version=' + version);
         if (map.knowledge_state !== 'READY') {
-            if (map.knowledge_state === 'FAILED') el('topic-cards').append(button('Retry analysis',async () => {
-                await post('/sources/' + encodeURIComponent(item.source_id) + '/retry-index'); await openSource(item,version);
+            if (map.knowledge_state === 'FAILED') el('topic-cards').append(button('Retry analysis', async () => {
+                await post('/sources/' + encodeURIComponent(item.source_id) + '/retry-index'); await openSource(item, version);
             }));
             return;
         }
-        for (const topic of rows(map.topics)) {
+        const topics = rows(map.topics);
+        const conceptCount = /** @param {Row} topic */(topic) => rows(topic.subtopics).reduce((count, sub) => count + rows(sub.concepts).length, 0);
+        for (const topic of topics.sort((a, b) => conceptCount(b) - conceptCount(a))) {
             const details = document.createElement('details'); const subs = rows(topic.subtopics);
-            details.append(node('summary',text(topic,'title')));
-            details.append(node('p',subs.length + ' subtopics · ' + subs.reduce((n,s) => n + rows(s.concepts).length,0) + ' concepts','muted'));
-            details.append(button('Focus on this topic',() => createSession(item,version,text(topic,'topic_id'),null)));
+            details.append(node('summary', text(topic, 'title')));
+            details.append(node('p', subs.length + ' subtopics · ' + subs.reduce((n, s) => n + rows(s.concepts).length, 0) + ' concepts', 'muted'));
+            details.append(button('Focus on this topic', () => createSession(item, version, text(topic, 'topic_id'), null)));
             for (const sub of subs) {
-                const block = node('div','','subtopic'); block.append(node('h3',text(sub,'title')));
+                const block = node('div', '', 'subtopic'); block.append(node('h3', text(sub, 'title')));
                 const list = document.createElement('ul'); list.className = 'concept-list';
                 for (const concept of rows(sub.concepts)) {
                     const evidence = rows(concept.evidence);
-                    list.append(node('li',text(concept,'name') + ' · ' + evidence.length + ' evidence references' + (strings(concept.prerequisite_concept_ids).length ? ' · has prerequisites' : '')));
-                    if (evidence.length) list.lastElementChild?.append(node('span',' · ' + evidence.map(e => location(row(e.content))).join(' · '),'muted'));
+                    list.append(node('li', text(concept, 'name') + ' · ' + evidence.length + ' evidence references' + (strings(concept.prerequisite_concept_ids).length ? ' · has prerequisites' : '')));
+                    if (evidence.length) list.lastElementChild?.append(node('span', ' · ' + evidence.map(e => location(row(e.content))).join(' · '), 'muted'));
                 }
-                block.append(list,button('Learn this subtopic',() => createSession(item,version,text(topic,'topic_id'),text(sub,'subtopic_id')))); details.append(block);
+                block.append(list, button('Learn this subtopic', () => createSession(item, version, text(topic, 'topic_id'), text(sub, 'subtopic_id')))); details.append(block);
             }
             el('topic-cards').append(details);
         }
     }
+
     /** @param {Source} item @param {number} version @param {string} topic @param {string|null} sub */
-    async function createSession(item,version,topic,sub) {
+    async function createSession(item, version, topic, sub) {
         el('status').textContent = 'Creating your focused learning session…';
-        const created = row(await post('/learning-sessions',{session_id:crypto.randomUUID(),source_id:item.source_id,source_version:version,topic_id:topic,subtopic_id:sub}));
-        await openSession(text(created,'session_id'),false);
+        const created = row(await post('/learning-sessions', { session_id: crypto.randomUUID(), source_id: item.source_id, source_version: version, topic_id: topic, subtopic_id: sub }));
+        await openSession(text(created, 'session_id'), false);
     }
+
     /** @param {string} id @param {boolean} resume */
-    async function openSession(id,resume) {
-        const ticket = ++navigation; show('session'); session = null; notesUI.setSession(null); askUI.setSession(null);
+    async function openSession(id, resume) {
+        const ticket = ++navigation; show('session'); session = null; currentEducationalLesson = null;
+        notesUI.setSession(null); askUI.setSession(null); practiceUI.setSession(null);
+        switchLessonTab('learn');
         el('session-title').textContent = 'Loading your focused session…'; el('concept-cards').replaceChildren();
         if (resume) await post('/learning-sessions/' + encodeURIComponent(id) + '/resume');
         const view = row(await api('/learning-sessions/' + encodeURIComponent(id)));
         if (ticket !== navigation) return;
         const loadedSession = row(view.session);
-        const loadedSource = sources.find(s => s.source_id === loadedSession.source_id) || decodeSource(row(await api('/sources/' + encodeURIComponent(text(loadedSession,'source_id')))));
+        const loadedSource = sources.find(s => s.source_id === loadedSession.source_id) || decodeSource(row(await api('/sources/' + encodeURIComponent(text(loadedSession, 'source_id')))));
         if (ticket !== navigation) return;
         session = loadedSession; source = loadedSource;
-        notesUI.setSession(session); askUI.setSession(session);
+        notesUI.setSession(session); askUI.setSession(session); practiceUI.setSession(session, rows(view.concepts));
         const version = session.source_version;
         el('session-source').textContent = source.filename + ' · Version ' + version;
-        el('session-title').textContent = text(view,'topic_title');
+        el('session-title').textContent = text(view, 'topic_title');
         el('session-subtitle').textContent = typeof view.subtopic_title === 'string' ? view.subtopic_title : 'All concepts in this topic';
-        el('session-state').textContent = text(session,'state');
+        el('session-state').textContent = text(session, 'state');
         el('new-version').hidden = !(typeof version === 'number' && source.version > version);
-        for (const name of ['ask-button','complete-session','abandon-session']) /** @type {HTMLButtonElement} */ (el(name)).disabled = session.state !== 'ACTIVE';
+        for (const name of ['ask-button', 'complete-session', 'abandon-session']) /** @type {HTMLButtonElement} */ (el(name)).disabled = session.state !== 'ACTIVE';
         const concepts = rows(view.concepts);
         for (const c of concepts) {
-            const block = node('article','','concept'); block.append(node('h3',text(c,'name')));
-            if (typeof c.definition === 'string') block.append(node('p',c.definition));
+            const block = node('article', '', 'concept'); block.append(node('h3', text(c, 'name')));
+            if (typeof c.definition === 'string') block.append(node('p', c.definition));
             const prerequisites = strings(c.prerequisite_concept_ids);
-            if (prerequisites.length) block.append(node('p','Builds on: ' + prerequisites.map(id => concepts.find(v => v.concept_id === id)?.name || 'a prerequisite in your source').join(', '),'muted'));
-            block.append(node('p',rows(c.evidence).map(e => location(row(e.content))).join(' · '),'muted'));
-            const explain = button('Explain this',async () => {
-                /** @type {HTMLTextAreaElement} */ (el('question')).value = 'What is ' + text(c,'name') + '?';
-                await ask(text(c,'concept_id'));
+            if (prerequisites.length) block.append(node('p', 'Builds on: ' + prerequisites.map(id => concepts.find(v => v.concept_id === id)?.name || 'a prerequisite in your source').join(', '), 'muted'));
+            block.append(node('p', rows(c.evidence).map(e => location(row(e.content))).join(' · '), 'muted'));
+            const explain = button('Explain this', async () => {
+                /** @type {HTMLTextAreaElement} */ (el('question')).value = 'What is ' + text(c, 'name') + '?';
+                await ask(text(c, 'concept_id'));
             }); explain.disabled = session.state !== 'ACTIVE'; block.append(explain); el('concept-cards').append(block);
         }
-        history.replaceState(null,'','/dashboard?session=' + encodeURIComponent(id));
+        history.replaceState(null, '', '/dashboard?session=' + encodeURIComponent(id));
     }
+
     /** @param {string} [concept] */
     async function ask(concept) {
         await askUI.ask(concept);
     }
+
     /** @param {'complete'|'abandon'} action */
     async function transition(action) {
         if (!session) return;
-        const id = text(session,'session_id'); await post('/learning-sessions/' + encodeURIComponent(id) + '/' + action); await openSession(id,false);
+        const id = text(session, 'session_id'); await post('/learning-sessions/' + encodeURIComponent(id) + '/' + action); await openSession(id, false);
     }
-    el('sources-nav').addEventListener('click',() => run(loadSources));
-    el('explorer-back').addEventListener('click',() => run(loadSources));
-    el('session-back').addEventListener('click',() => run(async () => {
-        if (source && session && typeof session.source_version === 'number') await openSource(source,session.source_version); else await loadSources();
+
+    // Tab buttons
+    el('learn-tab').addEventListener('click', () => switchLessonTab('learn'));
+    el('notes-tab').addEventListener('click', () => switchLessonTab('notes'));
+    el('diagram-tab').addEventListener('click', () => switchLessonTab('diagram'));
+    el('practice-tab').addEventListener('click', () => switchLessonTab('practice'));
+    el('video-tab').addEventListener('click', () => switchLessonTab('video'));
+
+    // Generation triggers
+    el('generate-notes').addEventListener('click', () => run(async () => {
+        if (!currentEducationalLesson) return;
+        el('notes-status').textContent = 'Generating comprehensive structured notes…';
+        const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/notes'));
+        renderEducationalNotes(row(res.notes || res));
+        el('notes-status').textContent = 'Structured educational notes ready.';
     }));
-    el('logout').addEventListener('click',() => run(auth.logout));
-    el('ask-form').addEventListener('submit',e => { e.preventDefault(); run(() => ask()); });
-    el('complete-session').addEventListener('click',() => run(() => transition('complete')));
-    el('abandon-session').addEventListener('click',() => run(() => transition('abandon')));
+
+    el('generate-diagram').addEventListener('click', () => run(async () => {
+        if (!currentEducationalLesson) return;
+        el('diagram-status').textContent = 'Generating algorithmic flowchart diagram…';
+        const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/diagram'));
+        renderEducationalDiagram(row(res.diagram || res));
+        el('diagram-status').textContent = 'Flowchart diagram rendered.';
+    }));
+
+    el('start-practice').addEventListener('click', () => run(async () => {
+        if (!currentEducationalLesson) return;
+        el('practice-status').textContent = 'Generating practice assessment questions…';
+        const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/assessment'));
+        renderEducationalAssessment(row(res.assessment || res));
+        el('practice-status').textContent = 'Assessment questions ready.';
+    }));
+
+    el('start-video-btn').addEventListener('click', () => run(async () => {
+        if (!currentEducationalLesson) return;
+        await startEducationalVideo(text(currentEducationalLesson, 'lesson_id'));
+    }));
+
+    // Topic direct learning
+    const topicForm = document.getElementById('topic-form');
+    if (topicForm) {
+        topicForm.addEventListener('submit', e => {
+            e.preventDefault();
+            const input = /** @type {HTMLInputElement} */ (document.getElementById('topic-input'));
+            const topic = input ? input.value.trim() : '';
+            if (!topic) return;
+            run(async () => {
+                el('status').textContent = 'Creating educational lesson for "' + topic + '"…';
+                const res = row(await post('/educational-content', { topic }));
+                await openEducationalLesson(text(res, 'content_id'));
+            });
+        });
+    }
+
+    el('sources-nav').addEventListener('click', () => run(loadSources));
+    el('explorer-back').addEventListener('click', () => run(loadSources));
+    el('session-back').addEventListener('click', () => run(async () => {
+        if (currentEducationalLesson) {
+            currentEducationalLesson = null;
+            await loadSources();
+        } else if (source && session && typeof session.source_version === 'number') {
+            await openSource(source, session.source_version);
+        } else {
+            await loadSources();
+        }
+    }));
+    el('logout').addEventListener('click', () => run(auth.logout));
+    el('ask-form').addEventListener('submit', e => {
+        e.preventDefault();
+        if (currentEducationalLesson) {
+            run(askEducationalLesson);
+        } else {
+            run(() => ask());
+        }
+    });
+    el('complete-session').addEventListener('click', () => run(() => transition('complete')));
+    el('abandon-session').addEventListener('click', () => run(() => transition('abandon')));
     const uploadStatus = createUploadStatus(el('upload-status'));
-    el('upload-form').addEventListener('submit',e => { e.preventDefault(); (async () => {
-        const file = /** @type {HTMLInputElement} */ (el('upload-file')).files?.[0]; if (!file) return;
-        const b = /** @type {HTMLButtonElement} */ (el('upload-button')); b.disabled = true;
-        uploadStatus.start();
-        const body = new FormData(); body.append('file',file);
-        try {
-            const job = row(await api('/pipeline/upload-and-assess',{method:'POST',body}));
-            for (let i=0; i<MAX_JOB_POLLS; i++) {
-                const current = row(await api('/pipeline/jobs/' + encodeURIComponent(text(job,'job_id'))));
-                uploadStatus.progress(current);
-                if (current.is_finished === true) {
-                    if (current.status !== 'completed') { uploadStatus.fail(current.failure); return; }
-                    await loadSources(); uploadStatus.progress({current_stage:'source_ready'}); return;
+    el('upload-form').addEventListener('submit', e => {
+        e.preventDefault(); (async () => {
+            const file = /** @type {HTMLInputElement} */ (el('upload-file')).files?.[0]; if (!file) return;
+            const b = /** @type {HTMLButtonElement} */ (el('upload-button')); b.disabled = true;
+            uploadStatus.start();
+            const body = new FormData(); body.append('file', file);
+            try {
+                const job = row(await api('/pipeline/upload-and-assess', { method: 'POST', body }));
+                for (let i = 0; i < MAX_JOB_POLLS; i++) {
+                    const current = row(await api('/pipeline/jobs/' + encodeURIComponent(text(job, 'job_id'))));
+                    uploadStatus.progress(current);
+                    if (current.is_finished === true) {
+                        if (current.status !== 'completed') { uploadStatus.fail(current.failure); return; }
+                        recentSourceId = typeof row(current.result).source_id === 'string' ? text(row(current.result), 'source_id') : '';
+                        await loadSources(); uploadStatus.progress({ current_stage: 'source_ready' }); return;
+                    }
+                    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
                 }
-                await new Promise(resolve => setTimeout(resolve,POLL_INTERVAL_MS));
-            }
-            throw new Error('Analysis is still running. Refresh your sources before retrying.');
-        } catch (error) { uploadStatus.error(error); } finally { b.disabled = false; }
-    })(); });
+                throw new Error('Analysis is still running. Refresh your sources before retrying.');
+            } catch (error) { uploadStatus.error(error); } finally { b.disabled = false; }
+        })();
+    });
     run(async () => {
         const params = new URLSearchParams(window.location.search);
-        if (params.has('session')) await openSession(params.get('session') || '',false);
-        else {
+        if (params.has('lesson')) {
+            await openEducationalLesson(params.get('lesson') || '');
+        } else if (params.has('session')) {
+            await openSession(params.get('session') || '', false);
+        } else {
             await loadSources();
             const selected = sources.find(s => s.source_id === params.get('source'));
             const version = Number(params.get('version'));
-            if (selected && Number.isInteger(version) && version > 0) await openSource(selected,version);
+            if (selected && Number.isInteger(version) && version > 0) await openSource(selected, version);
         }
     });
 })();

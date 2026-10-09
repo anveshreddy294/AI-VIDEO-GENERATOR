@@ -30,14 +30,14 @@ async def complete_source_job(job_id: str, result: dict[str, JsonValue]) -> None
         job.failure = None
         job.status = 'completed'
         job.is_finished = True
-    await job_manager.emit_event(job_id=job_id, stage='source_ready', status='completed',
-        message=('Source and knowledge READY; semantic indexing complete.' if result.get('knowledge_state')=='READY'
+    await job_manager.emit_event(job_id=job_id, stage='content_ready' if result.get('content_ready') is True else 'source_ready', status='completed',
+        message=('Extracted content available; hierarchy and indexing are optional.' if result.get('content_ready') is True else 'Source and knowledge READY; semantic indexing complete.' if result.get('knowledge_state')=='READY'
                  else 'Canonical source committed and indexed.'), progress_percent=100, terminal=True,
         metadata={'source_id': result['source_id']})
 
 
 async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: Path | None,
-                             filename: str, record: SourceRecord | None = None, *, routing_signals: VisualSignals | None = None, file_truth: FileTruth | None = None) -> None:
+                             filename: str, record: SourceRecord | None = None, *, routing_signals: VisualSignals | None = None, file_truth: FileTruth | None = None, enrich: bool = False) -> None:
     task = asyncio.current_task()
     if task:
         job_manager.attach_task(job_id, task)
@@ -53,15 +53,15 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
     try:
         async with job_manager.get_semaphore():
             await job_manager.emit_event(job_id=job_id, stage='ingesting_source', status='running',
-                message='Extracting and committing canonical source before vector indexing.', progress_percent=5)
+                message='Extracting and saving reusable content; enrichment is optional.', progress_percent=5)
             with source_progress(progress):
                 if record is not None:
                     worker = asyncio.create_task(asyncio.to_thread(index_committed_source, repo, record))
                 elif path is not None:
                     if routing_signals is None and file_truth is None:
-                        worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename))
+                        worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename, enrich=enrich))
                     else:
-                        worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename, routing_signals=routing_signals, file_truth=file_truth))
+                        worker = asyncio.create_task(asyncio.to_thread(ingest_source, repo, path, filename, routing_signals=routing_signals, file_truth=file_truth, enrich=enrich))
                 else:
                     raise ValueError('Source job has no input')
             try:
@@ -86,7 +86,9 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
                     await complete_source_job(job_id, result)
                     return
                 if current is not None:
-                    await asyncio.to_thread(repo.mark_status, current, "FAILED", "SOURCE_PROCESSING_FAILED")
+                    version = await asyncio.to_thread(repo.get_source_version, current.source_id, current.version)
+                    if version is None or version.provenance.get("downstream_optional") is not True:
+                        await asyncio.to_thread(repo.mark_status, current, "FAILED", "SOURCE_PROCESSING_FAILED")
             except Exception as reconciliation_error:
                 logging.getLogger(__name__).warning("Source reconciliation unavailable: %s", type(reconciliation_error).__name__)
         failure = (error.failure if isinstance(error, (SourceIngestionFailed, SourceIndexFailed)) else
@@ -135,14 +137,28 @@ async def retry_source_job(background: BackgroundTasks, repo: SupabaseSourceRepo
         raise HTTPException(404, 'Job not found')
     if not old.is_finished or old.status != 'failed':
         raise HTTPException(409, 'Only failed jobs may be retried')
+    retry_count = old.metadata.get('retry_count', 0)
+    if retry_count >= 3:
+        raise HTTPException(429, 'Retry limit reached for this job (maximum 3 attempts)')
     source_id = old.metadata.get('source_id')
     if not isinstance(source_id, str):
         raise HTTPException(409, 'Repeat the same upload; deterministic IDs reuse committed records')
     record = repo.get_source(source_id)
     if record is None:
         raise HTTPException(404, 'Source not found')
+    if record.status == 'READY':
+        raise HTTPException(409, 'Source is already successfully processed; existing artifacts preserved')
+    old_version = old.metadata.get('source_version')
+    if old_version is not None and getattr(record, 'version', None) is not None and old_version != record.version:
+        raise HTTPException(409, 'Source version has changed; start a new ingestion for the updated version')
     job, created = await job_manager.get_or_create_active_job(f'source-retry:{repo.owner_id}:{source_id}', job_type='source_ingestion')
     if created:
-        job.metadata.update(source_owner=repo.owner_id, source_id=source_id)
+        job.metadata.update(
+            source_owner=repo.owner_id,
+            source_id=source_id,
+            retry_count=retry_count + 1,
+            prior_job_id=old.job_id,
+            source_version=getattr(record, 'version', None),
+        )
         background.add_task(execute_source_job, job.job_id, repo, None, record.filename, record)
     return JobCreationResponse(job_id=job.job_id, status=job.status)

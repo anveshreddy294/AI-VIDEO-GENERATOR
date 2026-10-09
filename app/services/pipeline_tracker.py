@@ -7,7 +7,10 @@ Provides:
 """
 
 import asyncio
+import json
 import logging
+from pathlib import Path
+import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Literal
 from uuid import uuid4
@@ -137,7 +140,7 @@ class PipelineJob(BaseModel):
         if not self.metadata.get("source_owner"):
             return None
         if self.state == "SUCCEEDED":
-            return "READY"
+            return "CONTENT_READY" if self.result and self.result.get("content_ready") is True else "READY"
         if self.state == "FAILED":
             return "FAILED"
         return {"queued":"UPLOADED", "ingesting_source":"EXTRACTING",
@@ -147,16 +150,158 @@ class PipelineJob(BaseModel):
                 "INDEXING_SOURCE":"INDEXING"}.get(self.current_stage, "UPLOADED")
 
 
-class JobManager:
-    """Thread-safe in-memory job registry and SSE event broadcaster."""
+class DurableJobStore:
+    """ACID durable storage for pipeline jobs surviving process restart.
 
-    def __init__(self):
+    RUNTIME CONSTRAINT: SQLite durable storage with WAL mode is designed and validated
+    strictly for single-process local runtime (hackathon MVP). It is not a distributed queue.
+    Multi-worker deployments require distributed coordination (e.g. Postgres/Supabase or Redis).
+    """
+
+    def __init__(self, db_path: Path | str | None = None):
+        if db_path is not None:
+            self.db_path = Path(db_path)
+        else:
+            from ..core.config import settings
+            self.db_path = settings.qdrant_path.parent / "pipeline_jobs.sqlite3"
+        try:
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            self._init_db()
+        except Exception as exc:
+            logger.warning("[durable_job_store] Initialization error: %s", exc)
+
+    def _get_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(str(self.db_path), timeout=10.0)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def _init_db(self) -> None:
+        with self._get_conn() as conn:
+            conn.execute("PRAGMA journal_mode=WAL;")
+            conn.execute("PRAGMA busy_timeout=5000;")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pipeline_jobs (
+                    job_id TEXT PRIMARY KEY,
+                    job_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    current_stage TEXT NOT NULL,
+                    progress_percent INTEGER NOT NULL,
+                    error TEXT,
+                    is_finished INTEGER NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            conn.commit()
+
+    def save_job(self, job: PipelineJob) -> None:
+        try:
+            with self._get_conn() as conn:
+                conn.execute("""
+                    INSERT INTO pipeline_jobs (
+                        job_id, job_type, status, current_stage, progress_percent,
+                        error, is_finished, metadata_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(job_id) DO UPDATE SET
+                        status = excluded.status,
+                        current_stage = excluded.current_stage,
+                        progress_percent = excluded.progress_percent,
+                        error = excluded.error,
+                        is_finished = excluded.is_finished,
+                        metadata_json = excluded.metadata_json,
+                        updated_at = excluded.updated_at
+                """, (
+                    job.job_id,
+                    job.job_type,
+                    job.status,
+                    job.current_stage,
+                    job.progress_percent,
+                    job.error,
+                    1 if job.is_finished else 0,
+                    json.dumps(job.metadata),
+                    job.created_at,
+                    job.updated_at,
+                ))
+                conn.commit()
+        except Exception as exc:
+            logger.warning("[durable_job_store] Failed saving job %s: %s", job.job_id, exc)
+
+    def load_job(self, job_id: str) -> PipelineJob | None:
+        try:
+            with self._get_conn() as conn:
+                cur = conn.execute("SELECT * FROM pipeline_jobs WHERE job_id = ?", (job_id,))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                return PipelineJob(
+                    job_id=row["job_id"],
+                    job_type=row["job_type"],
+                    status=row["status"],
+                    current_stage=row["current_stage"],
+                    progress_percent=row["progress_percent"],
+                    error=row["error"],
+                    is_finished=bool(row["is_finished"]),
+                    metadata=json.loads(row["metadata_json"]) if row["metadata_json"] else {},
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+        except Exception as exc:
+            logger.warning("[durable_job_store] Failed loading job %s: %s", job_id, exc)
+            return None
+
+    def recover_interrupted_jobs(self) -> list[PipelineJob]:
+        """Detect and recover uncompleted jobs when server boots.
+
+        Transitions interrupted running jobs into a recoverable failed status without
+        fabricating completion or automatically re-triggering expensive inference.
+        """
+        recovered = []
+        try:
+            with self._get_conn() as conn:
+                cur = conn.execute("SELECT * FROM pipeline_jobs WHERE is_finished = 0")
+                rows = cur.fetchall()
+                for row in rows:
+                    meta = json.loads(row["metadata_json"]) if row["metadata_json"] else {}
+                    meta["recoverable"] = True
+                    meta["interrupted_on_restart"] = True
+                    job = PipelineJob(
+                        job_id=row["job_id"],
+                        job_type=row["job_type"],
+                        status="failed",
+                        current_stage="INTERRUPTED",
+                        progress_percent=row["progress_percent"],
+                        error="Server restarted while job was in progress. Interrupted execution recovered safely. Job can be retried.",
+                        is_finished=True,
+                        metadata=meta,
+                        created_at=row["created_at"],
+                        updated_at=datetime.now(timezone.utc).isoformat(),
+                    )
+                    conn.execute("""
+                        UPDATE pipeline_jobs SET
+                            status = ?, current_stage = ?, error = ?, is_finished = 1, metadata_json = ?, updated_at = ?
+                        WHERE job_id = ?
+                    """, (job.status, job.current_stage, job.error, json.dumps(meta), job.updated_at, job.job_id))
+                    recovered.append(job)
+                conn.commit()
+        except Exception as exc:
+            logger.warning("[durable_job_store] Failed recovering interrupted jobs: %s", exc)
+        return recovered
+
+
+class JobManager:
+    """Thread-safe in-memory job registry and SSE event broadcaster backed by durable storage."""
+
+    def __init__(self, store: DurableJobStore | None = None):
         self._jobs: dict[str, PipelineJob] = {}
         self._subscribers: dict[str, set[asyncio.Queue]] = {}
         self._semaphore: asyncio.Semaphore | None = None
         self._lock = asyncio.Lock()
         self._active_dedup_jobs: dict[str, str] = {}
         self._running_tasks: dict[str, asyncio.Task] = {}
+        self._store = store or DurableJobStore()
+        for rec in self._store.recover_interrupted_jobs():
+            self._jobs[rec.job_id] = rec
 
     def find_active_job_by_key(self, dedup_key: str) -> PipelineJob | None:
         """Find active (unfinished) pipeline job for a deterministic dedup key."""
@@ -297,10 +442,16 @@ class JobManager:
         job = PipelineJob(job_id=jid, job_type=job_type)
         self._jobs[jid] = job
         self._subscribers[jid] = set()
+        self._store.save_job(job)
         return job
 
     def get_job(self, job_id: str) -> PipelineJob | None:
-        return self._jobs.get(job_id)
+        job = self._jobs.get(job_id)
+        if job is None:
+            job = self._store.load_job(job_id)
+            if job is not None:
+                self._jobs[job_id] = job
+        return job
 
     async def emit_event(
         self,
@@ -335,6 +486,7 @@ class JobManager:
                 job.metadata.update(safe_meta)
             if terminal:
                 job.is_finished = True
+            self._store.save_job(job)
 
         # Dispatch to active SSE queues
         subs = list(self._subscribers.get(job_id, []))

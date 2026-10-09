@@ -8,6 +8,10 @@ Analyzes normalized ContentUnits to:
 """
 
 import json
+from contextvars import ContextVar
+from contextlib import contextmanager
+from collections.abc import Iterator
+from pydantic import JsonValue
 import logging
 import re
 import time
@@ -20,30 +24,38 @@ from .schemas import ConceptNode, ContentUnit, KnowledgeGraph, StageDiagnostics,
 logger = logging.getLogger(__name__)
 
 
+_proposal_schema: ContextVar[dict[str, JsonValue] | None] = ContextVar("visualai_proposal_schema", default=None)
+
+
+@contextmanager
+def scoped_proposal_schema(schema: dict[str, JsonValue] | None) -> Iterator[None]:
+    """Bind server-derived output constraints to one proposal call, isolated across requests."""
+    token = _proposal_schema.set(schema)
+    try:
+        yield
+    finally:
+        _proposal_schema.reset(token)
+
+
 def generate_educational_proposal(prompt: str) -> str:
     """Cloudflare primary, bounded local fallback; no change to legacy/video reasoning."""
     from ..core.reasoning import Message, ReasoningRequest, get_reasoning_router
     from .evidence_anchors import AnchoredStructureProposal
     from .content_understanding import MODEL_OUTPUT_TOKENS
     task = "structure_repair" if "\nREPAIR:" in prompt else "content_understanding"
-    from pydantic import TypeAdapter, StrictStr, JsonValue
-    schema: dict[str, JsonValue] = TypeAdapter(dict[str, JsonValue]).validate_python(AnchoredStructureProposal.model_json_schema())
-    if "\nSOURCE_VISUAL_LABEL=" in prompt:
-        label = TypeAdapter(StrictStr).validate_json(prompt.split("\nSOURCE_VISUAL_LABEL=", 1)[1].split("\n", 1)[0])
-        # Literal source label, minimum existing hierarchy, and no generated teaching facts.
-        objects = TypeAdapter(dict[str, dict[str, JsonValue]])
-        properties = objects.validate_python(schema["properties"])
-        definitions = objects.validate_python(schema["$defs"])
-        for level in ("topics", "subtopics", "concepts"):
-            properties[level]["maxItems"] = 1
-        properties["prerequisites"]["maxItems"] = 0
-        for name, field in (("AnchoredTopic", "title"), ("AnchoredSubtopic", "title"), ("AnchoredConcept", "name")):
-            fields = objects.validate_python(definitions[name]["properties"])
-            fields[field]["enum"] = [label]
-            if name == "AnchoredConcept":
-                fields["definition"]["enum"] = [None]
-            definitions[name]["properties"] = fields
-        schema["properties"], schema["$defs"] = properties, definitions
+    from pydantic import TypeAdapter, JsonValue
+    schema: dict[str, JsonValue] = _proposal_schema.get() or TypeAdapter(dict[str, JsonValue]).validate_python(AnchoredStructureProposal.model_json_schema())
+    defs = schema.get("$defs")
+    if isinstance(defs, dict):
+        for name in ("AnchoredTopic", "AnchoredSubtopic", "AnchoredConcept"):
+            sub = defs.get(name)
+            if isinstance(sub, dict):
+                req = sub.setdefault("required", [])
+                if isinstance(req, list) and "evidence" not in req:
+                    req.append("evidence")
+                props = sub.get("properties")
+                if isinstance(props, dict) and "evidence" in props and isinstance(props["evidence"], dict):
+                    props["evidence"]["minItems"] = 1
     request = ReasoningRequest(task=task, messages=[Message(role="user", content=prompt)],
         max_tokens=MODEL_OUTPUT_TOKENS, response_schema=schema)
     return get_reasoning_router().generate(request).response

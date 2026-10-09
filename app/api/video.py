@@ -294,8 +294,8 @@ def download_video(
             status_code=400,
             detail=f"Video job '{job_id}' is not completed yet (current status: {artifact.status})",
         )
-    p = Path(artifact.video_path)
-    if not p.exists():
+    p = Path(artifact.video_path).resolve()
+    if not p.is_relative_to(settings.renders_dir.resolve()) or not p.exists():
         raise HTTPException(status_code=404, detail="Rendered video file not found on disk")
 
     return FileResponse(
@@ -324,8 +324,8 @@ def stream_video(
             status_code=400,
             detail=f"Video job '{job_id}' is not completed yet (current status: {artifact.status})",
         )
-    p = Path(artifact.video_path)
-    if not p.exists():
+    p = Path(artifact.video_path).resolve()
+    if not p.is_relative_to(settings.renders_dir.resolve()) or not p.exists():
         raise HTTPException(status_code=404, detail="Rendered video file not found on disk")
 
     return range_requests_response(request, p, content_type="video/mp4")
@@ -379,6 +379,105 @@ def get_subtitles(
     return get_captions(job_id)
 
 
+@router.post("/{job_id}/retry", response_model=VideoGenerateResponse, status_code=202)
+@router.post("/jobs/{job_id}/retry", response_model=VideoGenerateResponse, status_code=202)
+async def retry_video_job(
+    job_id: Annotated[str, FPath(description="Failed video job identifier")],
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> VideoGenerateResponse:
+    """Idempotently retry a failed video generation job."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    old_artifact = get_video_job(job_id)
+    if not old_artifact:
+        raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")
+
+    if old_artifact.status != VideoJobStatus.FAILED:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Only failed video jobs can be retried. Job '{job_id}' is currently '{old_artifact.status}'.",
+        )
+
+    current_retries = old_artifact.retry_count or 0
+    if current_retries >= 3:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Retry limit reached for video job '{job_id}' (maximum 3 attempts).",
+        )
+
+    if not job_manager.can_accept_job():
+        raise HTTPException(
+            status_code=429,
+            detail=f"System job capacity reached ({settings.max_pending_jobs} active/queued jobs). Please retry later.",
+            headers={"Retry-After": "30"},
+        )
+
+    # Re-construct VideoTarget from old artifact
+    new_job_id = f"JOB_{uuid4().hex[:10].upper()}"
+    target = VideoTarget(
+        concept_id=old_artifact.concept_id,
+        concept_name=old_artifact.concept_name,
+        difficulty="intermediate",
+        score=0.0,
+        target_seconds=int(old_artifact.duration_seconds) if old_artifact.duration_seconds > 0 else 25,
+        chunk_ids=old_artifact.provenance_chunks,
+        source_content_ids=old_artifact.source_content_ids,
+        student_id=old_artifact.student_id,
+        source_id=old_artifact.source_id,
+        page_start=old_artifact.page_start,
+        page_end=old_artifact.page_end,
+    )
+    target.retry_count = current_retries + 1
+    target.prior_job_id = job_id
+
+    background_tasks.add_task(
+        execute_video_generation_job,
+        target=target,
+        job_id=new_job_id,
+        mock_mode=(getattr(settings, "llm_provider", "") in ("mock", "test")),
+        force=True,
+    )
+
+    return VideoGenerateResponse(
+        job_id=new_job_id,
+        status=VideoJobStatus.QUEUED,
+        concept_id=old_artifact.concept_id,
+        target_seconds=target.target_seconds,
+        jobs=[{"job_id": new_job_id, "concept_id": old_artifact.concept_id, "status": "QUEUED", "retry_count": target.retry_count}],
+    )
+
+
+@router.get("/{job_id}/preview")
+def get_video_preview(
+    job_id: Annotated[str, FPath(description="Job identifier")],
+) -> dict[str, Any]:
+    """Retrieve fast first-visual preview for an educational video plan before full render."""
+    try:
+        validate_path_component(job_id, "job_id")
+    except InvalidIdentifierError as err:
+        raise HTTPException(status_code=400, detail=str(err))
+
+    artifact = get_video_job(job_id)
+    if not artifact:
+        raise HTTPException(status_code=404, detail=f"Video job '{job_id}' not found")
+
+    if artifact.preview:
+        return artifact.preview
+
+    return {
+        "job_id": job_id,
+        "status": artifact.status,
+        "stage": artifact.stage,
+        "progress": artifact.progress,
+        "concept_name": artifact.concept_name,
+        "message": "Visual animation plan is currently generating. Check back momentarily for preview.",
+    }
+
+
 @router.get("/health/check")
 def check_video_health() -> dict[str, Any]:
     """Diagnostic check for Step 3 Video Engine prerequisites."""
@@ -399,4 +498,3 @@ def check_video_health() -> dict[str, Any]:
         "tts_provider": getattr(settings, "tts_provider", "edge_tts"),
         "whisper_model": getattr(settings, "whisper_model", "base"),
     }
-

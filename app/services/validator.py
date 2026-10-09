@@ -49,7 +49,10 @@ def validate_ingestion_quality(
     if len(unit_ids) != len(units):
         raise ValidationFailed("Duplicate content IDs")
     for cu in units:
-        if not cu.text.strip() or cu.confidence_score <= 0 or cu.source_id != record.source_id or cu.asset_id != record.asset_id:
+        confidence_valid = (cu.confidence_score > 0) or (
+            cu.provenance.get("confidence_status") == "unreported" and bool(cu.text.strip())
+        )
+        if not cu.text.strip() or not confidence_valid or cu.source_id != record.source_id or cu.asset_id != record.asset_id:
             raise ValidationFailed("Empty, failed, or mismatched content unit")
         if not cu.content_id or not cu.source_id or not cu.asset_id:
             raise ValidationFailed(f"Content level failure: ContentUnit {cu} missing essential IDs.")

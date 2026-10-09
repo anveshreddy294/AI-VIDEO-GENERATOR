@@ -34,9 +34,13 @@ class AssessmentAttempt(BaseModel):
     question_id: str
     assessment_type: AssessmentType
 
-    selected_answer: int = Field(ge=0, le=10)
-    correct_answer: int = Field(ge=0, le=10)
+    selected_answer: int = Field(default=-1, ge=-1, le=10)
+    correct_answer: int = Field(default=-1, ge=-1, le=10)
     is_correct: bool
+    text_answer: str | None = None
+    score: float = 0.0
+    feedback: str | None = None
+    explanation: str | None = None
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -69,10 +73,11 @@ class AssessmentAttempt(BaseModel):
     @model_validator(mode="after")
     def _enforce_attempt_invariants(self) -> "AssessmentAttempt":
         """Validate server-side grading consistency."""
-        expected_correct = (self.selected_answer == self.correct_answer)
-        if self.is_correct != expected_correct:
-            raise DomainInvariantViolation(
-                f"Inconsistent grading: is_correct is {self.is_correct}, "
-                f"but selected_answer ({self.selected_answer}) == correct_answer ({self.correct_answer}) is {expected_correct}."
-            )
+        if self.text_answer is None:
+            expected_correct = (self.selected_answer == self.correct_answer)
+            if self.is_correct != expected_correct:
+                raise DomainInvariantViolation(
+                    f"Inconsistent grading: is_correct is {self.is_correct}, "
+                    f"but selected_answer ({self.selected_answer}) == correct_answer ({self.correct_answer}) is {expected_correct}."
+                )
         return self

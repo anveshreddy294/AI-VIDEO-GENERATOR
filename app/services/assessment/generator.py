@@ -882,3 +882,58 @@ def generate_canonical_questions(bundle: "EvidenceBundle", plan: "AssessmentPlan
         validate_canonical_question(question,bundle,plan.concept_targets,questions)
         questions.append(question)
     return questions
+
+
+def verified_visual_cloze_questions(bundle: "EvidenceBundle", concepts: list[ConceptNode],
+    assessment_id: str, count: int, preference: Literal["foundational", "intermediate", "advanced"] | None = None,
+    distractor_concepts: list[ConceptNode] | None = None) -> list[Question]:
+    """Compile literal label-and-cue questions; no inferred relationships or answer metadata."""
+    from uuid import NAMESPACE_URL, uuid5
+    from .validator import validate_canonical_question
+    from ..retrieval import EvidenceItem
+    from ..repositories.knowledge_repository import KnowledgeError
+    candidates: list[tuple[ConceptNode, str, str, EvidenceItem]] = []
+    for concept in sorted(concepts, key=lambda item: item.concept_id):
+        label = concept.name.split(" (")[0].strip()
+        if not label or label == concept.name:
+            continue
+        for item in bundle.items:
+            if concept.concept_id not in item.concept_ids:
+                continue
+            quote = next((line.strip() for line in item.excerpt.splitlines()
+                if concept.name in line and line.count(label) == 1), None)
+            if quote and len(re.findall(r"\w+", quote.replace(label, "", 1))) >= 2:
+                candidates.append((concept, label, quote, item))
+                break
+    questions: list[Question] = []
+    allowed = [concept.concept_id for concept in concepts]
+    for candidate_index, (concept, label, quote, item) in enumerate(candidates):
+        alternatives = sorted({other.name.split(" (")[0].strip() for other in (distractor_concepts or concepts)
+            if other.name.split(" (")[0].strip().casefold() != label.casefold()
+            and other.name.split(" (")[0].strip() not in quote})
+        if len(alternatives) < 3:
+            continue
+        # Rotate distractors to avoid duplicate option sets across the finite source inventory.
+        offset = candidate_index % len(alternatives)
+        alternatives = alternatives[offset:] + alternatives[:offset]
+        options = alternatives[:3]
+        index = uuid5(NAMESPACE_URL, assessment_id + ":" + concept.concept_id).int % 4
+        options.insert(index, label)
+        question = Question(question_id="Q_" + uuid5(NAMESPACE_URL, assessment_id+":"+str(len(questions))).hex,
+            concept_id=concept.concept_id, concept_name=concept.name,
+            variant_type="verified_visual_label_cloze",
+            stem="Complete this source statement verbatim: " + quote.replace(label,"____",1),
+            options=[AssessmentOption(index=n,text=value) for n,value in enumerate(options)],
+            correct_index=index, explanation=quote, evidence_quote=quote, evidence_text=item.excerpt,
+            evidence_ids=[item.evidence_id], chunk_ids=[item.chunk_id], content_ids=[item.content_id],
+            source_id=bundle.scope.source_id, source_version=bundle.scope.source_version,
+            page_start=item.page_start,page_end=item.page_end,timestamp_start=item.timestamp_start,
+            timestamp_end=item.timestamp_end,difficulty=preference or classify_difficulty(concept))
+        try:
+            validate_canonical_question(question,bundle,allowed,questions)
+        except KnowledgeError:
+            continue
+        questions.append(question)
+        if len(questions) == count:
+            break
+    return questions

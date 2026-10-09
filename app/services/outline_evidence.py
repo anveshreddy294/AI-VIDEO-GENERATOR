@@ -26,7 +26,7 @@ def detect_outline(scope: SourceScope, units: list[ScopedContentUnit]) -> list[O
     """Recognize marked headings only in an ordered, explicitly nested TXT outline."""
     if not units or any((u.user_id, u.source_id, u.source_version) != (scope.user_id, scope.source_id, scope.source_version) for u in units):
         return []
-    if any(u.content.modality != "txt" for u in units):
+    if any(u.content.modality not in {"txt", "pdf"} or u.content.provenance.get("visual_schema_version") == "visual-v2" for u in units):
         return []
     ordered = sorted(units, key=lambda u: u.content.sequence_index)
     if len({u.content.sequence_index for u in ordered}) != len(ordered):

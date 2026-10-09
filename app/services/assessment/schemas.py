@@ -68,6 +68,7 @@ class Question(BaseModel):
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
     variant_type: str | None = Field(default=None, description="Pedagogical variant angle: definition, relationship, application, comparison, misconception")
     diagnostics: StageDiagnostics | None = Field(default=None, description="Execution diagnostics envelope")
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
 
 class SafeQuestion(BaseModel):
@@ -87,6 +88,7 @@ class SafeQuestion(BaseModel):
     chunk_ids: list[str] = Field(default_factory=list)
     timestamp_start: float | str | None = None
     timestamp_end: float | str | None = None
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
 
 class ConceptSnapshot(BaseModel):
@@ -98,6 +100,7 @@ class ConceptSnapshot(BaseModel):
     source_content_ids: list[str] = Field(default_factory=list)
     difficulty: Literal["foundational", "intermediate", "advanced"] = "intermediate"
     source_id: str | None = None
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
 
 
 class AssessmentSession(BaseModel):
@@ -248,6 +251,9 @@ class VideoTarget(BaseModel):
     teaching_strategy: str | None = Field(default=None, description="Deterministic teaching strategy selected for remediation")
     previous_strategy: str | None = Field(default=None, description="Previously attempted teaching strategy if retrying")
     evidence_attempt_ids: list[str] = Field(default_factory=list, description="IDs of learner attempts evidencing this gap")
+    provenance_kind: Literal["SOURCE_GROUNDED", "AI_ENRICHED"] = "SOURCE_GROUNDED"
+    retry_count: int = 0
+    prior_job_id: str | None = None
 
 
 class VideoTargetMatrix(BaseModel):

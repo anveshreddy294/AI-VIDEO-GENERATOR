@@ -54,7 +54,8 @@ class AssessmentSubmissionRequest(BaseModel):
     session_id: str | None = None
     concept_id: str
     question_id: str
-    selected_answer: int = Field(ge=0, le=10)
+    selected_answer: int = Field(default=-1, ge=-1, le=10)
+    text_answer: str | None = None
     assessment_type: AssessmentType = AssessmentType.DIAGNOSTIC
 
 
@@ -141,7 +142,24 @@ class AssessmentAttemptService:
             )
 
         # 4. Server-Side Deterministic Grading (never trust client)
-        is_correct = (request.selected_answer == question.correct_index)
+        if getattr(question, "question_type", "mcq") == "descriptive" or request.text_answer:
+            from ..assessment.descriptive_evaluator import evaluate_descriptive_answer
+            eval_res = evaluate_descriptive_answer(
+                question_id=question.question_id,
+                concept_id=question.concept_id,
+                student_response=request.text_answer or "",
+                rubric_criteria=getattr(question, "rubric_criteria", []),
+                authoritative_explanation=question.explanation,
+            )
+            is_correct = eval_res.passed
+            feedback = eval_res.feedback
+            explanation = eval_res.explanation
+            score = eval_res.score
+        else:
+            is_correct = (request.selected_answer == question.correct_index)
+            feedback = None
+            explanation = question.explanation
+            score = 100.0 if is_correct else 0.0
 
         attempt = AssessmentAttempt(
             attempt_id=clean_attempt_id,
@@ -154,6 +172,10 @@ class AssessmentAttemptService:
             selected_answer=request.selected_answer,
             correct_answer=question.correct_index,
             is_correct=is_correct,
+            text_answer=request.text_answer,
+            score=score,
+            feedback=feedback,
+            explanation=explanation,
         )
 
         # 5. Fetch or Initialize Mastery Record

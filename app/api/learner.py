@@ -30,3 +30,8 @@ def learning_style() -> FileResponse:
 @router.get("/assets/notes.js", include_in_schema=False)
 def notes_script() -> FileResponse:
     return FileResponse(STATIC / "notes.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/assets/practice.js", include_in_schema=False)
+def practice_script() -> FileResponse:
+    return FileResponse(STATIC / "practice.js", media_type="application/javascript", headers={"Cache-Control":"no-cache"})

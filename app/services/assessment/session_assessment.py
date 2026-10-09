@@ -27,7 +27,7 @@ from .schemas import (
     Question,
 )
 from .planner import AssessmentPlanner
-from .generator import generate_canonical_questions
+from .generator import generate_canonical_questions, verified_visual_cloze_questions
 from .engine import grade_canonical_submission
 
 
@@ -103,6 +103,7 @@ class SessionAssessmentService:
             subtopic_id=narrowed.subtopic_id,
             concept_ids=narrowed.concept_ids,
             purpose="assessment",
+            retrieval_mode=narrowed.retrieval_mode,
             include_prerequisites=False,
             max_items=20,
         )
@@ -152,9 +153,24 @@ class SessionAssessmentService:
         )
         if not plan.question_count:
             raise AssessmentInsufficientEvidence()
-        questions = generate_canonical_questions(
-            bundle, plan, concepts, key, request.difficulty
-        )
+        units = self.context.list_scoped_content(expected)
+        relevant = {item.content_id for item in bundle.items}
+        verified_visual = relevant and all(
+            unit.provenance.get("visual_schema_version") == "visual-v2"
+            and isinstance(unit.provenance.get("visual_verification"), dict)
+            and unit.provenance["visual_verification"].get("status") == "VERIFIED"
+            for unit in units if unit.content_id in relevant
+        ) and relevant <= {unit.content_id for unit in units}
+        learning = LearningSessionRepository(self.context).get(learning_session_id)
+        distractors = [ConceptNode(concept_id=c.concept_id, name=c.name) for c in knowledge.concepts
+            if c.concept_id in learning.selected_concept_ids]
+        questions = verified_visual_cloze_questions(bundle, concepts, key, request.question_count,
+            request.difficulty, distractors) if verified_visual else []
+        if questions:
+            plan = AssessmentPlan(concept_targets=[q.concept_id for q in questions],
+                question_count=len(questions), difficulty_distribution={})
+        if not questions:
+            questions = generate_canonical_questions(bundle, plan, concepts, key, request.difficulty)
         session = AssessmentSession(
             session_id=key,
             student_id=str(self.context.user.user_id),
@@ -243,7 +259,7 @@ class SessionAssessmentService:
             SafeQuestion(
                 question_id=q.question_id,
                 concept_id=q.concept_id,
-                concept_name=q.concept_name,
+                concept_name="Selected concept" if q.variant_type == "verified_visual_label_cloze" else q.concept_name,
                 stem=q.stem,
                 options=[SafeOption(index=o.index, text=o.text) for o in q.options],
                 difficulty=q.difficulty,
@@ -267,6 +283,6 @@ class SessionAssessmentService:
             questions=questions,
             requested_questions=count,
             generated_questions=len(questions),
-            concepts_tested=[q.concept_name for q in session.questions],
+            concepts_tested=[q.concept_name for q in questions],
             shortfall=max(0, count - len(questions)),
         )

@@ -340,7 +340,7 @@ def _validate_vision_extraction(
         + typed.handwriting_text
     )
     if re.search(
-        r"\b(i cannot|i can't|unable to (analyze|read|process)|as an ai|api key|error [45]\d\d)\b",
+        r"\b(i cannot|i can't|unable to (analyze|read|process)|as an ai (language )?model|invalid api key|missing api key|error [45]\d\d)\b",
         transcript,
         re.I,
     ):
@@ -507,17 +507,24 @@ def _validate_vision_extraction(
         raise VisionExtractionFailed(
             "Generic caption is not educational evidence", VISION_INVALID_RESPONSE
         )
+    def _normalize_formula_presentation(text: str) -> str:
+        # Normalize presentation-only whitespace, enclosing math delimiters, and explicit multiplication (*, ×, ·).
+        # Strictly preserve meaningful arithmetic operators (+, -, /, =), quantities, case, and directions (->).
+        clean = re.sub(r"^\$+|\$+$", "", text.strip())
+        clean = re.sub(r"\s+", "", clean)
+        return re.sub(r"[*×·]", "", clean)
+
     if transcript and any(
-        re.sub(r"[\s*×]+", "", formula) not in re.sub(r"[\s*×]+", "", transcript)
+        _normalize_formula_presentation(formula) not in _normalize_formula_presentation(transcript)
         for formula in typed.formulas
     ):
         raise VisionExtractionFailed(
             "Equation lacks visible transcription support", VISION_INVALID_RESPONSE
         )
     if typed.confidence <= 0:
-        raise VisionExtractionFailed(
-            "Missing visual confidence", VISION_INVALID_RESPONSE
-        )
+        typed._routing_provenance["confidence_status"] = "unreported"
+    else:
+        typed._routing_provenance["confidence_status"] = "reported"
     return typed
 
 

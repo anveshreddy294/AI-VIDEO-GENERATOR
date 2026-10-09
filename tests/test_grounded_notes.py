@@ -402,3 +402,17 @@ def test_http_success_uses_notes_service(
         assert result.status_code == 200
         assert result.json()["source_version"] == 7
         assert result.json()["citations"][0]["location"] == "Study.pdf — page 4"
+
+
+def test_notes_schema_disallows_diagrams_without_explicit_source_chain(setup):
+    context, retrieval, _, bundle = setup
+    without = bundle.model_copy(update={"items": [item.model_copy(update={"excerpt": item.excerpt.replace(" -> ", ", ")}) for item in bundle.items]})
+    retrieval.retrieve.return_value = without
+    captured = []
+    class Provider:
+        def generate(self, request):
+            captured.append(request)
+            return ReasoningResult(response=json.dumps({"title": claim("Osmosis")}), telemetry=Telemetry(provider="ollama",task="notes",outcome="SUCCESS",transport_latency_seconds=0.0))
+    service = GroundedNotesService(context,retrieval=retrieval,provider=Provider())
+    assert not service.generate(NotesRequest(session_id=SID)).diagram_specs
+    assert captured[0].response_schema["properties"]["diagram_specs"]["maxItems"] == 0

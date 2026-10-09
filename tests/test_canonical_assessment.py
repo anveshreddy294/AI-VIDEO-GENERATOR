@@ -298,7 +298,12 @@ def test_duplicate_and_multiple_correct_rejected(setup):
 
 
 def test_insufficient_evidence_never_calls_provider(setup):
-    setup[1].retrieval = RetrievalService(IndexDouble([]))
+    from unittest.mock import Mock
+    from app.services.retrieval import RetrievalRequest
+    bundle = setup[5].retrieve(setup[0], RetrievalRequest(source_id="source", source_version=1,
+        query="Test", topic_id="topic", subtopic_id="sub", concept_ids=["osmosis"]))
+    setup[1].retrieval = Mock(retrieve=Mock(return_value=bundle.model_copy(
+        update={"items": [], "outcome": "INSUFFICIENT_EVIDENCE"})))
     with pytest.raises(AssessmentInsufficientEvidence):
         start(setup)
     assert not setup[3].calls and not setup[2].rows
@@ -555,3 +560,37 @@ def test_grading_cannot_use_changed_selection_or_duplicate_answers(setup, monkey
     with pytest.raises(KnowledgeError, match="CONFLICT"):
         setup[1].submit(SID, view.session_id, CanonicalSubmission(answers=[answer]))
     assert setup[2].attempts == 0
+
+
+def test_session_assessment_uses_exact_canonical_evidence_without_semantic_hit(setup):
+    setup[1].retrieval = RetrievalService(IndexDouble([]))
+    assert start(setup).status == "READY"
+    assert len(setup[3].calls) == 1
+
+
+def test_verified_visual_cloze_compilation_and_answer_bearing_label_hiding(setup):
+    from app.services.assessment.generator import verified_visual_cloze_questions
+    from app.services.retrieval import RetrievalRequest
+    from app.services.schemas import ConceptNode
+    bundle = setup[5].retrieve(setup[0],RetrievalRequest(source_id="source",source_version=1,query="test",
+        topic_id="topic",subtopic_id="sub",concept_ids=["osmosis"]))
+    template = bundle.items[0]
+    concepts = [ConceptNode(concept_id=f"sensor{i}",name=f"Sensor {i} (value{i}, input{i})") for i in range(8)]
+    items = [template.model_copy(update={"evidence_id":f"e{i}","concept_ids":[c.concept_id],"excerpt":c.name}) for i,c in enumerate(concepts)]
+    bundle = bundle.model_copy(update={"items":items})
+    questions = verified_visual_cloze_questions(bundle,concepts,"compiled",3)
+    assert len(questions) == 3
+    session = AssessmentSession(session_id="compiled",student_id=str(OWNER),source_id="source",source_version=1,
+        learning_session_id=SID,questions=questions,concept_queue=[q.concept_id for q in questions],status="READY")
+    safe = SessionAssessmentService.safe(session,3)
+    assert all(q.concept_name == "Selected concept" for q in safe.questions)
+    assert safe.concepts_tested == ["Selected concept"] * 3
+    for internal, public in zip(questions,safe.questions):
+        correct = internal.options[internal.correct_index].text
+        assert correct.casefold() not in public.stem.casefold()
+        assert correct.casefold() not in public.concept_name.casefold()
+        assert "correct_index" not in public.model_dump()
+    narrowed = bundle.model_copy(update={"items":[items[0]]})
+    assert len(verified_visual_cloze_questions(narrowed,[concepts[0]],"reassessment",3,distractor_concepts=concepts)) == 1
+    foreign = bundle.model_copy(update={"items": [item.model_copy(update={"concept_ids":["foreign"]}) for item in items]})
+    assert not verified_visual_cloze_questions(foreign,concepts,"foreign",3)
