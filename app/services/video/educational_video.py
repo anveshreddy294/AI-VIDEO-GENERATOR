@@ -314,7 +314,11 @@ def validate_plan_evidence(repo, plan: VideoPlan) -> None:
     refs = [ref for scene in plan.scenes for ref in scene.evidence_references]
     if not refs:
         return
-    _, version = require_source_scope(repo, plan.source_id, plan.source_version)
+    try:
+        validate_video_plan(plan)
+    except SceneValidationError:
+        raise HTTPException(409, {"code":"VIDEO_EVIDENCE_UNAVAILABLE"}) from None
+    scope, version = require_source_scope(repo, plan.source_id, plan.source_version)
     units = {u.content_id:u for u in repo.get_content_units(plan.source_id, plan.source_version)}
     from ..security.content_sanitizer import SanitizedContent
     from pydantic import ValidationError
@@ -331,6 +335,36 @@ def validate_plan_evidence(repo, plan: VideoPlan) -> None:
                 or sanitized.sanitized_text != unit.text
                 or unit.text[ref.char_start:ref.char_end] != ref.quote):
             raise HTTPException(409, {"code":"VIDEO_EVIDENCE_UNAVAILABLE"})
+    manifest = _canonical_scene_manifest(repo, scope, version)
+    from ..educational_chunker import ChunkMetadata
+    for ref in refs:
+        chunk = manifest.get(ref.chunk_id)
+        if chunk is None or ref.concept_id not in chunk.concept_ids:
+            raise HTTPException(409, {"code":"VIDEO_EVIDENCE_UNAVAILABLE"})
+        metadata = ChunkMetadata.model_validate(chunk.metadata)
+        if not any(span.content_id == ref.source_content_id and span.char_start <= ref.char_start
+                   and ref.char_end <= span.char_end for span in metadata.canonical_spans):
+            raise HTTPException(409, {"code":"VIDEO_EVIDENCE_UNAVAILABLE"})
+
+
+def _canonical_scene_manifest(repo, scope, version):
+    """Rebuild the same manifest as retrieval; stored scene IDs grant no authority."""
+    from ..repositories.knowledge_repository import KnowledgeRepository, KnowledgeError
+    from ..educational_chunker import ChunkPolicy, create_educational_chunks
+    from pydantic import ValidationError
+    try:
+        context = KnowledgeRepository(repo.user, repo._token, repo.runtime)
+        units = context.list_scoped_content(scope)
+        data = context.get_complete_knowledge_map(scope)
+        chunks, _ = create_educational_chunks(scope, units, data,
+            ChunkPolicy.model_validate(version.provenance.get("chunk_policy") or ChunkPolicy().model_dump()),
+            version.file_hash)
+        return {chunk.chunk_id:chunk for chunk in chunks}
+    except KnowledgeError as error:
+        raise HTTPException(503 if error.code == "PROVIDER_UNAVAILABLE" else 409,
+                            {"code":"VIDEO_EVIDENCE_UNAVAILABLE"}) from None
+    except (ValidationError, ValueError, KeyError):
+        raise HTTPException(409, {"code":"VIDEO_EVIDENCE_UNAVAILABLE"}) from None
 
 
 def scene_views(lesson, generation) -> list[dict]:
@@ -418,6 +452,13 @@ def _reconcile_scene_index(repo, lesson_id: str, generation_id: str) -> dict:
         validated = validate_video_artifact(path, expect_audio=True)
         if abs(validated["duration"] - generation.actual_duration_seconds) > .15:
             raise ValueError("VIDEO_ARTIFACT_CHANGED")
+        if generation.artifact.caption_quality == "SCENE_TIMED":
+            from .caption_validation import validate_scene_captions
+            caption_path = Path(generation.artifact.subtitle_path or "").resolve()
+            if not caption_path.is_relative_to(settings.captions_dir.resolve()):
+                raise ValueError("VIDEO_CAPTIONS_INVALID")
+            validate_scene_captions(caption_path,generation.plan,generation.artifact.scene_timeline,
+                                    float(validated["duration"]))
         failure_stage = "SCENE_EMBEDDING_FAILED"
         vectors = vs.embed_documents([(s["title"] or "") + ": " + (s["narration_text"] or "") for s in scenes])
         provenance = vs.embedding_provenance()

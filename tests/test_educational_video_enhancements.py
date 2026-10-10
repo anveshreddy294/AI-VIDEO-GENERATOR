@@ -25,9 +25,14 @@ def completed(service, *, plan=None, job="generation-a"):
     media = settings.renders_dir / f"{job}.mp4"
     media.write_bytes(b"fixture; real encoding tested separately")
     captions = settings.captions_dir / f"{job}.vtt"
-    captions.write_text("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nA scene\n")
     timeline = [SceneTimelineEntry(scene_id=s.scene_id, scene_index=i, start_seconds=i*2,
                                   end_seconds=(i+1)*2, duration_seconds=2) for i,s in enumerate(plan.scenes)]
+    from app.services.video.caption_validation import caption_text
+    from app.services.video.whisper_alignment import _format_vtt_timestamp
+    captions.write_text("WEBVTT\n\n" + "\n\n".join(
+        f"{_format_vtt_timestamp(t.start_seconds)} --> {_format_vtt_timestamp(t.end_seconds)}\n" +
+        caption_text(" ".join(n.text for n in plan.narration if n.scene_index == t.scene_index))
+        for t in timeline), encoding="utf-8")
     artifact = VideoArtifact(job_id=job, student_id=str(OWNER), source_id=plan.source_id,
         concept_id=plan.concept_id, concept_name=plan.concept_name, status=VideoJobStatus.COMPLETED,
         video_path=str(media), subtitle_path=str(captions), duration_seconds=len(timeline)*2,
@@ -252,6 +257,15 @@ def test_evidence_revalidated_in_both_directions_and_default_stream(service, mon
         original_text=unit.text,sanitized_text=unit.text,original_text_hash="fixture")
     monkeypatch.setattr(ev,"require_source_scope",lambda *args:(None,NS(sanitized_content=[safe.model_dump()])))
     monkeypatch.setattr(service.repository,"get_content_units",lambda *args:[unit])
+    # This fixture isolates permission revalidation; real canonical chunk
+    # reconstruction and forged chunk IDs are exercised in the reliability suite.
+    from app.services.educational_chunker import ChunkMetadata
+    metadata = ChunkMetadata(topic_id=None,subtopic_id=None,content_role="DEFINITION",sequence=0,
+        heading_path=[],canonical_spans=[dict(content_id=ref.source_content_id,char_start=ref.char_start,char_end=ref.char_end)],
+        chunking_policy_version="educational-chunks-v1",chunking_policy_hash="fixture",
+        canonical_source_version=plan.source_version,understanding_version="fixture")
+    monkeypatch.setattr(ev,"_canonical_scene_manifest",lambda *args:{ref.chunk_id:NS(
+        concept_ids=[ref.concept_id],metadata=metadata.model_dump())})
     assert ev.video_metadata(service.repository,lesson.lesson_id)["scenes"][0]["evidence_references"][0]["quote"] == ref.quote
     found = ev.scenes_for_source(service.repository,plan.source_id,plan.source_version,ref.chunk_id,None,0,20)
     assert found["scenes"][0]["scene_id"] == plan.scenes[0].scene_id

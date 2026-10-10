@@ -15,6 +15,7 @@ from .manim_renderer import render_video_plan
 from .scene_schema import VideoPlan, SceneTimelineEntry
 from .video_compositor import _resolve_binary, run_subprocess_bounded, probe_media, validate_video_artifact
 from .whisper_alignment import _format_vtt_timestamp
+from .caption_validation import caption_text, validate_scene_captions
 
 
 async def assemble_scene_media(plan: VideoPlan, job_id: str, tts, progress: Callable) -> dict:
@@ -91,7 +92,9 @@ async def assemble_scene_media(plan: VideoPlan, job_id: str, tts, progress: Call
     for entry, scene in zip(timeline, plan.scenes):
         text = " ".join(s.text for s in plan.narration if s.scene_index == scene.scene_index)
         cues.extend([f"{_format_vtt_timestamp(entry.start_seconds)} --> {_format_vtt_timestamp(entry.end_seconds)}",
-                     text.replace("-->", "→").replace("<", "&lt;").replace(">", "&gt;"), ""])
+                     caption_text(text), ""])
     vtt.write_text("\n".join(cues), encoding="utf-8")
+    # Validate what was actually written before publishing COMPLETED metadata.
+    validate_scene_captions(vtt, plan, timeline, final_duration)
     return {"video_path":str(final), "subtitle_path":str(vtt), "duration":final_duration,
             "timeline":timeline, "validation":validation}

@@ -1,5 +1,8 @@
 # Video API enhancement implementation — 2026-10-11
 
+Follow-up reliability work and current dependency blockers are recorded in
+[video-generation-reliability.md](video-generation-reliability.md).
+
 ## Continuous topic visuals update
 
 Baseline: branch `new-implementations`, commit `8a97eda`; only the existing
@@ -116,7 +119,7 @@ Authenticated owned lesson
   → authenticated metadata, search, navigation and playback
 ```
 
-Files remain in the configured lesson runtime, renders, audio and captions directories. Intermediate scene audio and visual/composited segments are retained; this increment adds no cleanup policy. Local persistent volumes/backups remain an operational requirement. The unchanged Docker command starts one Uvicorn process; JSON merging and admission accounting are process-local. OS execution/index locks protect individual jobs, but this is not a distributed queue or a guarantee of transactional multi-worker lesson writes.
+Files remain in the configured lesson runtime, renders, audio and captions directories. Intermediate scene audio and visual/composited segments are retained; this increment adds no cleanup policy. Local persistent volumes/backups remain an operational requirement. The unchanged Docker command starts one Uvicorn process. The shared JSON store already serializes read/modify/write merging with a thread lock and a cross-process OS file lock; admission accounting remains process-local. OS execution/index locks protect individual jobs. These local locks are not a distributed queue or a guarantee of multi-host transactional writes.
 
 Failed indexing does not turn a valid rendered video into a failed render. Reindex uses the same deterministic IDs and refuses incomplete/unmeasured media. Historical scene points can remain searchable only while their owned generation is valid and indexed; invalid metadata digests, foreign owners, removed evidence and missing media are rejected when results are rehydrated.
 

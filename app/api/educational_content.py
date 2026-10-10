@@ -377,6 +377,13 @@ async def read_video_captions(lesson_id: str, repository: SourceDependency,
     path = Path(generation.artifact.subtitle_path).resolve()
     if not path.is_relative_to(settings.captions_dir.resolve()) or path.suffix != ".vtt" or not path.is_file():
         raise HTTPException(404, {"code":"VIDEO_CAPTIONS_UNAVAILABLE"})
+    if generation.artifact.caption_quality == "SCENE_TIMED" and generation.artifact.timing_status == "MEASURED":
+        from ..services.video.caption_validation import validate_scene_captions, CaptionValidationError
+        try:
+            await run_in_threadpool(validate_scene_captions, path, generation.plan,
+                                    generation.artifact.scene_timeline, generation.artifact.duration_seconds)
+        except CaptionValidationError:
+            raise HTTPException(409, {"code":"VIDEO_CAPTIONS_INVALID"}) from None
     return FileResponse(path, media_type="text/vtt", headers={"Cache-Control":"private, no-store"})
 
 
