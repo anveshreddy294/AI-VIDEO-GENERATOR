@@ -39,14 +39,15 @@ def fuse_units(
                 frame_id=f"FRAME_{int(f.timestamp)}",
                 sequence_index=seq_index,
                 extraction_method="opencv_vision",
-                confidence_score=0.90,
+                confidence_score=f.provenance.get("confidence_score", 0.90),
+                provenance={"frames":[f.provenance]} if f.provenance else {},
             )
             units.append(unit)
             seq_index += 1
         units.sort(key=lambda unit: unit.timestamp_start if unit.timestamp_start is not None else 0)
-    for index, unit in enumerate(units):
-        unit.sequence_index = index
-    return units
+        for index, unit in enumerate(units):
+            unit.sequence_index = index
+        return units
 
     frames_used = [False] * len(frames)
 
@@ -88,6 +89,7 @@ def fuse_units(
             sequence_index=seq_index,
             extraction_method="whisper_vision_fusion",
             confidence_score=0.95,
+            provenance={"frames":[f.provenance for f in visible if f.provenance]},
         )
         units.append(unit)
         seq_index += 1
@@ -106,7 +108,8 @@ def fuse_units(
                 frame_id=f"FRAME_{int(f.timestamp)}",
                 sequence_index=seq_index,
                 extraction_method="opencv_vision_gap",
-                confidence_score=0.85,
+                confidence_score=f.provenance.get("confidence_score", 0.85),
+                provenance={"frames":[f.provenance]} if f.provenance else {},
             )
             units.append(unit)
             seq_index += 1

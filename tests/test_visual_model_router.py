@@ -151,11 +151,11 @@ def test_structural_workloads_use_qualified_model(workload: str, tier: Tier) -> 
 @pytest.mark.parametrize(
     "tier,signals,chain",
     [
-        ("general", {"semantic_kind": "TEXT"}, ["general"]),
+        ("general", {"semantic_kind": "TEXT"}, ["general", "general"]),
         ("deep", {"contains_handwriting": True}, ["deep", "general"]),
-        ("deep", {"contains_graph": True}, ["deep"]),
+        ("deep", {"contains_graph": True}, ["deep", "deep"]),
         ("general", {"semantic_kind": "FLOWCHART"}, ["general", "deep"]),
-        ("deep", {"complexity": "COMPLEX"}, ["deep"]),
+        ("deep", {"complexity": "COMPLEX"}, ["deep", "deep"]),
     ],
 )
 def test_operational_chains_only(
@@ -475,7 +475,7 @@ def test_exact_gemma_provider_identity(
 @pytest.mark.parametrize(
     "workload,tier,read",
     [
-        ("complex_diagram", "deep", 60),
+        ("complex_diagram", "deep", 45),
         ("printed", "general", 45),
         ("flowchart", "general", 45),
         ("graph", "deep", 45),
@@ -525,10 +525,10 @@ def test_complex_http_timeout_is_scoped_and_default_policy_unchanged(
     [
         ("vision_extract", "AI_PROVIDER_TIMEOUT", "TIMEOUT"),
         ("vision_extract", "AI_PROVIDER_ERROR", "PROVIDER_UNAVAILABLE"),
-        ("qa", "AI_PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE"),
+            ("qa", "AI_PROVIDER_TIMEOUT", "TIMEOUT"),
     ],
 )
-def test_only_visual_worker_timeout_receives_timeout_category(
+def test_worker_timeout_is_classified_for_all_inference_tasks(
     task: str, error: str, category: str
 ) -> None:
     import time

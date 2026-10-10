@@ -2,17 +2,17 @@
 
 from pathlib import Path
 from fastapi import APIRouter
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
+from ..core.config import settings
 
 router = APIRouter(tags=["Learning experience"])
 STATIC = Path(__file__).resolve().parent.parent / "static"
 
 
 @router.get("/learn", include_in_schema=False)
-def learning_page() -> FileResponse:
-    return FileResponse(
-        STATIC / "learning.html",
-        media_type="text/html",
+def learning_page() -> HTMLResponse:
+    return HTMLResponse(
+        (STATIC / "learning.html").read_text(encoding="utf-8").replace("__JOB_POLL_TIMEOUT_SECONDS__", str(settings.frontend_job_poll_timeout_seconds)),
         headers={"Cache-Control": "no-store"},
     )
 

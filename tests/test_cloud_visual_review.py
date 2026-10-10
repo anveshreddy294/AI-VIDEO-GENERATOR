@@ -56,10 +56,10 @@ def test_expired_shared_deadline_does_not_call_review() -> None:
 
 def test_default_production_route_never_burns_local_timeout() -> None:
     local = LocalDouble()
-    cloud = CloudDouble([ProviderFailure("TIMEOUT", True)])
+    cloud = CloudDouble([ProviderFailure("TIMEOUT", True), ProviderFailure("TIMEOUT", True)])
     with pytest.raises(VisionExtractionFailed) as caught:
         VisualModelRouter(cloud, local).extract(FIXTURE.read_bytes(), "image")
-    assert local.calls == 0 and len(cloud.calls) == 1
+    assert local.calls == 0 and len(cloud.calls) == 2
     assert caught.value.error_code == "VISION_TIMEOUT"
     assert caught.value.route_trace is not None and not caught.value.route_trace.local_fallback_attempted
 

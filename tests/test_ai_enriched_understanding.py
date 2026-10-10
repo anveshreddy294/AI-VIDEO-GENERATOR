@@ -418,7 +418,9 @@ def test_provider_timeout_handling():
 # 9. API Endpoint & Cross-User Isolation
 # =============================================================================
 
-def test_api_explain_endpoint_typed_topic():
+def test_api_explain_endpoint_typed_topic(monkeypatch):
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "reasoning_provider", "cloudflare")
     from fastapi.testclient import TestClient
     from app.main import app
 

@@ -180,7 +180,7 @@ class ModelManager:
         if reasoning_only:
             # Source reasoning never routes ordinary text through a configured vision model.
             chain = ([{"model": "mock", "provider": "mock"}] if self.active_provider == "mock"
-                     else [{"model": "llama3.2:3b", "provider": "ollama"}])
+                     else [{"model": settings.ollama_model, "provider": "ollama"}])
         last_err: Exception | None = None
         if messages is not None and (not 1 <= len(messages) <= 4 or any(
             set(message) != {"role", "content"} or message["role"] not in {"system", "user", "assistant"}

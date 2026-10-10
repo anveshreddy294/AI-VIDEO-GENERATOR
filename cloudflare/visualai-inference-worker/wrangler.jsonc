@@ -7,5 +7,13 @@
     "binding": "AI"
   },
   "workers_dev": true,
-  "preview_urls": false
+  "preview_urls": false,
+  "vars": {
+    "TEXT_TIMEOUT_MS": "180000",
+    "VISION_TIMEOUT_MS": "180000",
+    "VISION_COMPLEX_TIMEOUT_MS": "180000",
+    "VISION_REVIEW_TIMEOUT_MS": "180000",
+    "TEXT_GENERAL_MODEL": "@cf/qwen/qwen3-30b-a3b-fp8",
+    "TEXT_STRUCTURED_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  }
 }

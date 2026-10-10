@@ -1,5 +1,11 @@
 # VisualAI inference Worker (local preparation only)
 
+## Current reliability update — 2026-10-10
+
+The historical preparation notes below describe an earlier baseline. For current routing, budgets, test evidence and deployment limitations, see [the reliability report](../../docs/cloudflare-reliability.md). The current visual allowlist has only general Gemma 4 and deep Qwen 3.8; the fast/Moondream candidate described below is no longer supported. Text schemas are forwarded for every task when supplied, and text output is capped at 8,192 tokens. Text/general/complex/review request timers default to 180 seconds and are configurable through Worker vars.
+
+No deployment was performed for this update. The configured runtime hostname returned health HTTP 200 but real text and vision inference failed with HTTP 502. The local Wrangler name `speedrun` does not identify that configured hostname; verify the intended account, Worker and AI binding before deployment. Earlier claims below about a matching deployment name, a text-only deployed Worker, 45-second timers or absent live requests must not be used as current operational evidence.
+
 The authoritative recovered source was imported without edits and passed 22 baseline Node tests before extension. The exact deployed-source bytes remain in `tests/fixtures/deployed-worker.js`; SHA256 `d4a45c898b1e1477bd608dd6869653d5115fe62da1d48dc6496060f0505509a8` matches the supplied attachment. `src/index.js` now delegates only the new `vision_extract` family to `src/visual.js`. No replacement Worker or external deployment was created.
 
 ## Existing contract

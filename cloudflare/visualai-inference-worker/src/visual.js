@@ -1,14 +1,16 @@
 // @ts-check
 /** @typedef {Record<string, unknown>} Row */
-/** @typedef {{AI:{run:(model:string,input:Row)=>Promise<unknown>}}} VisualEnv */
+/** @typedef {{AI:{run:(model:string,input:Row)=>Promise<unknown>},VISION_TIMEOUT_MS?:string,VISION_COMPLEX_TIMEOUT_MS?:string,VISION_REVIEW_TIMEOUT_MS?:string}} VisualEnv */
 export const VISION_MODELS=Object.freeze({general:'@cf/google/gemma-4-26b-a4b-it',deep:'@cf/qwen/qwen3.8-27b'});
 const GEMMA_EXTERNAL='@cf/google/gemma-4-26b-a4b-it-external';
 export const MAX_IMAGE_BYTES=2*1024*1024;
 export const MAX_VISUAL_BODY_BYTES=3*1024*1024;
 const MAX_OUTPUT_BYTES=256*1024;
 const MAX_PROMPT_CHARS=32000;
-const PROVIDER_TIMEOUT_MS=45000;
-const COMPLEX_PROVIDER_TIMEOUT_MS=55000;
+const PROVIDER_TIMEOUT_MS=180000;
+const COMPLEX_PROVIDER_TIMEOUT_MS=180000;
+/** @param {unknown} value @param {number} fallback */
+export function configuredTimeout(value,fallback){const number=Number(value);return Number.isFinite(number)&&number>=1000&&number<=600000?number:fallback;}
 const REVIEW_OUTPUT_TOKENS=4096; // Up to 128 individually classified claims in the bounded review schema.
 class VisualTimeout extends Error {}
 /** Only documented native error codes leave the Worker, never raw error text. @param {unknown} error */
@@ -34,17 +36,14 @@ function logProviderError(error,requestId,model){
     /** @type {Row} */ const event={request_id:requestId,task:'vision_extract',model,stage:'env.AI.run'};
     if(error!==null&&(typeof error==='object'||typeof error==='function')){
         const object=/** @type {Row} */(error);
-        event.error_properties=Object.getOwnPropertyNames(error).map(safeDiagnostic);
-        for(const field of ['name','message','code','status']){
+        event.error_properties=Object.getOwnPropertyNames(error).filter(key=>['name','code','status'].includes(key));
+        for(const field of ['code','status']){
             const value=object[field];
-            if(typeof value==='string'||typeof value==='number')event['error_'+field]=typeof value==='string'?safeDiagnostic(value):value;
+            if(typeof value==='number'&&Number.isFinite(value))event['error_'+field]=value;
         }
-        const cause=object.cause;
-        if(cause!==null&&typeof cause==='object'){
-            const detail=/** @type {Row} */(cause);
-            for(const field of ['name','message'])if(typeof detail[field]==='string')event['error_cause_'+field]=safeDiagnostic(detail[field]);
-        }
-    }else if(typeof error==='string')event.error_message=safeDiagnostic(error);
+        event.error_name=['Error','TypeError','RangeError','AbortError','TimeoutError'].includes(String(object.name))?object.name:'UnknownError';
+    }
+    event.category=providerFailure(error).error;
     console.error(JSON.stringify(event));
 }
 
@@ -83,7 +82,7 @@ export async function handleVisual(body,env,requestId){
     input={messages:[{role:'system',content:system},{role:'user',content:[{type:'text',text:body.prompt},{type:'image_url',image_url:{url:body.image}}]}],max_completion_tokens:body.task==='vision_verify'?REVIEW_OUTPUT_TOKENS:2048,temperature:0,stream:false,response_format:{type:'json_object'},...(body.tier==='deep'?{reasoning_effort:'low'}:{chat_template_kwargs:{enable_thinking:false}})};
     // Backend validates visual-v2; raw provider-specific shape never becomes canonical state here.
     let timer;const started=Date.now();
-    const providerTimeout=(body.workload==='complex_diagram'||body.task==='vision_verify')&&body.tier==='deep'?COMPLEX_PROVIDER_TIMEOUT_MS:PROVIDER_TIMEOUT_MS;
+    const providerTimeout=body.task==='vision_verify'?configuredTimeout(env.VISION_REVIEW_TIMEOUT_MS,PROVIDER_TIMEOUT_MS):body.workload==='complex_diagram'?configuredTimeout(env.VISION_COMPLEX_TIMEOUT_MS,COMPLEX_PROVIDER_TIMEOUT_MS):configuredTimeout(env.VISION_TIMEOUT_MS,PROVIDER_TIMEOUT_MS);
     let result;
     try{
         console.log(JSON.stringify({request_id:requestId,task:body.task,model,event:'workers_ai_call_start'}));

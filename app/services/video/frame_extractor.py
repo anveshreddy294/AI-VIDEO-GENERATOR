@@ -26,6 +26,7 @@ class FrameCapture:
     timestamp: float
     frame_bytes: bytes | None = None
     description: str = field(default="", init=False)  # filled by the pipeline
+    provenance: dict = field(default_factory=dict, init=False)
 
 
 def extract_frames(video_path: Path) -> list[FrameCapture]:

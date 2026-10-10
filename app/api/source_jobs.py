@@ -2,6 +2,7 @@
 from __future__ import annotations
 import asyncio
 import logging
+import time
 from pathlib import Path
 from uuid import uuid5, NAMESPACE_URL
 from typing import TYPE_CHECKING
@@ -17,12 +18,15 @@ from ..services.visual_router import VisualSignals
 from ..services.ingestion.progress import source_progress, IngestionStage
 from ..services.file_truth import FileTruth
 from pydantic import JsonValue
+from ..core.config import settings
+from ..core.inference_budget import processing_budget
 from ..services.ingestion.failures import SourceFailure, SourceIngestionFailed, SourceIndexFailed
 
 
 async def complete_source_job(job_id: str, result: dict[str, JsonValue]) -> None:
     """Publish the terminal job only after the canonical operation has completed."""
     job = job_manager.get_job(job_id)
+    logging.getLogger(__name__).info("SOURCE_JOB_TERMINAL job_id=%s status=completed readiness=%s warnings=%s", job_id, "CONTENT_READY" if result.get("content_ready") else "READY", result.get("warnings", []))
     if job:
         job.metadata['source_id'] = result['source_id']
         job.result = result
@@ -43,18 +47,31 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
         job_manager.attach_task(job_id, task)
     worker: asyncio.Task[dict[str, JsonValue]] | None = None
     loop = asyncio.get_running_loop()
+    stage_started = time.monotonic()
+    last_stage: str = "queued"
     def progress(stage: IngestionStage) -> None:
+        nonlocal stage_started, last_stage
+        from ..core.inference_budget import check_budget
+        check_budget()
+        now = time.monotonic()
+        logging.getLogger(__name__).info("SOURCE_JOB_STAGE job_id=%s stage=%s previous_stage=%s previous_elapsed_seconds=%.3f", job_id, stage, last_stage, now-stage_started)
+        stage_started, last_stage = now, stage
         messages = {"EXTRACTING_SOURCE": "Extracting source", "PERSISTING_SOURCE": "Persisting verified source", "PREPARING_IMAGE": "Preparing image", "UNDERSTANDING_IMAGE": "Understanding image",
                     "VALIDATING_VISUAL_EVIDENCE": "Validating visual evidence",
                     "BUILDING_LEARNING_STRUCTURE": "Building learning structure", "INDEXING_SOURCE": "Indexing source"}
+        percentages = {"EXTRACTING_SOURCE": 10, "PREPARING_IMAGE": 15, "UNDERSTANDING_IMAGE": 25,
+            "VALIDATING_VISUAL_EVIDENCE": 45, "PERSISTING_SOURCE": 60,
+            "BUILDING_LEARNING_STRUCTURE": 70, "INDEXING_SOURCE": 90}
+        current = job_manager.get_job(job_id)
+        percent = max(current.progress_percent if current else 0, percentages[stage])
         asyncio.run_coroutine_threadsafe(job_manager.emit_event(job_id=job_id, stage=stage, status="running",
-            message=messages[stage], progress_percent=5), loop).result(timeout=5)
+            message=messages[stage], progress_percent=percent), loop).result(timeout=5)
 
     try:
         async with job_manager.get_semaphore():
             await job_manager.emit_event(job_id=job_id, stage='ingesting_source', status='running',
                 message='Extracting and saving reusable content; enrichment is optional.', progress_percent=5)
-            with source_progress(progress):
+            with source_progress(progress), processing_budget(settings.source_job_timeout_seconds):
                 if record is not None:
                     worker = asyncio.create_task(asyncio.to_thread(index_committed_source, repo, record))
                 elif path is not None:
@@ -92,6 +109,8 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
             except Exception as reconciliation_error:
                 logging.getLogger(__name__).warning("Source reconciliation unavailable: %s", type(reconciliation_error).__name__)
         failure = (error.failure if isinstance(error, (SourceIngestionFailed, SourceIndexFailed)) else
+                   SourceFailure(stage='EXTRACTION',code='SOURCE_JOB_TIMEOUT',reason_code='MODEL_TIMEOUT',retryable=True,
+                                 message='Source processing exceeded its configured budget. Retry this source.') if isinstance(error, TimeoutError) else
                    SourceFailure(stage='PERSISTENCE', code='SOURCE_STORAGE_FAILED', retryable=True,
                                  message='Could not persist or index the source.'))
         job = job_manager.get_job(job_id)
@@ -99,6 +118,7 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
             job.failure = failure
         await job_manager.fail_job(job_id, failure.stage, failure.message,
                                    metadata={'error_code': failure.code})
+        logging.getLogger(__name__).warning("SOURCE_JOB_TERMINAL job_id=%s status=failed stage=%s code=%s", job_id, failure.stage, failure.code)
     finally:
         job_manager.detach_task(job_id)
         if path is not None:

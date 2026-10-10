@@ -53,10 +53,10 @@ for(const [label,subject] of [['recovered',baseline],['current',worker]]){
         const {env,calls}=setup();
         const schema={type:'object'};
         await subject.fetch(request({task:'content_understanding',messages:[{role:'user',content:'x'}],max_tokens:99999,temperature:99,response_schema:schema}),env);
-        assert.equal(calls[0].input.max_tokens,4096);assert.equal(calls[0].input.temperature,1);
+        assert.equal(calls[0].input.max_tokens,label==='current'?8192:4096);assert.equal(calls[0].input.temperature,1);
         assert.deepEqual(calls[0].input.response_format,{type:'json_schema',json_schema:schema});
         await subject.fetch(request({task:'reasoning',prompt:'x',max_tokens:-9,temperature:-2,response_schema:schema},{path:'/'}),env);
-        assert.equal(calls[1].input.max_tokens,1);assert.equal(calls[1].input.temperature,0);assert.equal(calls[1].input.response_format,undefined);
+        assert.equal(calls[1].input.max_tokens,1);assert.equal(calls[1].input.temperature,0);assert.deepEqual(calls[1].input.response_format,label==='current'?{type:'json_schema',json_schema:schema}:undefined);
         await subject.fetch(request({task:'reasoning',prompt:'x',max_tokens:1.5,temperature:'bad'}),env);
         assert.equal(calls[2].input.max_tokens,1024);assert.equal(calls[2].input.temperature,0.2);
     });

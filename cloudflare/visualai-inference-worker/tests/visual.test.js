@@ -58,7 +58,7 @@ test('visual inference timeout classified without changing deadline',async()=>{
  let deadline;
  globalThis.setTimeout=(callback,delay)=>{deadline=delay;queueMicrotask(callback);return 0;};globalThis.clearTimeout=()=>{};
  try{
-  const {env}=setup(()=>new Promise(()=>{}));const r=await worker.fetch(req(body('general')),env);assert.equal(r.status,502);const d=await r.json();assert.equal(d.error,'AI_PROVIDER_TIMEOUT');assert.equal(typeof d.latency_ms,'number');assert.equal(deadline,45000);
+  const {env}=setup(()=>new Promise(()=>{}));const r=await worker.fetch(req(body('general')),env);assert.equal(r.status,502);const d=await r.json();assert.equal(d.error,'AI_PROVIDER_TIMEOUT');assert.equal(typeof d.latency_ms,'number');assert.equal(deadline,180000);
  }finally{globalThis.setTimeout=originalSet;globalThis.clearTimeout=originalClear;}
 });
 
@@ -69,7 +69,7 @@ test('all Gemma visual profiles disable native thinking',async()=>{
  const {env,calls}=setup();await worker.fetch(req({...body('general'),workload:'printed'}),env);assert.deepEqual(calls[0].input.chat_template_kwargs,{enable_thinking:false});
 });
 
-for(const [tier,workload,expected] of [['deep','complex_diagram',55000],['general','complex_diagram',45000],['deep','flowchart',45000],['deep','graph',45000]])test('scoped deadline '+tier+' '+workload,async()=>{
+for(const [tier,workload,expected] of [['deep','complex_diagram',180000],['general','complex_diagram',180000],['deep','flowchart',180000],['deep','graph',180000]])test('scoped deadline '+tier+' '+workload,async()=>{
  const originalSet=globalThis.setTimeout,originalClear=globalThis.clearTimeout;let deadline;
  globalThis.setTimeout=(callback,delay)=>{deadline=delay;queueMicrotask(callback);return 0;};globalThis.clearTimeout=()=>{};
  try{const {env}=setup(()=>new Promise(()=>{}));const response=await worker.fetch(req({...body(tier),workload}),env);assert.equal(response.status,502);assert.equal((await response.json()).error,'AI_PROVIDER_TIMEOUT');assert.equal(deadline,expected);}

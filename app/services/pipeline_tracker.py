@@ -195,14 +195,21 @@ class DurableJobStore:
             """)
             conn.commit()
 
+            # Additive local schema upgrade preserves older job databases.
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(pipeline_jobs)")}
+            for column in ("result_json", "failure_json"):
+                if column not in columns:
+                    conn.execute(f"ALTER TABLE pipeline_jobs ADD COLUMN {column} TEXT")
+            conn.commit()
+
     def save_job(self, job: PipelineJob) -> None:
         try:
             with self._get_conn() as conn:
                 conn.execute("""
                     INSERT INTO pipeline_jobs (
                         job_id, job_type, status, current_stage, progress_percent,
-                        error, is_finished, metadata_json, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        error, is_finished, metadata_json, created_at, updated_at, result_json, failure_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(job_id) DO UPDATE SET
                         status = excluded.status,
                         current_stage = excluded.current_stage,
@@ -210,7 +217,9 @@ class DurableJobStore:
                         error = excluded.error,
                         is_finished = excluded.is_finished,
                         metadata_json = excluded.metadata_json,
-                        updated_at = excluded.updated_at
+                        updated_at = excluded.updated_at,
+                        result_json = excluded.result_json,
+                        failure_json = excluded.failure_json
                 """, (
                     job.job_id,
                     job.job_type,
@@ -222,6 +231,8 @@ class DurableJobStore:
                     json.dumps(job.metadata),
                     job.created_at,
                     job.updated_at,
+                    json.dumps(job.result) if job.result is not None else None,
+                    job.failure.model_dump_json() if job.failure is not None else None,
                 ))
                 conn.commit()
         except Exception as exc:
@@ -245,6 +256,8 @@ class DurableJobStore:
                     metadata=json.loads(row["metadata_json"]) if row["metadata_json"] else {},
                     created_at=row["created_at"],
                     updated_at=row["updated_at"],
+                    result=json.loads(row["result_json"]) if row["result_json"] else None,
+                    failure=SourceFailure.model_validate_json(row["failure_json"]) if row["failure_json"] else None,
                 )
         except Exception as exc:
             logger.warning("[durable_job_store] Failed loading job %s: %s", job_id, exc)

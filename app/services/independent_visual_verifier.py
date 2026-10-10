@@ -4,6 +4,9 @@ from __future__ import annotations
 import base64
 import json
 import time
+import hashlib
+import logging
+from threading import Lock
 from typing import Literal, Protocol
 from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
@@ -25,7 +28,7 @@ MAX_PROMPT_BYTES = 65536
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_RESPONSE_BYTES = 65536
 MAX_OUTPUT_TOKENS = 2048
-VERIFIER_TIMEOUT_SECONDS = 45.0
+VERIFIER_TIMEOUT_SECONDS = settings.vision_verification_timeout_seconds
 
 
 class ClaimDecision(BaseModel):
@@ -185,6 +188,9 @@ MAX_REVIEW_PARALLELISM = 3
 MAX_REVIEW_PROMPT_CHARACTERS = 32000
 from threading import BoundedSemaphore
 _review_slots = BoundedSemaphore(MAX_REVIEW_PARALLELISM)
+_review_cache: dict[str, tuple[float, VisualVerificationResult]] = {}
+_review_cache_lock = Lock()
+_review_inflight = [Lock() for _ in range(64)]
 
 class CloudflareIndependentVisualVerifier:
     """Correlate bounded independent review batches under one shared deadline."""
@@ -192,23 +198,28 @@ class CloudflareIndependentVisualVerifier:
     def __init__(self, *, deadline: float | None = None, transport: ReviewTransport | None = None) -> None:
         from dataclasses import replace
         from ..core.reasoning import CloudflareProvider, get_cloud_reasoning_router
-        from .visual_router import COMPLEX_READ_TIMEOUT_SECONDS, COMPLEX_REQUEST_TIMEOUT_SECONDS
         self.deadline = deadline
         policy = replace(get_cloud_reasoning_router().policy,
-            read_timeout=COMPLEX_READ_TIMEOUT_SECONDS, overall_timeout=COMPLEX_REQUEST_TIMEOUT_SECONDS)
+            read_timeout=min(settings.vision_cloud_timeout_seconds, settings.vision_verification_timeout_seconds),
+            overall_timeout=settings.vision_verification_timeout_seconds)
         self.transport: ReviewTransport = transport or CloudflareProvider(policy)
 
     def verify(self, image: bytes, claims: tuple[VerificationCheck, ...],
                extraction: VisionExtractionData, provenance: VisualSourceContext | None = None) -> VisualVerificationResult:
         from concurrent.futures import ThreadPoolExecutor
-        from .visual_router import MODELS, ALLOWED_MODEL_IDENTITIES, private_image_transport, Tier, COMPLEX_REQUEST_TIMEOUT_SECONDS
+        from .visual_router import MODELS, ALLOWED_MODEL_IDENTITIES, private_image_transport, Tier
         origin = extraction._actual_model
         if not origin or not claims:
             return unavailable(claims, "VERIFIER_PROVENANCE_MISSING")
         tier: Tier | None = "deep" if origin in ALLOWED_MODEL_IDENTITIES.get(MODELS["general"], frozenset({MODELS["general"]})) else "general" if origin in ALLOWED_MODEL_IDENTITIES.get(MODELS["deep"], frozenset({MODELS["deep"]})) else None
+        if tier is None and extraction._actual_provider == "ollama":
+            # A Cloudflare pixel reviewer is independent of the local extraction model.
+            # Its response model must still match the requested approved cloud identity.
+            tier = "general"
         if tier is None:
             return unavailable(claims, "VERIFIER_NOT_INDEPENDENT")
-        deadline = min(self.deadline or float("inf"), time.monotonic() + COMPLEX_REQUEST_TIMEOUT_SECONDS)
+        from ..core.inference_budget import effective_deadline
+        deadline = effective_deadline(min(self.deadline or float("inf"), time.monotonic() + settings.vision_verification_timeout_seconds))
         literal_types = {"visible_text", "handwriting_text", "paragraphs", "bullet_points", "headings", "labels"}
         groups: dict[tuple[str,str],VerificationCheck] = {}
         representatives: dict[str,str] = {}
@@ -223,8 +234,10 @@ class CloudflareIndependentVisualVerifier:
         capacity = REVIEW_BATCH_CLAIMS * MAX_REVIEW_BATCHES
         batches = [unique[i:i+REVIEW_BATCH_CLAIMS] for i in range(0,min(len(unique),capacity),REVIEW_BATCH_CLAIMS)]
         image_uri = private_image_transport(image)
+        from contextvars import copy_context
         with ThreadPoolExecutor(max_workers=MAX_REVIEW_PARALLELISM,thread_name_prefix="visual-review") as pool:
-            results = list(pool.map(lambda batch:self._review_batch(image_uri,batch,tier,deadline),batches))
+            futures = [pool.submit(copy_context().run, self._review_batch, image_uri, batch, tier, deadline) for batch in batches]
+            results = [future.result() for future in futures]
         decisions = {c.claim_id:c for result in results for c in result.checks}
         checks: list[VerificationCheck]=[]
         for claim in claims:
@@ -236,6 +249,35 @@ class CloudflareIndependentVisualVerifier:
         return combine_checks(checks,"INDEPENDENT_REVIEW_REQUIRED")
 
     def _review_batch(self, image_uri: str, claims: tuple[VerificationCheck,...],
+                      tier: Literal["general","deep"], deadline: float) -> VisualVerificationResult:
+        from .visual_router import scope_cache_key, MODELS
+        scope = scope_cache_key()
+        if not scope or not settings.vision_cache_enabled:
+            return self._perform_review_batch(image_uri, claims, tier, deadline)
+        key = hashlib.sha256(json.dumps({"scope":scope, "image":hashlib.sha256(image_uri.encode()).hexdigest(),
+            "claims":[c.model_dump() for c in claims], "model":MODELS[tier], "prompt":PROMPT,
+            "version":settings.pipeline_config_version, "endpoint":settings.cloudflare_worker_url}, sort_keys=True).encode()).hexdigest()
+        stripe = _review_inflight[int(key[:8],16) % len(_review_inflight)]
+        if not stripe.acquire(timeout=max(0,deadline-time.monotonic())):
+            return unavailable(claims,"INDEPENDENT_VERIFIER_TIMEOUT")
+        try:
+            with _review_cache_lock:
+                entry = _review_cache.get(key)
+                if entry and time.monotonic()-entry[0] < settings.vision_cache_ttl_seconds:
+                    logging.getLogger(__name__).info("VISUAL_REVIEW_CACHE_HIT")
+                    return entry[1].model_copy(deep=True)
+            result = self._perform_review_batch(image_uri, claims, tier, deadline)
+            # Unavailable/uncertain reviewers are retried on the next explicit analysis.
+            if result.status == "VERIFIED":
+                with _review_cache_lock:
+                    if len(_review_cache) >= 128:
+                        _review_cache.pop(next(iter(_review_cache)))
+                    _review_cache[key] = (time.monotonic(), result.model_copy(deep=True))
+            return result
+        finally:
+            stripe.release()
+
+    def _perform_review_batch(self, image_uri: str, claims: tuple[VerificationCheck,...],
                       tier: Literal["general","deep"], deadline: float) -> VisualVerificationResult:
         from ..core.reasoning import ProviderFailure
         from .visual_router import MODELS, ALLOWED_MODEL_IDENTITIES, VisualWorkerEnvelope
@@ -250,8 +292,15 @@ class CloudflareIndependentVisualVerifier:
         if not _review_slots.acquire(timeout=max(0,deadline-time.monotonic())):
             return unavailable(claims,"INDEPENDENT_VERIFIER_TIMEOUT")
         try:
-            raw=self.transport.fetch_payload({"task":"vision_verify","tier":tier,"image":image_uri,
-                "prompt":prompt,"schema_version":"visual-review-v1","purpose":"verify"},deadline)
+            from ..core.reasoning import retry_pause
+            for attempt in range(settings.cloudflare_max_retries + 1):
+                try:
+                    raw=self.transport.fetch_payload({"task":"vision_verify","tier":tier,"image":image_uri,
+                        "prompt":prompt,"schema_version":"visual-review-v1","purpose":"verify"},deadline)
+                    break
+                except ProviderFailure as error:
+                    if not error.retryable or attempt >= settings.cloudflare_max_retries or not retry_pause(error, attempt, deadline):
+                        raise
             result=ReviewResult.model_validate_json(raw)
             if result.model not in ALLOWED_MODEL_IDENTITIES.get(MODELS[tier], frozenset({MODELS[tier]})) or result.model_requested not in (None,MODELS[tier]):
                 return unavailable(claims,"VERIFIER_NOT_INDEPENDENT")

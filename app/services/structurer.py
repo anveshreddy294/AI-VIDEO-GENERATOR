@@ -119,6 +119,12 @@ MATERIAL CONTENT UNITS:
 
 def _generate_with_llm(payload: str) -> str:
     """Generate content using ModelManager with runtime switching and automatic fallback."""
+    if settings.reasoning_provider == "cloudflare":
+        from ..core.reasoning import Message, ReasoningRequest, get_reasoning_router
+        from pydantic import TypeAdapter
+        return get_reasoning_router().generate(ReasoningRequest(task="content_understanding",
+            messages=[Message(role="user", content=payload)], max_tokens=STRUCTURE_OUTPUT_TOKENS,
+            response_schema=TypeAdapter(dict[str, JsonValue]).validate_python(STRUCTURE_RESPONSE_SCHEMA))).response
     from ..core.model_manager import model_manager
     timeout = float(settings.ollama_timeout)
     raw_response, model_used = model_manager.generate_with_fallback(

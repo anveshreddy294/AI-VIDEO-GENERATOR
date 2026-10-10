@@ -218,7 +218,8 @@ def ingest_source(
     report("EXTRACTING_SOURCE")
     with ingestion_stage("EXTRACTION"):
         from ..visual_router import VisualScope, visual_scope
-        with visual_scope(VisualScope(user_id=repo.owner_id, source_id=record.source_id, source_version=record.version)):
+        from ...core.inference_budget import processing_budget
+        with visual_scope(VisualScope(user_id=repo.owner_id, source_id=record.source_id, source_version=record.version)), processing_budget(settings.extraction_stage_timeout_seconds):
             if routing_signals is None:
                 extraction = dispatch(persistent_file, source_id=record.source_id, asset_id=record.asset_id)
             else:
@@ -332,6 +333,11 @@ def extracted_source_result(repo: SupabaseSourceRepository, record: SourceRecord
     units = repo.get_content_units(record.source_id, record.version)
     if not units:
         raise SupabaseResponseError("Committed source has no extracted content")
+    warnings: list[JsonValue] = []
+    if any(unit.provenance.get("missing_visual_content") for unit in units):
+        warnings.append("OPTIONAL_VISUAL_CONTENT_UNAVAILABLE")
+    if any(unit.provenance.get("publication_policy") == "independent-verified-subset-v1" for unit in units):
+        warnings.append("PARTIAL_VISUAL_VERIFICATION")
     # Keep legacy READY semantics intact: READY still means indexed. The new explicit
     # content_ready field represents extraction availability without a schema change.
     return {
@@ -340,6 +346,7 @@ def extracted_source_result(repo: SupabaseSourceRepository, record: SourceRecord
         "upload_id": record.upload_id, "filename": record.filename, "modality": record.source_type,
         "file_hash": record.file_hash, "version": record.version, "source_version": record.source_version,
         "content_units": len(units), "chunks_synced": 0,
+        "warnings": warnings,
         "downstream": {"knowledge": "NOT_REQUESTED", "indexing": "NOT_REQUESTED"},
         "educational_content_endpoint": "/educational-content",
     }

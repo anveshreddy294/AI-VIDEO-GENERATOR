@@ -18,6 +18,16 @@ from .transcriber import transcribe_with_timestamps
 logger = logging.getLogger(__name__)
 
 
+def _describe_capture(cap: FrameCapture, source_id: str, asset_id: str) -> str:
+    if settings.vision_provider in {"cloudflare", "auto"}:
+        from ..visual_evidence import visual_content_unit
+        unit = visual_content_unit(cap.frame_bytes, source_id=source_id, asset_id=asset_id,
+            source=f"video-frame@{cap.timestamp}s")
+        cap.provenance = {**unit.provenance, "timestamp":cap.timestamp, "confidence_score":unit.confidence_score}
+        return unit.text
+    return describe_frame(cap.frame_bytes, cap.timestamp)
+
+
 def process_video_units(
     video_path: Path, source_id: str, asset_id: str
 ) -> list[ContentUnit]:
@@ -55,15 +65,13 @@ def process_video_units(
         for i, cap in enumerate(captures):
             if cap.frame_bytes is not None:
                 try:
-                    desc = describe_frame(cap.frame_bytes, cap.timestamp)
+                    desc = _describe_capture(cap, source_id, asset_id)
                     cap.description = desc
                     described.append(cap)
                 except Exception as exc:
                     logger.warning("[video] Phase 3b FAILED for frame %d @%ss: %s", i, cap.timestamp, exc)
-                    cap.description = (
-                        f"[Frame at {cap.timestamp:.0f}s — vision description unavailable]"
-                    )
-                    described.append(cap)
+                    # A failed frame is not visual evidence. Usable speech remains available.
+                    continue
 
         # Phase 4: Multimodal fusion into ContentUnits
         return fuse_units(segments, described, source_id=source_id, asset_id=asset_id)
@@ -81,13 +89,12 @@ def _visuals_only_units(
         for cap in captures:
             if cap.frame_bytes is not None:
                 try:
-                    desc = describe_frame(cap.frame_bytes, cap.timestamp)
+                    desc = _describe_capture(cap, source_id, asset_id)
                     cap.description = desc
                     described.append(cap)
                 except Exception as exc:
                     logger.warning("[video] Frame description failed @%ss: %s", cap.timestamp, exc)
-                    cap.description = f"[Frame at {cap.timestamp:.0f}s — unavailable]"
-                    described.append(cap)
+                    continue
         return fuse_units([], described, source_id=source_id, asset_id=asset_id)
     except Exception as exc:
         logger.error("[video] _visuals_only_units failed: %s", exc)

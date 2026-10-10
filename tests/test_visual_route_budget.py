@@ -47,6 +47,8 @@ def budget(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "vision_stage_timeout_seconds", 90.0)
     monkeypatch.setattr(settings, "vision_timeout_seconds", 45.0)
     monkeypatch.setattr(settings, "cloudflare_connect_timeout", 5.0)
+    monkeypatch.setattr(settings, "vision_cloud_stage_timeout_seconds", 40.0)
+    monkeypatch.setattr(settings, "vision_max_retries", 0)
 
 def test_original_shared_deadline_exhausts_local_window() -> None:
     clock = Clock()
@@ -56,7 +58,7 @@ def test_original_shared_deadline_exhausts_local_window() -> None:
     assert local.remaining == pytest.approx(44.9)
     assert clock.now > 90
 
-def test_reserved_window_completes_without_increasing_stage() -> None:
+def test_explicit_cloud_budget_leaves_configured_local_window() -> None:
     clock = Clock()
     cloud = Cloud(clock, [40], ProviderFailure("TIMEOUT", True))
     local = Local(clock, 45)
@@ -89,7 +91,8 @@ def test_exhausted_budget_does_not_start_short_local_attempt() -> None:
     assert caught.value.route_trace.cloud_failure_category == "NETWORK"
     assert not caught.value.route_trace.local_fallback_attempted
 
-def test_two_cloud_attempts_share_cutoff_then_one_local() -> None:
+def test_two_cloud_attempts_share_cutoff_then_one_local(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "vision_max_retries", 1)
     clock = Clock()
     cloud = Cloud(clock, [10, 30], ProviderFailure("RATE_LIMIT", True))
     local = Local(clock, 45)

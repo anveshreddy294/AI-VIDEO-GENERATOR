@@ -57,7 +57,7 @@ SAFE_VISION_ERROR_CODES: frozenset[str] = frozenset({
 class VisionRouteFailureTrace(BaseModel):
     """Fixed operational classifications only; no upstream payload or transport URL."""
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-    cloud_failure_category: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "PROVIDER_UNAVAILABLE"] | None = None
+    cloud_failure_category: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "QUOTA_EXHAUSTED", "PROVIDER_UNAVAILABLE"] | None = None
     cloud_attempt_count: int = Field(ge=0, le=2)
     local_fallback_attempted: bool
     local_failure_code: VisionErrorCode | None = None
@@ -1077,6 +1077,15 @@ def describe_image(
         mock_data = _mock_vision_extraction(source=source)
         return format_vision_markdown(mock_data)
 
+    if provider in {"cloudflare", "auto"}:
+        from .visual_evidence import visual_content_unit
+        from .visual_router import _scope
+        scope = _scope.get()
+        digest = hashlib.sha256(image_bytes).hexdigest()
+        return visual_content_unit(image_bytes, source=source,
+            source_id=scope.source_id if scope else "LEGACY_" + digest,
+            asset_id="VISUAL_" + digest).text
+
     # 2. Ollama Vision Provider (Primary)
     if (
         provider == "openrouter"
@@ -1126,6 +1135,9 @@ async def describe_image_async(
 
     provider = getattr(settings, "vision_provider", "ollama").strip().lower()
 
+    if provider in {"cloudflare", "auto"}:
+        return await asyncio.to_thread(describe_image, image_bytes, source, on_progress)
+
     if provider in ("mock", "test"):
         mock_data = _mock_vision_extraction(source=source)
         return format_vision_markdown(mock_data)
@@ -1172,6 +1184,9 @@ def describe_frame(image_bytes: bytes, source: str = "frame") -> str:
     if provider in ("mock", "test"):
         return f"Lecture video keyframe {source}: instructional board content and mathematical derivations."
 
+    if provider in {"cloudflare", "auto"}:
+        return describe_image(image_bytes, source)
+
     if provider in ("ollama", "openrouter"):
         try:
             data = extract_vision_ollama(image_bytes, source=source)
@@ -1181,7 +1196,7 @@ def describe_frame(image_bytes: bytes, source: str = "frame") -> str:
                 "[vision] Ollama frame extraction failed (%s), using fallback", exc
             )
 
-    return f"Lecture video keyframe {source}: visual board contents and instructional notes."
+    raise VisionExtractionFailed("Video frame understanding unavailable", VISION_PROVIDER_FAILED)
 
 
 def describe_image_file(

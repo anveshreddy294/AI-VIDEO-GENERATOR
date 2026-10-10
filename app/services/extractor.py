@@ -29,13 +29,16 @@ def extract_from_pdf(
 
     units: list[ContentUnit] = []
     calls = 0
+    from ..core.inference_budget import check_budget
     with fitz.open(pdf_path) as doc:
+        logger.info("PDF_EXTRACTION_STARTED pages=%d file_bytes=%d", len(doc), pdf_path.stat().st_size)
+        # Complete cheap native parsing before any optional image request. A scan on
+        # page one must not discard independently readable text on later pages.
         for page_number, page in enumerate(doc, start=1):
-            has_text = False
+            check_budget()
             for block in page.get_text("blocks"):
                 if block[6] != 0 or not block[4].strip():
                     continue
-                has_text = True
                 units.append(
                     ContentUnit(
                         source_id=source_id,
@@ -49,7 +52,22 @@ def extract_from_pdf(
                         confidence_score=1.0,
                     )
                 )
-            images = _extract_page_images_with_info(page, page_number)
+        native_pages = {u.page_number for u in units}
+        for page_number, page in enumerate(doc, start=1):
+            check_budget()
+            has_text = page_number in native_pages
+            try:
+                images = _extract_page_images_with_info(page, page_number)
+            except VisionExtractionFailed:
+                if not native_pages:
+                    raise
+                for unit in units:
+                    if unit.extraction_method == "pymupdf_block":
+                        unit.provenance.setdefault("missing_visual_content", []).append({
+                            "page_number":page_number,"status":"UNEXTRACTED_IMAGE_ERROR",
+                            "reason":"Optional PDF image failed decoding or safety limits"})
+                logger.warning("PDF_OPTIONAL_VISUAL_PREFLIGHT_FAILED page=%d", page_number)
+                continue
             scanned = not has_text and bool(
                 images or page.get_images(full=True) or page.get_drawings()
             )
@@ -66,14 +84,16 @@ def extract_from_pdf(
                 else images
             )
             for image in visual_inputs:
+                check_budget()
                 if calls >= PDF_MAX_VISION_CALLS:
-                    if units and has_text:
+                    if any(u.extraction_method == "pymupdf_block" for u in units):
                         logger.warning("PDF visual extraction budget reached; proceeding with native text.")
                         for u in units:
-                            if u.page_number == page_number:
+                            if u.extraction_method == "pymupdf_block":
                                 missing = u.provenance.setdefault("missing_visual_content", [])
                                 missing.append({
                                     "xref": image.get("xref"),
+                                    "page_number": page_number,
                                     "reason": "PDF visual extraction budget exceeded",
                                     "status": "UNEXTRACTED_BUDGET_EXCEEDED",
                                 })
@@ -123,19 +143,24 @@ def extract_from_pdf(
                         ]
                     units.append(unit)
                 except Exception as exc:
-                    if units and has_text:
-                        logger.warning("Embedded image extraction failed on page %d, continuing with text units: %s", page_number, exc)
+                    if any(u.extraction_method == "pymupdf_block" for u in units):
+                        logger.warning("PDF_OPTIONAL_VISUAL_FAILED page=%d classification=%s", page_number, type(exc).__name__)
                         for u in units:
-                            if u.page_number == page_number:
+                            if u.extraction_method == "pymupdf_block":
                                 missing = u.provenance.setdefault("missing_visual_content", [])
                                 missing.append({
                                     "image_id": image_id,
                                     "xref": image.get("xref"),
+                                    "page_number": page_number,
                                     "reason": f"Embedded image extraction failed: {type(exc).__name__}",
                                     "status": "UNEXTRACTED_IMAGE_ERROR",
                                 })
                         continue
                     raise
+    units.sort(key=lambda unit: unit.page_number or 0)
+    for index, unit in enumerate(units):
+        unit.sequence_index = index
+    logger.info("PDF_EXTRACTION_COMPLETED units=%d visual_inputs=%d", len(units), calls)
     return units
 
 

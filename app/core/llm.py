@@ -500,9 +500,36 @@ class MockProvider:
 MockLLMProvider = MockProvider
 
 
+class RoutedTextProvider:
+    """Legacy text entry points use the same audited primary/fallback policy."""
+    provider = "cloudflare"
+    model_name = "cloudflare-task-router"
+
+    def generate_content(self, prompt: str) -> str:
+        return self.generate(prompt)
+
+    def generate(self, prompt: str, response_schema: type | None = None) -> str:
+        from .reasoning import Message, ReasoningRequest, get_reasoning_router
+        schema = response_schema.model_json_schema() if response_schema is not None else None
+        return get_reasoning_router().generate(ReasoningRequest(task="reasoning",
+            messages=[Message(role="user", content=prompt)], max_tokens=4096,
+            response_schema=schema)).response
+
+    def health_check(self) -> dict[str, Any]:
+        return {"provider": self.provider, "configured_model": self.model_name,
+            "configured": bool(settings.cloudflare_worker_url and settings.cloudflare_worker_secret.get_secret_value()),
+            "reachable": None, "model_available": None}
+
+
 def get_llm_provider(provider_override: str | None = None) -> LLMProvider:
     """Factory function returning the configured LLM provider based on settings."""
     provider_name = (provider_override or getattr(settings, "llm_provider", "ollama")).lower().strip()
+    if provider_name not in {"cloudflare", "ollama", "mock", "test"}:
+        raise RuntimeError("Unsupported LLM_PROVIDER configuration")
+    if provider_override is None and provider_name not in {"mock", "test"}:
+        provider_name = settings.reasoning_provider
+    if provider_name == "cloudflare":
+        return RoutedTextProvider()
     if provider_name == "ollama":
         return OllamaProvider()
     elif provider_name in ("mock", "test"):
@@ -510,7 +537,7 @@ def get_llm_provider(provider_override: str | None = None) -> LLMProvider:
 
     raise RuntimeError(
         f"Unsupported LLM_PROVIDER: '{provider_name}'. "
-        "Gemini and OmniRoute have been completely removed. Supported providers are 'ollama' and 'mock'."
+        "Supported providers are 'cloudflare', 'ollama' and explicit test 'mock'."
     )
 
 

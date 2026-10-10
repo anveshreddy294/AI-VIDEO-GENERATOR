@@ -27,9 +27,9 @@ class Element {
 function descendants(el){return [el,...el.children.flatMap(descendants)];}
 function text(el){return descendants(el).map(node=>node.textContent).join(' ');}
 const flush=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setImmediate(resolve));};
-function setup(overrides={}) {
+function setup(overrides={},options={}) {
     const ids=new Map();
-    const document={getElementById(id){if(!ids.has(id))ids.set(id,new Element());return ids.get(id);},createElement(tag){return new Element(tag);}};
+    const document={body:{dataset:{jobPollTimeoutSeconds:'3600'}},getElementById(id){if(!ids.has(id))ids.set(id,new Element());return ids.get(id);},createElement(tag){return new Element(tag);}};
     const calls=[];const intervals=new Map();let intervalId=0;
     const lesson={lesson_id:'lesson-a',topic:'Binary Search Trees',content:{explanation:'Left keys are smaller; right keys are larger.',key_concepts:[],examples:[],equations:[]},video:null};
     const replies={
@@ -57,7 +57,7 @@ function setup(overrides={}) {
     TestURL.createObjectURL=()=> 'blob:owned-video';TestURL.revokeObjectURL=url=>revoked.push(url);
     const window={VisualAIAuth:{protectedFetch:fetch},VisualAINotes:notes,
         VisualAIPractice:{createController(){return {setSession(){}};}},location:{search:'?lesson=lesson-a'},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}}};
-    vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,history:{replaceState(){}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout,FormData,console});
+    vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,history:{replaceState(){}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout:options.instantTimers?(fn)=>{queueMicrotask(fn);return 0;}:setTimeout,FormData,console});
     return {ids,document,calls,intervals,revoked};
 }
 
@@ -139,4 +139,22 @@ test('navigation discards late topic notes and does not enable controls',async()
     finish({ok:true,status:200,json:async()=>({title:'Stale notes',summary:'Must not render.'})});await flush();
     assert(!text(s.ids.get('notes-content')).includes('Stale notes'));
     assert.equal(s.ids.get('generate-notes').disabled,true);
+});
+
+test('upload polls beyond the old four-minute ceiling and stops on completion without repeating upload',async()=>{
+    let polls=0;
+    const s=setup({
+        '/pipeline/upload-and-assess':{job_id:'long-job'},
+        '/pipeline/jobs/long-job':()=>({ok:true,status:200,json:async()=>++polls<123?
+            {status:'running',is_finished:false,current_stage:'UNDERSTANDING_IMAGE'}:
+            {status:'completed',is_finished:true,result:{source_id:'source',content_ready:true,warnings:['PARTIAL_VISUAL_VERIFICATION']}}})
+    },{instantTimers:true});
+    await flush();
+    s.document.getElementById('upload-file').files=[new File(['synthetic'],'diagram.png',{type:'image/png'})];
+    s.ids.get('upload-form').dispatch('submit');await flush();
+    assert.equal(polls,123);
+    assert.equal(s.calls.filter(c=>c.path==='/pipeline/upload-and-assess').length,1);
+    assert.match(s.ids.get('upload-status').textContent,/Some optional visual evidence/);
+    assert.equal(s.ids.get('upload-button').disabled,false);
+    await flush();assert.equal(polls,123);
 });

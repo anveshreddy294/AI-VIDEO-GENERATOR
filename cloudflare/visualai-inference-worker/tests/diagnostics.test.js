@@ -10,7 +10,7 @@ test('diagnostic failure logs redacted primitives and keeps caller sanitized',as
   const error=Object.assign(new Error('provider failed Bearer super-private api_key=private-key token=private-token '+ 'x'.repeat(1200)),{code:1234,status:500,cause:new Error('secret=private-cause'),nested:{secret:'never-serialize'}});
   const response=await handleVisual(body,{AI:{run:async()=>{throw error;}}},'diagnostic-test');
   const caller=await response.text();assert.equal(response.status,502);assert.equal(JSON.parse(caller).error,'AI_PROVIDER_ERROR');assert(!caller.includes('provider failed'));assert(!caller.includes('private'));
-  assert.equal(messages[0].event,'workers_ai_call_start');const logged=messages[1];assert.equal(logged.stage,'env.AI.run');assert.equal(logged.error_code,1234);assert.equal(logged.error_status,500);assert(logged.error_properties.includes('nested'));assert(!JSON.stringify(logged).includes('private'));assert(!JSON.stringify(logged).includes('never-serialize'));assert(logged.error_message.length<=1000);assert.equal(logged.error_cause_message,'secret=[REDACTED]');
+  assert.equal(messages[0].event,'workers_ai_call_start');const logged=messages[1];assert.equal(logged.stage,'env.AI.run');assert.equal(logged.error_code,1234);assert.equal(logged.error_status,500);assert(!logged.error_properties.includes('nested'));assert(!JSON.stringify(logged).includes('private'));assert(!JSON.stringify(logged).includes('never-serialize'));assert.equal(logged.error_message,undefined);assert.equal(logged.error_cause_message,undefined);assert.equal(logged.category,'AI_PROVIDER_ERROR');
  }finally{console.log=oldLog;console.error=oldError;}
 });
 test('diagnostic success preserves provider response and emits success boundary',async()=>{

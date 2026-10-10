@@ -77,7 +77,8 @@ class Settings:
         self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
         self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
         self.llm_provider: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
-        self.reasoning_provider: str = os.getenv("REASONING_PROVIDER", self.llm_provider).strip().lower()
+        self.reasoning_provider: str = os.getenv("REASONING_PROVIDER", "cloudflare").strip().lower()
+        self.reasoning_local_fallback_enabled = os.getenv("REASONING_LOCAL_FALLBACK_ENABLED", "true").lower() in {"1", "true", "yes"}
         self.ollama_base_url: str = (os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
         self.ollama_url: str = self.ollama_base_url
         self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
@@ -87,9 +88,14 @@ class Settings:
         # Dedicated semantic routing; legacy/vision/video provider selection is unchanged.
         self.cloudflare_worker_url: str = os.getenv("CLOUDFLARE_WORKER_URL", "").strip()
         self.cloudflare_worker_secret: SecretStr = SecretStr(os.getenv("CLOUDFLARE_WORKER_SECRET", ""))
-        self.cloudflare_connect_timeout: float = float(os.getenv("CLOUDFLARE_CONNECT_TIMEOUT", "5"))
-        self.cloudflare_read_timeout: float = float(os.getenv("CLOUDFLARE_READ_TIMEOUT", "45"))
-        self.cloudflare_overall_timeout: float = float(os.getenv("CLOUDFLARE_OVERALL_TIMEOUT", "60"))
+        self.cloudflare_vision_general_model = os.getenv("CLOUDFLARE_VISION_GENERAL_MODEL", "@cf/google/gemma-4-26b-a4b-it")
+        self.cloudflare_vision_deep_model = os.getenv("CLOUDFLARE_VISION_DEEP_MODEL", "@cf/qwen/qwen3.8-27b")
+        self.cloudflare_connect_timeout: float = float(os.getenv("CLOUDFLARE_CONNECT_TIMEOUT", "10"))
+        self.cloudflare_read_timeout: float = float(os.getenv("CLOUDFLARE_READ_TIMEOUT", "180"))
+        self.cloudflare_write_timeout: float = float(os.getenv("CLOUDFLARE_WRITE_TIMEOUT", "30"))
+        self.cloudflare_overall_timeout: float = float(os.getenv("CLOUDFLARE_OVERALL_TIMEOUT", "300"))
+        self.cloudflare_retry_backoff: float = float(os.getenv("CLOUDFLARE_RETRY_BACKOFF", "1"))
+        self.cloudflare_max_concurrency: int = int(os.getenv("CLOUDFLARE_MAX_CONCURRENCY", "3"))
         self.cloudflare_max_retries: int = int(os.getenv("CLOUDFLARE_MAX_RETRIES", "1"))
         self.cloudflare_circuit_threshold: int = int(os.getenv("CLOUDFLARE_CIRCUIT_THRESHOLD", "3"))
         self.cloudflare_circuit_cooldown: float = float(os.getenv("CLOUDFLARE_CIRCUIT_COOLDOWN", "60"))
@@ -122,7 +128,7 @@ class Settings:
         self.ollama_max_concurrency: int = int(os.getenv("OLLAMA_MAX_CONCURRENCY", "1"))
         self.video_render_max_concurrency: int = int(os.getenv("VIDEO_RENDER_MAX_CONCURRENCY", "1"))
         self.ollama_keep_alive: str = os.getenv("OLLAMA_KEEP_ALIVE", "15m")
-        self.max_background_jobs: int = int(os.getenv("MAX_BACKGROUND_JOBS", str(self.ollama_max_concurrency)))
+        self.max_background_jobs: int = int(os.getenv("MAX_BACKGROUND_JOBS", str(self.cloudflare_max_concurrency if self.reasoning_provider == "cloudflare" else self.ollama_max_concurrency)))
         self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
 
@@ -139,11 +145,18 @@ class Settings:
             or "gemma3:4b"
         ).strip()
         self.vision_fallback_model: str = os.getenv("VISION_FALLBACK_MODEL", "").strip()
-        self.vision_timeout_seconds: float = float(os.getenv("VISION_TIMEOUT_SECONDS", "45.0"))
-        self.vision_stage_timeout_seconds: float = float(os.getenv("VISION_STAGE_TIMEOUT_SECONDS", "90.0"))
+        self.vision_timeout_seconds: float = float(os.getenv("VISION_TIMEOUT_SECONDS", "120"))
+        self.vision_cloud_timeout_seconds = float(os.getenv("VISION_CLOUD_TIMEOUT_SECONDS", "180"))
+        self.vision_cloud_stage_timeout_seconds = float(os.getenv("VISION_CLOUD_STAGE_TIMEOUT_SECONDS", "300"))
+        self.vision_verification_timeout_seconds = float(os.getenv("VISION_VERIFICATION_TIMEOUT_SECONDS", "180"))
+        self.vision_stage_timeout_seconds: float = float(os.getenv("VISION_STAGE_TIMEOUT_SECONDS", "600"))
         self.extraction_stage_timeout_seconds: float = float(
-            os.getenv("EXTRACTION_STAGE_TIMEOUT_SECONDS", str(self.vision_stage_timeout_seconds + 10.0))
+            os.getenv("EXTRACTION_STAGE_TIMEOUT_SECONDS", "1800")
         )
+        self.source_job_timeout_seconds = float(os.getenv("SOURCE_JOB_TIMEOUT_SECONDS", "2400"))
+        self.frontend_job_poll_timeout_seconds = float(os.getenv("FRONTEND_JOB_POLL_TIMEOUT_SECONDS", "3600"))
+        self.vision_cache_enabled = os.getenv("VISION_CACHE_ENABLED", "true").lower() in {"1", "true", "yes"}
+        self.vision_cache_ttl_seconds = float(os.getenv("VISION_CACHE_TTL_SECONDS", "3600"))
         self.vision_max_retries: int = int(os.getenv("VISION_MAX_RETRIES", "1"))
         self.vision_rate_limit_fallback: bool = False
         self.pipeline_config_version: str = os.getenv("PIPELINE_CONFIG_VERSION", "v1").strip()
@@ -159,6 +172,20 @@ class Settings:
         self.supabase_secret_key: str = os.getenv("SUPABASE_SECRET_KEY", "").strip()
         self.supabase_jwt_audience: str = os.getenv("SUPABASE_JWT_AUDIENCE", "authenticated").strip()
         self.supabase_timeout_seconds: float = float(os.getenv("SUPABASE_TIMEOUT_SECONDS", "10"))
+        import math
+        for name in ("cloudflare_connect_timeout", "cloudflare_read_timeout", "cloudflare_write_timeout",
+                     "cloudflare_overall_timeout", "vision_timeout_seconds", "vision_cloud_timeout_seconds",
+                     "vision_cloud_stage_timeout_seconds", "vision_verification_timeout_seconds", "vision_stage_timeout_seconds",
+                     "extraction_stage_timeout_seconds", "source_job_timeout_seconds", "frontend_job_poll_timeout_seconds", "vision_cache_ttl_seconds"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError(f"{name} must be a finite positive number")
+        if self.vision_max_retries not in (0, 1) or self.cloudflare_max_retries not in (0, 1):
+            raise ValueError("Cloud and vision retries must be 0 or 1")
+        if not 1 <= self.cloudflare_max_concurrency <= 32:
+            raise ValueError("CLOUDFLARE_MAX_CONCURRENCY must be between 1 and 32")
+        if self.cloudflare_vision_general_model != "@cf/google/gemma-4-26b-a4b-it" or self.cloudflare_vision_deep_model != "@cf/qwen/qwen3.8-27b":
+            raise ValueError("Cloud visual tiers must use the two distinct qualified vision models")
 
     # ---------- Validation helpers ----------
     def is_allowed(self, filename: str) -> bool:
@@ -180,6 +207,18 @@ class Settings:
                 "DATABASE_PROVIDER is set to 'supabase', but SUPABASE_URL or keys are not configured. "
                 "Configure runtime credentials before enabling remote capabilities."
             )
+        status.update(reasoning_provider=self.reasoning_provider, vision_provider=self.vision_provider,
+            cloud_vision_general_model=self.cloudflare_vision_general_model, cloud_vision_deep_model=self.cloudflare_vision_deep_model,
+            visual_independent_verifier=self.visual_independent_verifier,
+            text_request_timeout=self.cloudflare_read_timeout, text_stage_timeout=self.cloudflare_overall_timeout,
+            vision_request_timeout=self.vision_cloud_timeout_seconds, vision_cloud_stage_timeout=self.vision_cloud_stage_timeout_seconds,
+            vision_stage_timeout=self.vision_stage_timeout_seconds, verification_timeout=self.vision_verification_timeout_seconds,
+            extraction_timeout=self.extraction_stage_timeout_seconds, source_job_timeout=self.source_job_timeout_seconds,
+            cloud_concurrency=self.cloudflare_max_concurrency,
+            text_local_fallback=self.reasoning_local_fallback_enabled, vision_local_fallback=self.vision_local_fallback_enabled)
+        if "cloudflare" in {self.reasoning_provider, self.vision_provider, self.visual_independent_verifier}:
+            if not self.cloudflare_worker_url or not self.cloudflare_worker_secret.get_secret_value():
+                status["warnings"].append("Cloudflare primary configuration is missing: set CLOUDFLARE_WORKER_URL and CLOUDFLARE_WORKER_SECRET. Requests fail explicitly; missing credentials do not enable local fallback.")
         return status
 
 

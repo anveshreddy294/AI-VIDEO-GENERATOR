@@ -252,7 +252,7 @@ async def generate_grounded_answer(request: QARequest | CanonicalQARequest, *, c
     parsed_json: dict[str, Any] | None = None
 
     try:
-        raw_response = llm.generate_content(full_prompt)
+        raw_response = await run_in_threadpool(llm.generate_content, full_prompt)
         # Parse JSON
         clean_text = raw_response.strip()
         if clean_text.startswith("```"):

@@ -1,8 +1,8 @@
 // @ts-check
 /** @typedef {Record<string, unknown>} Row */
 /** @typedef {{role:string,content:string}} Message */
-/** @typedef {import('./visual.js').VisualEnv & {API_KEY?:string}} Env */
-import {handleVisual, readBoundedBody, MAX_VISUAL_BODY_BYTES} from "./visual.js";
+/** @typedef {import('./visual.js').VisualEnv & {API_KEY?:string,TEXT_TIMEOUT_MS?:string,TEXT_GENERAL_MODEL?:string,TEXT_STRUCTURED_MODEL?:string}} Env */
+import {handleVisual, readBoundedBody, MAX_VISUAL_BODY_BYTES, configuredTimeout, providerFailure} from "./visual.js";
 
 /** @type {Readonly<Record<string,string>>} */
 const MODELS = Object.freeze({
@@ -83,7 +83,8 @@ export default {
                     ? body.task
                     : "reasoning";
 
-            const model = Object.hasOwn(MODELS, task) ? MODELS[task] : undefined;
+            const configuredModel = STRUCTURED_TASKS.has(task) ? env.TEXT_STRUCTURED_MODEL : env.TEXT_GENERAL_MODEL;
+            const model = Object.hasOwn(MODELS, task) ? (configuredModel || MODELS[task]) : undefined;
 
             if (!model) {
                 return json(
@@ -94,6 +95,7 @@ export default {
                     422
                 );
             }
+            if (!Object.values(MODELS).includes(model)) return json({error:"Invalid text model configuration",request_id:requestId},503);
 
             const messages = normalizeMessages(body);
 
@@ -120,7 +122,7 @@ export default {
             const maxTokens = clampInteger(
                 body.max_tokens,
                 1,
-                4096,
+                8192,
                 STRUCTURED_TASKS.has(task) ? 2048 : 1024
             );
 
@@ -140,7 +142,6 @@ export default {
 
             // JSON-schema mode only for strict structured tasks.
             if (
-                STRUCTURED_TASKS.has(task) &&
                 body.response_schema &&
                 typeof body.response_schema === "object"
             ) {
@@ -152,7 +153,14 @@ export default {
 
             const started = Date.now();
 
-            const aiResponse = /** @type {Row} */ (await env.AI.run(model, input));
+            let timer;
+            let aiResponse;
+            try {
+                aiResponse = /** @type {Row} */ (await Promise.race([
+                    env.AI.run(model, input),
+                    new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('3007: inference budget exhausted')), configuredTimeout(env.TEXT_TIMEOUT_MS,180000)); })
+                ]));
+            } finally { clearTimeout(timer); }
 
             const latencyMs = Date.now() - started;
 
@@ -173,13 +181,15 @@ export default {
                 error_name: /** @type {Row | null | undefined} */ (error)?.name || "UnknownError",
             });
 
+            const failure = providerFailure(error);
             return json(
                 {
                     ok: false,
-                    error: "AI_PROVIDER_ERROR",
+                    error: failure.error,
+                    native_code: failure.native_code,
                     request_id: requestId,
                 },
-                502
+                failure.status
             );
         }
     },

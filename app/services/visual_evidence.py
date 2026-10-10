@@ -26,7 +26,7 @@ from ..core.config import settings
 
 MAX_IMAGE_BYTES = 8 * 1024 * 1024
 MAX_IMAGE_PIXELS = 16_000_000
-MAX_CONCURRENT_VISION = 2
+MAX_CONCURRENT_VISION = max(1, settings.cloudflare_max_concurrency)
 _gate = threading.BoundedSemaphore(MAX_CONCURRENT_VISION)
 _object = TypeAdapter(dict[str, JsonValue])
 
@@ -71,7 +71,8 @@ def visual_content_unit(
     with _extraction_diagnostics(source_id):
         from .ingestion.progress import report
         report("PREPARING_IMAGE")
-        stage_deadline = min(deadline or float("inf"), time.monotonic() + settings.vision_stage_timeout_seconds)
+        from ..core.inference_budget import effective_deadline
+        stage_deadline = effective_deadline(min(deadline or float("inf"), time.monotonic() + settings.vision_stage_timeout_seconds))
         preprocess_started = time.perf_counter()
         if not image_bytes or len(image_bytes) > MAX_IMAGE_BYTES:
             raise VisionExtractionFailed(
@@ -135,6 +136,7 @@ def visual_content_unit(
         verification = (verifier or configured_visual_verifier(deadline=stage_deadline)).verify(image_bytes, data, context=context, anchors=source_anchors)
         from .visual_verifier import verification_summary
         original_summary = verification_summary(verification)
+        original_verification = verification.model_dump(mode="json")
         logger.info("VISUAL_VERIFICATION_RESULT %s", original_summary)
         subset_used = False
         if verification.status != "VERIFIED":
@@ -149,6 +151,7 @@ def visual_content_unit(
         provenance: dict[str, JsonValue] = {
             "publication_policy": "independent-verified-subset-v1" if subset_used else "whole-extraction-v1",
             "original_verification_summary": _object.validate_python(original_summary),
+            "unpublished_visual_verification": _object.validate_python(original_verification) if subset_used else None,
             "chrome_claims_excluded": chrome_removed,
             "visual_schema_version": "visual-v2",
             "source_type": modality,

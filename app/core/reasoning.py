@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from threading import Lock
+from threading import Lock, BoundedSemaphore
 from typing import Annotated, Literal, Protocol
 from urllib.parse import urlsplit
 
@@ -17,6 +17,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, ValidationError
 
 from .config import settings
+from .inference_budget import effective_deadline, check_budget, local_inference_slot
 
 logger = logging.getLogger(__name__)
 Task = Literal[
@@ -122,9 +123,10 @@ class ReasoningResult(StrictDTO):
 class ProviderFailure(RuntimeError):
     """Allowlisted category only: no upstream body, request, key or student text."""
 
-    def __init__(self, category: FailureCategory, retryable: bool = False) -> None:
+    def __init__(self, category: FailureCategory, retryable: bool = False, retry_after: float | None = None) -> None:
         self.category = category
         self.retryable = retryable
+        self.retry_after = retry_after
         super().__init__(category)
 
 
@@ -157,15 +159,46 @@ class ProviderPolicy:
     max_retries: int = 1
     circuit_threshold: int = 3
     circuit_cooldown: float = 60.0
+    write_timeout: float = 30.0
+    retry_backoff: float = 1.0
 
     def __post_init__(self) -> None:
         if type(self.max_retries) is not int or not (
-            0 < self.connect_timeout <= self.read_timeout <= self.overall_timeout <= 120
+            0 < self.connect_timeout <= self.read_timeout <= self.overall_timeout <= 3600
+            and 0 < self.write_timeout <= 3600
+            and 0 <= self.retry_backoff <= 60
             and self.max_retries in (0, 1)
             and 1 <= self.circuit_threshold <= 10
             and 1 <= self.circuit_cooldown <= 600
         ):
             raise ProviderFailure("CONFIGURATION")
+
+
+_cloud_slots = BoundedSemaphore(max(1, settings.cloudflare_max_concurrency))
+
+
+def retry_pause(error: ProviderFailure, attempt: int, deadline: float, *, clock: Callable[[], float] = time.monotonic, backoff: float | None = None) -> bool:
+    """Respect Retry-After without retrying early or sleeping beyond the stage budget."""
+    delay = max(error.retry_after or 0.0, (settings.cloudflare_retry_backoff if backoff is None else backoff) * (2 ** attempt))
+    if deadline - clock() <= delay:
+        return False
+    if delay:
+        time.sleep(delay)
+    return True
+
+
+def response_retry_after(response: httpx.Response) -> float | None:
+    value = response.headers.get("Retry-After")
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        from email.utils import parsedate_to_datetime
+        try:
+            return max(0.0, parsedate_to_datetime(value).timestamp() - time.time())
+        except (ValueError, TypeError, OverflowError):
+            return None
 
 
 class CloudflareProvider:
@@ -252,21 +285,30 @@ class CloudflareProvider:
         url = policy.url.rstrip("/")
         if not url.endswith("/v1/generate"):
             url += "/v1/generate"
+        deadline = effective_deadline(deadline)
         remaining = deadline - self.clock()
-        if remaining <= 2 * policy.connect_timeout:
+        if remaining <= 0:
             raise ProviderFailure("TIMEOUT", True)
         timeout = httpx.Timeout(
-            min(policy.read_timeout, remaining - 2 * policy.connect_timeout),
-            connect=policy.connect_timeout,
-            write=policy.connect_timeout,
-            pool=policy.connect_timeout,
+            min(policy.read_timeout, remaining),
+            connect=min(policy.connect_timeout, remaining),
+            write=min(policy.write_timeout, remaining),
+            pool=min(policy.connect_timeout, remaining),
         )
+        if not _cloud_slots.acquire(timeout=max(0, remaining)):
+            raise ProviderFailure("TIMEOUT", True)
         try:
+            remaining = deadline - self.clock()
+            if remaining <= 0:
+                raise ProviderFailure("TIMEOUT", True)
+            logger.info("AI_TRANSPORT_STARTED task=%s payload_bytes=%d", payload.get("task"), len(json.dumps(payload).encode()))
             return asyncio.run(self._fetch(url, payload, timeout, remaining))
         except (httpx.TimeoutException, TimeoutError):
             raise ProviderFailure("TIMEOUT", True) from None
         except (httpx.NetworkError, httpx.RemoteProtocolError):
             raise ProviderFailure("NETWORK", True) from None
+        finally:
+            _cloud_slots.release()
 
     async def _fetch(
         self,
@@ -293,6 +335,7 @@ class CloudflareProvider:
                         "Content-Type": "application/json",
                     },
                 ) as response:
+                    logger.info("AI_TRANSPORT_RESPONSE task=%s status=%d", payload.get("task"), response.status_code)
                     if response.status_code in (401, 403):
                         raise ProviderFailure("AUTH_REJECTED")
                     if response.status_code in (400, 429):
@@ -308,6 +351,7 @@ class CloudflareProvider:
                         codes: list[object] = []
                         if isinstance(failure, dict):
                             codes.append(failure.get("code"))
+                            codes.append(failure.get("native_code"))
                             error = failure.get("error")
                             if isinstance(error, dict):
                                 codes.append(error.get("code"))
@@ -316,12 +360,10 @@ class CloudflareProvider:
                                 codes.extend(item.get("code") for item in errors if isinstance(item, dict))
                         if any(str(code) in {"4006", "3036"} for code in codes):
                             raise ProviderFailure("QUOTA_EXHAUSTED")
-                        raise ProviderFailure("RATE_LIMIT", True) if response.status_code == 429 else ProviderFailure("REQUEST_REJECTED")
+                        retry_after = response_retry_after(response)
+                        raise ProviderFailure("RATE_LIMIT", True, retry_after) if response.status_code == 429 else ProviderFailure("REQUEST_REJECTED")
                     if 500 <= response.status_code <= 599:
-                        if (
-                            payload.get("task") == "vision_extract"
-                            and response.status_code == 502
-                        ):
+                        if response.status_code == 502:
                             bounded = bytearray()
                             async for chunk in response.aiter_bytes():
                                 bounded.extend(chunk)
@@ -338,7 +380,7 @@ class CloudflareProvider:
                                 and failure.get("error") == "AI_PROVIDER_TIMEOUT"
                             ):
                                 raise ProviderFailure("TIMEOUT", True)
-                        raise ProviderFailure("PROVIDER_UNAVAILABLE", True)
+                        raise ProviderFailure("PROVIDER_UNAVAILABLE", True, response_retry_after(response))
                     if response.status_code != 200:
                         raise ProviderFailure("REQUEST_REJECTED")
                     body = bytearray()
@@ -359,16 +401,20 @@ class OllamaReasoningProvider:
             raise ProviderFailure("CONFIGURATION")
         started = time.monotonic()
         try:
-            response, model = model_manager.generate_with_fallback(
-                json.dumps([m.model_dump() for m in request.messages]),
-                reasoning_only=True,
-                messages=[{"role": m.role, "content": m.content} for m in request.messages],
-                is_json=True,
-                json_schema=request.response_schema,
-                max_output_tokens=request.max_tokens,
-                timeout=settings.ollama_timeout,
-                context_tokens=32768,
-            )
+            deadline = effective_deadline(time.monotonic() + settings.ollama_timeout)
+            with local_inference_slot(deadline):
+                if deadline <= time.monotonic():
+                    raise TimeoutError("Local reasoning budget exhausted")
+                response, model = model_manager.generate_with_fallback(
+                    json.dumps([m.model_dump() for m in request.messages]),
+                    reasoning_only=True,
+                    messages=[{"role": m.role, "content": m.content} for m in request.messages],
+                    is_json=True,
+                    json_schema=request.response_schema,
+                    max_output_tokens=request.max_tokens,
+                    timeout=deadline-time.monotonic(),
+                    context_tokens=32768,
+                )
         except TimeoutError:
             raise ProviderFailure("TIMEOUT", True) from None
         except ProcessingError as error:
@@ -439,7 +485,7 @@ class ReasoningProviderRouter:
     def __init__(
         self,
         primary: ReasoningProvider,
-        fallback: ReasoningProvider,
+        fallback: ReasoningProvider | None,
         policy: ProviderPolicy,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
@@ -459,6 +505,7 @@ class ReasoningProviderRouter:
         reason: FailureCategory = "CIRCUIT_OPEN"
         if self.circuit.permit():
             started = self.clock()
+            deadline = effective_deadline(started + self.policy.overall_timeout)
             for attempt in range(self.policy.max_retries + 1):
                 logger.info(
                     "AI_PRIMARY_STARTED",
@@ -472,7 +519,7 @@ class ReasoningProviderRouter:
                 try:
                     result = (
                         self.primary.generate_with_deadline(
-                            request, started + self.policy.overall_timeout
+                            request, deadline
                         )
                         if isinstance(self.primary, CloudflareProvider)
                         else self.primary.generate(request)
@@ -517,15 +564,15 @@ class ReasoningProviderRouter:
                             break
                         self.circuit.succeeded()
                         raise
-                    if (
-                        self.clock() - started + self.policy.read_timeout
-                        > self.policy.overall_timeout
-                    ):
+                    if attempt >= self.policy.max_retries or not retry_pause(error, attempt, deadline, clock=self.clock, backoff=self.policy.retry_backoff):
                         break
                 except Exception:
                     self.circuit.cancel_probe()
                     raise
             self.circuit.failed(reason)
+        if self.fallback is None:
+            raise ProviderFailure(reason)
+        check_budget()
         logger.info(
             "AI_FALLBACK_STARTED",
             extra={"provider": "ollama", "task": request.task, "reason_code": reason},
@@ -588,8 +635,10 @@ def get_cloud_reasoning_router() -> ReasoningProviderRouter:
                 settings.cloudflare_max_retries,
                 settings.cloudflare_circuit_threshold,
                 settings.cloudflare_circuit_cooldown,
+                write_timeout=settings.cloudflare_write_timeout,
+                retry_backoff=settings.cloudflare_retry_backoff,
             )
             _router = ReasoningProviderRouter(
-                CloudflareProvider(policy), OllamaReasoningProvider(), policy
+                CloudflareProvider(policy), OllamaReasoningProvider() if settings.reasoning_local_fallback_enabled else None, policy
             )
         return _router

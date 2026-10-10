@@ -48,6 +48,11 @@ ALLOWED_ORIGINS = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import logging
+    configuration = settings.validate_runtime_configuration()
+    logging.getLogger(__name__).info("INFERENCE_CONFIGURATION %s", {k: v for k, v in configuration.items() if k not in {"qdrant_url", "warnings"}})
+    for warning in configuration["warnings"]:
+        logging.getLogger(__name__).warning("RUNTIME_CONFIGURATION %s", warning)
     try:
         yield
     finally:

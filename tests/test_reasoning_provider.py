@@ -274,7 +274,7 @@ def test_bounded_circuit_opens_cools_down_and_recovers() -> None:
     )
 
 
-def test_overall_budget_prevents_second_transport_after_long_failure() -> None:
+def test_remaining_budget_allows_bounded_shorter_second_request() -> None:
     clock = [0.0]
     attempts = 0
 
@@ -288,7 +288,7 @@ def test_overall_budget_prevents_second_transport_after_long_failure() -> None:
     fallback = Fallback()
     route = ReasoningProviderRouter(SlowPrimary(), fallback, POLICY, lambda: clock[0])
     route.generate(REQUEST)
-    assert attempts == 1 and fallback.calls == 1
+    assert attempts == 2 and fallback.calls == 1
 
 
 def test_programming_errors_do_not_trigger_fallback() -> None:

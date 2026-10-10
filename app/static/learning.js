@@ -5,7 +5,8 @@
     /** @typedef {Record<string, unknown>} Row */
     /** @typedef {{source_id:string, filename:string, status:string, version:number, modality:string, content_ready?:boolean}} Source */
     const POLL_INTERVAL_MS = 2000;
-    const MAX_JOB_POLLS = 120;
+    const configuredPollSeconds = Number(globalThis.document?.body?.dataset?.jobPollTimeoutSeconds);
+    const MAX_JOB_POLLS = Math.ceil((Number.isFinite(configuredPollSeconds) && configuredPollSeconds >= 60 ? configuredPollSeconds : 3600) * 1000 / POLL_INTERVAL_MS);
     /** @param {unknown} value @returns {Row} */
     function row(value) {
         if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid learning response.');
@@ -115,6 +116,11 @@
         return {
             start() { status.textContent = "Uploading your material\u2026"; },
             progress(job) {
+                if (job.current_stage === 'content_ready') {
+                    const warnings = job.result && typeof job.result === 'object' ? row(job.result).warnings : [];
+                    status.textContent = Array.isArray(warnings) && warnings.length ? 'Extracted content is available. Some optional visual evidence remains unavailable or uncertain.' : 'Extracted content is available.';
+                    return;
+                }
                 /** @type {Record<string,string>} */
                 const stages = {'PREPARING_IMAGE':'Preparing image', 'UNDERSTANDING_IMAGE':'Understanding image',
                     'VALIDATING_VISUAL_EVIDENCE':'Validating visual evidence', 'BUILDING_LEARNING_STRUCTURE':'Building learning structure',
@@ -1202,7 +1208,7 @@
                     if (current.is_finished === true) {
                         if (current.status !== 'completed') { uploadStatus.fail(current.failure); return; }
                         recentSourceId = typeof row(current.result).source_id === 'string' ? text(row(current.result), 'source_id') : '';
-                        await loadSources(); uploadStatus.progress({ current_stage: 'source_ready' }); return;
+                        await loadSources(); uploadStatus.progress({ current_stage: row(current.result).content_ready === true ? 'content_ready' : 'source_ready', result: current.result }); return;
                     }
                     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
                 }

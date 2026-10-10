@@ -63,6 +63,8 @@ def default_test_environment(monkeypatch: pytest.MonkeyPatch, isolated_storage: 
     from app.main import app
     monkeypatch.setattr(settings, 'vision_provider', 'ollama')
     monkeypatch.setattr(settings, 'llm_provider', 'mock')
+    monkeypatch.setattr(settings, 'reasoning_provider', 'ollama')
+    monkeypatch.setattr(settings, 'cloudflare_retry_backoff', 0.0)
     monkeypatch.setattr(settings, 'embedding_provider', 'mock')
     monkeypatch.setattr(settings, 'qdrant_url', '')
     before = dict(app.dependency_overrides)
