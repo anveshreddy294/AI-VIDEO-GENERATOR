@@ -1,0 +1,69 @@
+/* ==========================================================================
+   VISUALAI : THE KNOWLEDGE ATELIER — DESIGN TOKENS
+   STRICT ADHERENCE TO THE 30 NON-NEGOTIABLE RESTRICTIONS
+   ========================================================================== */
+
+:root {
+  /* Surface System — Material & Architectural */
+  --canvas: #EAE7DF;
+  --surface-secondary: #DCD8CF;
+  --surface-panel: #F0EEE8;
+  --surface-subtle: #E2DFD6;
+  --surface-dark-stage: #1C1917;
+  --surface-dark-panel: #262320;
+
+  /* Ink & Typography Hierarchy */
+  --ink-primary: #1C1917;
+  --ink-secondary: #57534E;
+  --ink-muted: #78716C;
+  --ink-faint: #A8A29E;
+  --ink-inverse: #F0EEE8;
+  --ink-inverse-muted: #D6D3CD;
+
+  /* Structural & Accent Colors (Terracotta from "understanding" replaces olive green) */
+  --evergreen: #A46047;
+  --evergreen-hover: #8E523C;
+  --olive: #A46047;
+  --terracotta: #A46047;
+  --terracotta-muted: #8E523C;
+  --terracotta-hover: #8E523C;
+  --terracotta-subtle: rgba(164, 96, 71, 0.12);
+
+  /* Architectural Hairlines & Rules */
+  --border: #B9B7AE;
+  --border-strong: #96948B;
+  --border-subtle: rgba(37, 54, 48, 0.14);
+  --border-inverse: rgba(240, 238, 232, 0.16);
+
+  /* Geometry & Corner Treatment (Permitted 0px to 4px strictly) */
+  --radius-none: 0px;
+  --radius-sharp: 2px;
+  --radius-subtle: 3px;
+  --radius-card: 4px;
+
+  /* Zero Decorative Shadows Policy */
+  --shadow-none: none;
+
+  /* Typography Families (Zero Inter, Zero Geist, Zero Space Grotesk) */
+  --font-serif: 'IBM Plex Serif', Georgia, serif;
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
+  --font-editorial: 'Newsreader', 'IBM Plex Serif', Georgia, serif;
+  --font-handwritten: 'Caveat', cursive, sans-serif;
+
+  /* Fluid Spacing Scale */
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+  --space-3xl: 64px;
+  --space-4xl: 96px;
+
+  /* Standard Layout Widths */
+  --max-width-site: 1380px;
+  --max-width-prose: 68ch;
+  --header-height: 64px;
+}

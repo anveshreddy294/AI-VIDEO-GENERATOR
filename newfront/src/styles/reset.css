@@ -1,0 +1,105 @@
+/* ==========================================================================
+   RESET & FOUNDATIONAL ELEVATION
+   Zero Decorative Orbs, Zero Dot Grids, Zero Harsh Gradients
+   ========================================================================== */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  background-color: var(--canvas);
+  color: var(--ink-primary);
+  font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--canvas);
+  color: var(--ink-primary);
+  line-height: 1.55;
+  overflow-x: hidden;
+}
+
+/* Typography Defaults */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  color: var(--ink-primary);
+  line-height: 1.2;
+}
+
+p, li, span, label, input, button, select, textarea {
+  font-family: var(--font-sans);
+  color: inherit;
+}
+
+code, pre, kbd, samp, .mono {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+img, svg, video {
+  display: block;
+  max-width: 100%;
+}
+
+/* Accessible Focus Outlines */
+:focus-visible {
+  outline: 2px solid var(--evergreen);
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background-color: var(--evergreen);
+  color: var(--canvas);
+}
+
+/* Micro Registration Rules & Utility Classes */
+.hairline-rule {
+  height: 1px;
+  width: 100%;
+  background-color: var(--border);
+  border: none;
+}
+
+.coord-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.atelier-container {
+  max-width: var(--max-width-site);
+  margin: 0 auto;
+  padding: 0 40px;
+}
+
+@media (max-width: 768px) {
+  .atelier-container {
+    padding: 0 20px;
+  }
+}
