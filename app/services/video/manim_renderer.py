@@ -16,6 +16,8 @@ import re
 import shutil
 import tempfile
 import textwrap
+import threading
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +25,17 @@ from ...core.config import settings
 from .scene_schema import ScenePlan, SceneType, VideoPlan
 
 logger = logging.getLogger(__name__)
+
+_render_lock = threading.Lock()
+
+
+def _serialized_render(function):
+    @wraps(function)
+    def render(*args, **kwargs):
+        # Manim configuration is global within a process.
+        with _render_lock:
+            return function(*args, **kwargs)
+    return render
 
 
 def _validate_raw_video(mp4_path: Path) -> None:
@@ -49,6 +62,7 @@ def _validate_raw_video(mp4_path: Path) -> None:
         raise
 
 
+@_serialized_render
 def render_video_plan(plan: VideoPlan, output_mp4: Path) -> Path:
     """Render a VideoPlan to an MP4 video file."""
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
@@ -77,6 +91,8 @@ def _render_with_manim(plan: VideoPlan, output_mp4: Path) -> Path:
     import manim
     from manim import (
         Arrow,
+        Circle,
+        Line,
         FadeIn,
         FadeOut,
         Rectangle,
@@ -110,7 +126,34 @@ def _render_with_manim(plan: VideoPlan, output_mp4: Path) -> Path:
                 stype = scene.scene_type
                 dur = max(1.0, scene.duration_seconds)
 
-                if stype == SceneType.TITLE:
+                if scene.diagram_type == "binary_search_tree":
+                    positions = [(0,1.5),(-2,0),(2,0),(-3,-1.5),(-1,-1.5),(1,-1.5),(3,-1.5)]
+                    values = scene.visual_payload.get("nodes", [10,5,15,3,7,12,18])
+                    circles = []
+                    for index, (x,y) in enumerate(positions):
+                        circle = Circle(radius=.38, color=BLUE).move_to([x,y,0])
+                        self.add(circle, Text(str(values[index]),font_size=28).move_to(circle))
+                        circles.append(circle)
+                        if index:
+                            self.add(Line(circles[(index-1)//2].get_center(),circle.get_center(),buff=.38,color=BLUE))
+                    heading = Text(scene.title or "Binary search tree",font_size=28).to_edge(UP)
+                    self.add(heading)
+                    path = scene.visual_payload.get("path", [0,1,4])
+                    for index in path:
+                        self.play(circles[index].animate.set_color(YELLOW),run_time=max(.1,dur/len(path)*.4))
+                        self.wait(max(.1,dur/len(path)*.6))
+                elif scene.diagram_type == "concept_map":
+                    center = Text(str(scene.visual_payload.get("center",plan.concept_name))[:60],font_size=25).move_to([0,1.5,0])
+                    self.add(center)
+                    labels = scene.visual_payload.get("labels",[])[:5]
+                    for index,label in enumerate(labels):
+                        x = (index-(len(labels)-1)/2)*2.5
+                        card = Rectangle(width=2.25,height=1.3,color=BLUE).move_to([x,-.5,0])
+                        text = Text("\n".join(textwrap.wrap(str(label),15)[:3]),font_size=18).move_to(card)
+                        self.add(Line(center.get_bottom(),card.get_top(),color=BLUE))
+                        self.play(FadeIn(VGroup(card,text)),run_time=max(.1,dur*.4/max(1,len(labels))))
+                    self.wait(max(.1,dur*.6))
+                elif stype == SceneType.TITLE:
                     title_text = scene.title or plan.concept_name
                     sub_text = scene.subtitle or "Core Concept Review"
                     title = Text(title_text, font_size=42, color=YELLOW, weight="BOLD")
@@ -236,6 +279,14 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
     import numpy as np
     from PIL import Image, ImageDraw, ImageFont
 
+    font = None
+    for name in ("DejaVuSans.ttf", "C:/Windows/Fonts/arial.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+        try:
+            font = ImageFont.truetype(name, 24)
+            break
+        except OSError:
+            continue
+
     fps = settings.video_default_fps
     width, height = 1280, 720
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -272,16 +323,47 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
         for f in range(total_frames):
             img = Image.new("RGB", (width, height), bg_color)
             draw = ImageDraw.Draw(img)
+            if font is not None:
+                draw.font = font
             t_ratio = f / float(total_frames)
 
             # Draw header banner
             draw.rectangle([0, 0, width, 50], fill=(31, 41, 55))
-            draw.text((40, 16), f"Adaptive Remediation: {plan.concept_name}", fill=(243, 244, 246))
+            draw.text((40, 12), f"VisualAI: {plan.concept_name[:75]}", fill=(243, 244, 246))
 
-            if stype == SceneType.TITLE:
+            if scene.diagram_type == "binary_search_tree":
+                points = [(640,170),(380,310),(900,310),(250,460),(510,460),(770,460),(1030,460)]
+                values = scene.visual_payload.get("nodes", [10,5,15,3,7,12,18])
+                path = scene.visual_payload.get("path", [0,1,4])
+                active = path[:min(len(path),int(t_ratio*len(path))+1)]
+                draw.text((60,75),scene.title or "Binary search tree",fill=(250,204,21))
+                for index,(x,y) in enumerate(points):
+                    if index:
+                        px,py = points[(index-1)//2]
+                        draw.line([(px,py),(x,y)],fill=(100,116,139),width=4)
+                for index,(x,y) in enumerate(points):
+                    color = (250,204,21) if index in active else (96,165,250)
+                    draw.ellipse((x-34,y-34,x+34,y+34),fill=(31,41,55),outline=color,width=4)
+                    draw.text((x-15,y-15),str(values[index]),fill=color)
+            elif scene.diagram_type == "concept_map":
+                labels = scene.visual_payload.get("labels", [])[:5]
+                center = scene.visual_payload.get("center", plan.concept_name)
+                draw.rounded_rectangle((400,140,880,240),radius=18,fill=(30,58,138),outline=(96,165,250),width=3)
+                for n,line in enumerate(textwrap.wrap(str(center),30)[:2]):
+                    draw.text((420,160+n*30),line,fill=(255,255,255))
+                for n,label in enumerate(labels):
+                    x = 75+n*235
+                    draw.line([(640,240),(x+105,350)],fill=(100,116,139),width=3)
+                    highlight = n <= int(t_ratio*len(labels))
+                    draw.rounded_rectangle((x,350,x+210,470),radius=12,fill=(31,41,55),
+                        outline=(250,204,21) if highlight else (96,165,250),width=3)
+                    for k,line in enumerate(textwrap.wrap(str(label),14)[:3]):
+                        draw.text((x+12,365+k*28),line,fill=(243,244,246))
+            elif stype == SceneType.TITLE:
                 title = scene.title or plan.concept_name
                 sub = scene.subtitle or "Core Concept Review"
-                draw.text((width // 2 - len(title) * 10, height // 2 - 50), title, fill=(250, 204, 21))
+                for n,line in enumerate(textwrap.wrap(title,60)[:3]):
+                    draw.text((100,height//2-70+n*38),line,fill=(250,204,21))
                 draw.text((width // 2 - len(sub) * 6, height // 2 + 10), sub, fill=(229, 231, 235))
 
             elif stype == SceneType.EQUATION:
@@ -374,7 +456,8 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
 
             else:
                 txt = scene.text or plan.concept_name
-                draw.text((width // 2 - len(txt) * 6, height // 2 - 30), txt, fill=(255, 255, 255))
+                for n,line in enumerate(textwrap.wrap(txt,70)[:8]):
+                    draw.text((100,150+n*42),line,fill=(255,255,255))
 
             # --- Synchronized On-Screen Caption Card ---
             sent_idx = min(len(sentences) - 1, int(t_ratio * len(sentences)))

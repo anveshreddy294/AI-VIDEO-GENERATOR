@@ -1,5 +1,16 @@
 # Video generation foundation: baseline and acceptance criteria
 
+The sections below preserve the first increment's historical baseline and results.
+See [video-api-enhancements.md](video-api-enhancements.md) for the second-round implementation, API inventory, actual tests, and the canonical remediation persistence blocker.
+
+## Second-round continuation baseline (2026-10-11)
+
+- Branch `new-implementations`, commit `a3c38c9`; only pre-existing untracked `LEARNING_PIPELINE_AUDIT.md`, preserved.
+- Before editing: foundation/canonical/lesson suite excluding the slow render case: **35 passed, 1 deselected**, 1 warning, 3.14 seconds.
+- Actual educational pipeline still renders fixed slides and cannot regenerate completed videos. Final timeline, traceability query APIs, canonical scene search and index reconciliation are absent.
+- Live RPC inspected read-only: `visualai_internal.remediation_video` stores `plan` at claim, but `save` does not update plan/output metadata, and terminal rows cannot be retried. Canonical remediation metadata/retry changes therefore require a reviewed migration; production will not be modified or bypassed. Independently testable educational enhancements reuse its established owned lesson JSON boundary.
+- Focused files: shared engine/compositor/renderer for scene media and synchronization; educational service/API for generation options, metadata, provenance, reconciliation and regeneration; existing Qdrant integration for scene pointers; frontend for controls/navigation/captions; regression tests and documentation. No new agents, learning loop, database, object store, or parallel rendering engine.
+
 ## Baseline (2026-10-11, before implementation)
 
 - Branch: `new-implementations`; HEAD: `278fdcb4f434bb4d6bf4507725e4cb3c1e7430cf`.

@@ -164,7 +164,7 @@ def validate_video_plan(plan: VideoPlan, max_duration_tolerance: float | None = 
                     or reference.source_content_id not in plan.source_content_ids
                     or reference.chunk_id not in plan.source_chunk_ids
                     or reference.chunk_id not in scene.source_chunk_ids
-                    or reference.concept_id != plan.concept_id):
+                    or reference.concept_id not in {plan.concept_id, *plan.concept_ids}):
                 raise SceneValidationError("Scene evidence is outside the video source scope")
             if (reference.char_end - reference.char_start != len(reference.quote)
                     or not any(reference.quote in text for text in

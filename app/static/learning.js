@@ -52,6 +52,16 @@
             INVALID_RESPONSE: 'The model returned invalid output. No generated result was saved. Retry generation.',
             VIDEO_PLAN_INVALID: 'This lesson could not be converted into a valid video plan.',
             VIDEO_START_FAILED: 'Video generation could not start. Please retry.',
+            VIDEO_TOPIC_MISMATCH: 'Create a lesson for the requested video topic first.',
+            VIDEO_SOURCE_REQUIRED: 'Open a lesson from uploaded material to generate a source-grounded video.',
+            VIDEO_GROUNDING_REQUIRED: 'Enable source grounding when selecting source content or chunks.',
+            VIDEO_EVIDENCE_INSUFFICIENT: 'The selected source does not provide enough eligible evidence for this video.',
+            VIDEO_EVIDENCE_NOT_READY: 'Source retrieval is unavailable. Check indexing and retry.',
+            VIDEO_EVIDENCE_UNAVAILABLE: 'The original evidence is no longer available for this video.',
+            VIDEO_GENERATION_IN_PROGRESS: 'A video is already processing for this lesson. Wait for it to finish.',
+            VIDEO_CAPACITY_REACHED: 'Video processing is busy. Retry in 30 seconds.',
+            VIDEO_SCENE_SEARCH_UNAVAILABLE: 'Video scene search is unavailable. Check the embedding and search services.',
+            VIDEO_SCENE_TOO_LONG: 'This scene exceeds the duration limit. Choose a shorter target or more concise lesson.',
             ASSESSMENT_SUBMISSION_INVALID: 'Answer every question before submitting this assessment.',
             ASSESSMENT_GRADING_FAILED: 'Assessment grading is unavailable. Your answers have not been scored; please retry.',
             NOTES_GENERATION_FAILED: 'Notes generation failed. Please retry.',
@@ -371,7 +381,10 @@
     /** @type {Row|null} */ let currentEducationalLesson = null;
     /** @type {ReturnType<typeof setInterval>|null} */ let videoPollInterval = null;
     let videoGeneration = 0;
+    let initialVideoLink = true;
     let videoObjectURL = '';
+    let captionObjectURL = '';
+    let displayedVideo = null;
 
     function resetEducationalVideo() {
         videoGeneration++;
@@ -381,6 +394,16 @@
         player.pause(); player.removeAttribute('src'); player.load();
         if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
         videoObjectURL = '';
+        if (captionObjectURL) URL.revokeObjectURL(captionObjectURL);
+        captionObjectURL = '';
+        el('video-captions-track').removeAttribute('src');
+        el('video-scenes').replaceChildren();
+        el('video-evidence').replaceChildren();
+        el('video-details-status').textContent = '';
+        displayedVideo = null;
+        el('retry-video-index').disabled = true;
+        el('video-index-status').textContent = '';
+        el('video-scene-search-results').replaceChildren();
         el('video-player-container').style.display = 'none';
     }
 
@@ -694,11 +717,15 @@
     }
 
     /** @param {string} lessonId @param {number} ticket */
-    async function playEducationalVideo(lessonId, ticket) {
-        const response = await auth.protectedFetch('/educational-content/' + encodeURIComponent(lessonId) + '/video/stream');
+    async function playEducationalVideo(lessonId, ticket, generationId = '', sceneId = '') {
+        const query = generationId ? '?generation_id=' + encodeURIComponent(generationId) : '';
+        const response = await auth.protectedFetch('/educational-content/' + encodeURIComponent(lessonId) + '/video/stream' + query);
         if (!response.ok) throw new Error(safeError(response.status, {}));
         const blob = await response.blob();
         if (ticket !== videoGeneration) return;
+        history.replaceState(null, '', '/dashboard?lesson=' + encodeURIComponent(lessonId) +
+            (generationId ? '&generation=' + encodeURIComponent(generationId) : '') +
+            (sceneId ? '&scene=' + encodeURIComponent(sceneId) : ''));
         if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
         videoObjectURL = URL.createObjectURL(blob);
         const player = /** @type {HTMLVideoElement} */ (el('video-player'));
@@ -706,15 +733,87 @@
         el('video-player-container').style.display = 'block';
         el('video-status').textContent = 'Animated narrated video is ready.';
         el('start-video-btn').textContent = 'Load Generated Video';
+        el('regenerate-video-btn').disabled = false;
+        void loadVideoSceneDetails(lessonId, ticket, query, sceneId);
+    }
+
+    async function loadVideoSceneDetails(lessonId, ticket, query, selectedSceneId = '') {
+        const base = '/educational-content/' + encodeURIComponent(lessonId) + '/video';
+        try {
+            const metadata = row(await api(base + '/metadata' + query));
+            if (ticket !== videoGeneration) return;
+            displayedVideo = {lessonId, generationId:text(metadata, 'generation_id'), ticket};
+            showVideoIndexStatus(metadata.indexing_status, metadata.indexing_error_code);
+            el('video-details-status').textContent = metadata.provenance_kind === 'SOURCE_GROUNDED'
+                ? 'This video uses retrieved source quotations. Select a scene to inspect its evidence.'
+                : 'AI-enriched explanation. Illustrative examples are not source evidence.';
+            const navigation = el('video-scenes'); navigation.replaceChildren();
+            const scenes = Array.isArray(metadata.scenes) ? metadata.scenes : [];
+            for (const value of scenes) {
+                const scene = row(value); const timing = scene.timing ? row(scene.timing) : null;
+                const button = document.createElement('button'); button.type = 'button';
+                const seconds = timing ? Number(timing.start_seconds) : NaN;
+                button.textContent = (Number.isFinite(seconds) ? Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0') + ' — ' : '') + text(scene, 'title');
+                button.addEventListener('click', () => {
+                    if (ticket !== videoGeneration) return;
+                    if (Number.isFinite(seconds)) {
+                        const player = el('video-player');
+                        const seek = () => { if (ticket === videoGeneration) player.currentTime = seconds; };
+                        if (player.readyState >= 1) seek();
+                        else player.addEventListener('loadedmetadata', seek, {once:true});
+                    }
+                    const evidence = el('video-evidence'); evidence.replaceChildren();
+                    const references = Array.isArray(scene.evidence_references) ? scene.evidence_references : [];
+                    if (!references.length) evidence.textContent = 'AI-generated explanation or illustrative example; no source claim.';
+                    for (const value of references) {
+                        const reference = row(value); const paragraph = document.createElement('p');
+                        paragraph.textContent = (reference.page_start ? 'Page ' + Number(reference.page_start) + ': ' : 'Source excerpt: ') + text(reference, 'quote');
+                        evidence.append(paragraph);
+                    }
+                });
+                navigation.append(button);
+                if (scene.scene_id === selectedSceneId) button.click();
+            }
+            if (metadata.caption_url) {
+                const response = await auth.protectedFetch(base + '/captions' + query);
+                if (!response.ok) throw new Error('Captions unavailable.');
+                const blob = await response.blob();
+                if (ticket !== videoGeneration) return;
+                if (captionObjectURL) URL.revokeObjectURL(captionObjectURL);
+                captionObjectURL = URL.createObjectURL(blob);
+                el('video-captions-track').src = captionObjectURL;
+            }
+        } catch (error) {
+            if (ticket === videoGeneration) el('video-details-status').textContent = 'Scene details or captions are unavailable for this version. Generate a new version to refresh it.';
+        }
+    }
+
+    function showVideoIndexStatus(status, errorCode) {
+        const explanations = {
+            EMBEDDING_MODEL_UNAVAILABLE:'The configured embedding model is unavailable.',
+            EMBEDDING_FAILED:'Embedding generation or validation failed.',
+            SCENE_EMBEDDING_FAILED:'Scene embeddings could not be prepared.',
+            SCENE_INDEX_MEDIA_INVALID:'The stored media could not be validated for indexing.',
+            SCENE_INDEX_WRITE_FAILED:'The scene search index could not be written or verified.',
+        };
+        el('video-index-status').textContent = status === 'INDEXED' ? 'Scenes are indexed and searchable.' :
+            status === 'FAILED' ? (explanations[errorCode] || 'Scene indexing failed.') + ' Video playback is still available. Retry indexing after resolving the service issue.' :
+            status === 'PENDING' ? 'Scene indexing is in progress. Refresh details or retry reconciliation later.' : 'Scenes have not been indexed.';
+        el('retry-video-index').disabled = !['FAILED','PENDING','NOT_REQUESTED'].includes(String(status));
     }
 
     /** @param {Row} lesson */
     function setupEducationalVideoState(lesson) {
         const video = lesson.video ? row(lesson.video) : null;
         const id = text(lesson, 'lesson_id');
-        if (video && video.status === 'COMPLETED') {
+        el('video-grounded').disabled = !lesson.source_id;
+        const params = new URLSearchParams(window.location.search);
+        const linkedGeneration = initialVideoLink && params.get('lesson') === id ? params.get('generation') : null;
+        initialVideoLink = false;
+        if (linkedGeneration || (video && video.status === 'COMPLETED')) {
             const ticket = videoGeneration;
-            void playEducationalVideo(id, ticket).catch(error => {
+            if (linkedGeneration) switchLessonTab('video');
+            void playEducationalVideo(id, ticket, linkedGeneration || (typeof video?.job_id === 'string' ? video.job_id : ''), linkedGeneration ? params.get('scene') || '' : '').catch(error => {
                 if (ticket === videoGeneration) el('video-status').textContent = error instanceof Error ? error.message : 'Video playback is unavailable.';
             });
         } else if (video && !['FAILED', 'NOT_STARTED'].includes(String(video.status))) {
@@ -726,22 +825,31 @@
     }
 
     /** @param {string} lessonId */
-    async function startEducationalVideo(lessonId) {
+    async function startEducationalVideo(lessonId, regenerate = false) {
         const ticket = videoGeneration;
         const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
         startBtn.disabled = true;
+        el('regenerate-video-btn').disabled = true;
         el('video-status').textContent = 'Starting video generation pipeline…';
         try {
-            const status = row(await post('/educational-content/' + encodeURIComponent(lessonId) + '/video'));
+            const selectedDifficulty = el('video-difficulty').value;
+            const selectedSeconds = Number(el('video-duration').value);
+            const status = row(await post('/educational-content/' + encodeURIComponent(lessonId) + '/video', {
+                regenerate, target_seconds: Number.isFinite(selectedSeconds) && selectedSeconds >= 20 ? selectedSeconds : 45,
+                difficulty: ['foundational','intermediate','advanced'].includes(selectedDifficulty) ? selectedDifficulty : 'intermediate',
+                grounded: !!el('video-grounded').checked && !el('video-grounded').disabled,
+                instructions: String(el('video-instructions').value || '').slice(0, 1000),
+            }));
             if (ticket !== videoGeneration) return;
             if (status.status === 'COMPLETED') {
-                await playEducationalVideo(lessonId, ticket);
+                await playEducationalVideo(lessonId, ticket, typeof status.job_id === 'string' ? status.job_id : '');
                 startBtn.disabled = false;
             } else pollVideoStatus(lessonId);
         } catch (error) {
             if (ticket !== videoGeneration) return;
             el('video-status').textContent = error instanceof Error ? error.message : 'Failed to start video.';
             startBtn.disabled = false;
+            el('regenerate-video-btn').disabled = false;
         }
     }
 
@@ -767,7 +875,8 @@
                     if (videoPollInterval) clearInterval(videoPollInterval);
                     videoPollInterval = null;
                     startBtn.disabled = false;
-                    if (state === 'COMPLETED') await playEducationalVideo(lessonId, ticket);
+                    el('regenerate-video-btn').disabled = false;
+                    if (state === 'COMPLETED') await playEducationalVideo(lessonId, ticket, typeof status.job_id === 'string' ? status.job_id : '');
                     else el('video-status').textContent = state === 'FAILED' ? (status.error_code === 'VIDEO_AUDIO_FAILED' ? 'Spoken narration could not be generated. Check the voice service and retry.' : 'Video generation failed. Please retry.') : 'Video generation has not started.';
                 }
             } catch (error) {
@@ -775,6 +884,7 @@
                 if (videoPollInterval) clearInterval(videoPollInterval);
                 videoPollInterval = null;
                 startBtn.disabled = false;
+                el('regenerate-video-btn').disabled = false;
                 el('video-status').textContent = error instanceof Error ? error.message : 'Failed checking video progress.';
             } finally { pending = false; }
         };
@@ -1196,6 +1306,44 @@
         if (!currentEducationalLesson) return;
         await startEducationalVideo(text(currentEducationalLesson, 'lesson_id'));
     }));
+    el('regenerate-video-btn').addEventListener('click', () => run(async () => {
+        if (!currentEducationalLesson) return;
+        await startEducationalVideo(text(currentEducationalLesson, 'lesson_id'), true);
+    }));
+    el('retry-video-index').addEventListener('click', () => run(async () => {
+        const selected = displayedVideo;
+        if (!selected || selected.ticket !== videoGeneration) return;
+        el('retry-video-index').disabled = true;
+        try {
+            const result = row(await post('/educational-content/' + encodeURIComponent(selected.lessonId) +
+                '/video/reindex?generation_id=' + encodeURIComponent(selected.generationId), {}));
+            if (selected.ticket === videoGeneration) showVideoIndexStatus(result.indexing_status, result.error_code);
+        } catch (error) {
+            if (selected.ticket !== videoGeneration) return;
+            el('video-index-status').textContent = error instanceof Error ? error.message : 'Scene indexing is unavailable.';
+            el('retry-video-index').disabled = false;
+        }
+    }));
+    el('video-scene-search-form').addEventListener('submit', event => {
+        event.preventDefault();
+        const query = String(el('video-scene-search').value || '').trim();
+        if (!query) return;
+        const ticket = videoGeneration;
+        run(async () => {
+            const result = row(await api('/educational-content/video-scenes/search?query=' + encodeURIComponent(query)));
+            if (ticket !== videoGeneration) return;
+            const container = el('video-scene-search-results'); container.replaceChildren();
+            const scenes = Array.isArray(result.scenes) ? result.scenes : [];
+            if (!scenes.length) container.textContent = 'No matching indexed video scenes.';
+            for (const value of scenes) {
+                const scene = row(value); const link = document.createElement('a');
+                link.textContent = text(scene, 'title');
+                link.href = '/learn?lesson=' + encodeURIComponent(text(scene, 'lesson_id')) +
+                    '&generation=' + encodeURIComponent(text(scene, 'generation_id')) + '&scene=' + encodeURIComponent(text(scene, 'scene_id'));
+                container.append(link);
+            }
+        });
+    });
 
     // Topic direct learning
     const topicForm = document.getElementById('topic-form');

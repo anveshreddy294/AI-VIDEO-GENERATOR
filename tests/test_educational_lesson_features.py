@@ -317,7 +317,9 @@ def test_video_generation_pipeline(context: Context) -> None:
     lesson = service.get_lesson(str(content.content_id))
     assert lesson is not None
 
-    plan = service.create_video_plan(content)
+    from app.services.video.educational_video import build_video_plan, VideoOptions
+    plan = build_video_plan(service, content, VideoOptions(target_seconds=30))
+    assert any(s.diagram_type == "binary_search_tree" for s in plan.scenes)
     job_id = f"JOB_TEST_{uuid4().hex[:6]}"
     lesson.video = {
         "job_id": job_id, "status": "QUEUED", "stage": "QUEUED",
@@ -344,4 +346,14 @@ def test_video_generation_pipeline(context: Context) -> None:
     assert any(s.get("codec_type") == "audio" for s in streams)
     dur = float(info.get("format", {}).get("duration", 0))
     assert dur >= 20.0
+    generation = updated.video_generations[job_id]
+    assert generation.timing_status == "MEASURED"
+    artifact = generation.artifact
+    assert artifact.caption_quality == "SCENE_TIMED"
+    assert len(artifact.scene_timeline) == len(plan.scenes)
+    assert artifact.scene_timeline[0].start_seconds == 0
+    assert artifact.scene_timeline[-1].end_seconds == pytest.approx(dur,abs=.01)
+    for previous, following in zip(artifact.scene_timeline,artifact.scene_timeline[1:]):
+        assert previous.end_seconds == following.start_seconds
+    assert Path(artifact.subtitle_path).read_text(encoding="utf-8").startswith("WEBVTT")
 

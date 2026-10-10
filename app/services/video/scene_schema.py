@@ -95,6 +95,14 @@ class ScenePlan(BaseModel):
     page_end: int | None = None
 
 
+class SceneTimelineEntry(BaseModel):
+    scene_id: str
+    scene_index: int
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+    duration_seconds: float = Field(gt=0, allow_inf_nan=False)
+
+
 class NarrationSegment(BaseModel):
     """Voiceover text corresponding to a specific scene index."""
     segment_id: str = Field(default_factory=lambda: f"narr_{uuid4().hex[:8]}")
@@ -120,6 +128,7 @@ class VideoPlan(BaseModel):
     source_version: int | None = Field(default=None, ge=1)
     concept_id: str
     concept_name: str
+    concept_ids: list[str] = Field(default_factory=list)
     definition: str = ""
     duration_seconds: int = 45  # 30, 45, or 60 per specification
     target_seconds: int | None = None
@@ -182,3 +191,7 @@ class VideoArtifact(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     completed_at: str | None = None
+    scene_timeline: list[SceneTimelineEntry] = Field(default_factory=list)
+    timing_status: Literal["UNAVAILABLE", "MEASURED"] = "UNAVAILABLE"
+    caption_quality: Literal["UNAVAILABLE", "ESTIMATED", "ALIGNED", "SCENE_TIMED"] = "UNAVAILABLE"
+    media_properties: dict[str, Any] = Field(default_factory=dict)

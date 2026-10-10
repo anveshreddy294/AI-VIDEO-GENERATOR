@@ -18,6 +18,7 @@ class Element {
     removeAttribute(key){delete this.attributes[key];if(key==='src')this.src='';}
     addEventListener(name,handler){(this.events[name] ||= []).push(handler);}
     dispatch(name){for(const handler of this.events[name] || [])handler({preventDefault(){}});}
+    click(){this.dispatch('click');}
     querySelector(selector){return {value:selector.startsWith('input')?'0':'Compare the target to the node; search the smaller or larger subtree.'};}
     reportValidity(){return true;}
     focus(){this.focused=true;}
@@ -30,7 +31,7 @@ const flush=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setImmediat
 function setup(overrides={},options={}) {
     const ids=new Map();
     const document={body:{dataset:{jobPollTimeoutSeconds:'3600'}},getElementById(id){if(!ids.has(id))ids.set(id,new Element());return ids.get(id);},createElement(tag){return new Element(tag);}};
-    const calls=[];const downloads=[];const intervals=new Map();let intervalId=0;
+    const calls=[];const downloads=[];const locations=[];const intervals=new Map();let intervalId=0;
     const lesson={lesson_id:'lesson-a',topic:'Binary Search Trees',content:{explanation:'Left keys are smaller; right keys are larger.',key_concepts:[],examples:[],equations:[]},video:null};
     const replies={
         '/educational-content/lesson-a':lesson,
@@ -57,9 +58,9 @@ function setup(overrides={},options={}) {
     TestURL.createObjectURL=()=> 'blob:owned-video';TestURL.revokeObjectURL=url=>revoked.push(url);
     const window={VisualAIAuth:{protectedFetch:fetch},VisualAINotes:notes,VisualAIResources:{...require('../app/static/resource-exports.js'),download:(doc,blob,name)=>downloads.push({blob,name}),...options.resources},VisualAIAnalysis:require('../app/static/analysis-results.js'),
         VisualAILearningProfile:options.profile,
-        VisualAIPractice:{createController(){return {setSession(){}};}},location:{search:'?lesson=lesson-a'},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}}};
-    vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,Blob,Error,history:{replaceState(){}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout:options.instantTimers?(fn)=>{queueMicrotask(fn);return 0;}:setTimeout,FormData,console});
-    return {ids,document,calls,downloads,intervals,revoked};
+        VisualAIPractice:{createController(){return {setSession(){}};}},location:{search:options.search || '?lesson=lesson-a'},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}}};
+    vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,Blob,Error,history:{replaceState(state,title,url){locations.push(url);window.location.search=new URL(url,'http://localhost').search;}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout:options.instantTimers?(fn)=>{queueMicrotask(fn);return 0;}:setTimeout,FormData,console});
+    return {ids,document,calls,downloads,locations,intervals,revoked};
 }
 
 test('incomplete profile stops dashboard resource requests before loading a lesson',async()=>{
@@ -161,6 +162,71 @@ test('completed video restores from nested lesson status',async()=>{
     await flush();
     assert.equal(s.ids.get('video-player').src,'blob:owned-video');
     assert(s.calls.some(call=>call.path.endsWith('/video/stream')));
+});
+
+function enhancedVideoReplies() {
+    const base='/educational-content/lesson-a/video';
+    return {
+        [base]:{status:'COMPLETED',job_id:'generation-a'},
+        [base+'/stream?generation_id=generation-a']:()=>({ok:true,status:200,blob:async()=>({type:'video/mp4'})}),
+        [base+'/captions?generation_id=generation-a']:()=>({ok:true,status:200,blob:async()=>({type:'text/vtt'})}),
+        [base+'/metadata?generation_id=generation-a']:{generation_id:'generation-a',indexing_status:'INDEXED',provenance_kind:'SOURCE_GROUNDED',caption_url:base+'/captions',scenes:[
+            {scene_id:'scene-a',title:'Compare keys',timing:{start_seconds:4},evidence_references:[{page_start:2,quote:'<script>literal source quote</script>'}]}]},
+    };
+}
+
+test('regeneration submits selected controls and pins authenticated media and captions',async()=>{
+    const s=setup(enhancedVideoReplies());await flush();
+    s.document.getElementById('video-duration').value='60';s.document.getElementById('video-difficulty').value='advanced';
+    s.document.getElementById('video-instructions').value='Explain comparisons';
+    s.ids.get('regenerate-video-btn').dispatch('click');await flush();
+    const call=s.calls.find(c=>c.path==='/educational-content/lesson-a/video');
+    const body=JSON.parse(call.options.body);
+    assert.equal(body.regenerate,true);assert.equal(body.target_seconds,60);assert.equal(body.difficulty,'advanced');
+    assert.equal(body.grounded,false);assert.equal(body.instructions,'Explain comparisons');
+    assert(s.calls.some(c=>c.path.endsWith('/stream?generation_id=generation-a')));
+    assert(s.calls.some(c=>c.path.endsWith('/captions?generation_id=generation-a')));
+    assert.equal(s.ids.get('video-captions-track').src,'blob:owned-video');
+    const button=s.ids.get('video-scenes').children[0];assert.match(button.textContent,/0:04/);
+    s.ids.get('video-player').readyState=1;button.dispatch('click');
+    assert.equal(s.ids.get('video-player').currentTime,4);
+    assert.match(text(s.ids.get('video-evidence')),/Page 2.*<script>literal source quote<\/script>/);
+    s.ids.get('sources-nav').dispatch('click');await flush();
+    assert.equal(s.revoked.length,2);
+});
+
+test('scene search deep link restores exact generation and seeks after media metadata loads',async()=>{
+    const s=setup(enhancedVideoReplies(),{search:'?lesson=lesson-a&generation=generation-a&scene=scene-a'});
+    await flush();
+    assert(s.calls.some(c=>c.path.endsWith('/stream?generation_id=generation-a')));
+    s.ids.get('video-player').dispatch('loadedmetadata');
+    assert.equal(s.ids.get('video-player').currentTime,4);
+    assert.match(text(s.ids.get('video-evidence')),/literal source quote/);
+    assert.equal(s.ids.get('video-panel').hidden,false);
+    assert.equal(s.locations.at(-1),'/dashboard?lesson=lesson-a&generation=generation-a&scene=scene-a');
+});
+
+test('video scene search builds generation and scene specific links',async()=>{
+    const s=setup({'/educational-content/video-scenes/search?query=tree':{scenes:[{
+        lesson_id:'lesson-a',generation_id:'old-version',scene_id:'scene-b',title:'Tree comparisons'}]}});
+    await flush();s.document.getElementById('video-scene-search').value='tree';s.ids.get('video-scene-search-form').dispatch('submit');await flush();
+    const link=s.ids.get('video-scene-search-results').children[0];
+    assert.equal(link.href,'/learn?lesson=lesson-a&generation=old-version&scene=scene-b');
+});
+
+test('failed indexing preserves playback and retries only the displayed generation',async()=>{
+    const replies=enhancedVideoReplies();
+    const metadata=replies['/educational-content/lesson-a/video/metadata?generation_id=generation-a'];
+    metadata.indexing_status='FAILED';metadata.indexing_error_code='EMBEDDING_MODEL_UNAVAILABLE';
+    replies['/educational-content/lesson-a/video/reindex?generation_id=generation-a']={indexing_status:'INDEXED'};
+    const s=setup(replies);await flush();s.ids.get('start-video-btn').dispatch('click');await flush();
+    assert.equal(s.ids.get('video-player').src,'blob:owned-video');
+    assert.match(s.ids.get('video-index-status').textContent,/configured embedding model is unavailable/);
+    assert.equal(s.ids.get('retry-video-index').disabled,false);
+    s.ids.get('retry-video-index').dispatch('click');await flush();
+    assert.match(s.ids.get('video-index-status').textContent,/indexed and searchable/);
+    assert.equal(s.ids.get('retry-video-index').disabled,true);
+    assert.equal(s.calls.filter(c=>c.path==='/educational-content/lesson-a/video').length,1);
 });
 
 test('uploaded lesson is identified from its actual API source fields',async()=>{
