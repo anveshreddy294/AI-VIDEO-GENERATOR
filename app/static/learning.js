@@ -284,6 +284,9 @@
     const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void,setTopic:(enabled:boolean)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
     const practiceUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,store:Storage)=>{setSession:(session:Row|null,concepts?:Row[])=>void}}} */ (Reflect.get(window,"VisualAIPractice")).createController(document,(path,options)=>auth.protectedFetch(path,options),window.sessionStorage);
     const askUI = createAskController(document, (path,options) => auth.protectedFetch(path,options));
+    const resources = Reflect.get(window, 'VisualAIResources');
+    let diagramExport = '';
+    let diagramScope = null;
     /** @param {string} id @returns {HTMLElement} */
     function el(id) {
         const element = document.getElementById(id);
@@ -321,13 +324,28 @@
         return api(path, {method:'POST', ...(body ? {headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {})});
     }
     let navigation = 0;
-    let recentSourceId = '';
     /** @type {Source[]} */ let sources = [];
     /** @type {Source|null} */ let source = null;
     /** @type {Row|null} */ let session = null;
     /** @type {Row|null} */ let knowledge = null;
     /** @param {string} panel */
+    const analysis = Reflect.get(window, 'VisualAIAnalysis').createController(document, {
+        learn: async item => {
+            el('status').textContent = 'Preparing lesson for ' + item.filename + '…';
+            const lesson = row(await post('/educational-content', {source_id:item.source_id,source_version:item.version}));
+            await openEducationalLesson(text(lesson,'content_id'));
+        },
+        retry: async (key,jobId) => {
+            const job = row(await post('/pipeline/jobs/' + encodeURIComponent(jobId) + '/retry'));
+            key = analysis.update(key,{...job,is_finished:false},'Retry queued…');
+            await trackAnalysis(key,job);
+        },
+        explore: async item => openSource(item,item.version),
+        failure: sourceJobFailure
+    });
     function show(panel) {
+        diagramExport = ''; diagramScope = null;
+        for (const name of ['notes','diagram','lesson']) el(name + '-export-status').textContent = '';
         if (panel !== 'session') resetEducationalVideo();
         for (const name of ['sources','explorer','session']) el(name + '-panel').hidden = name !== panel;
         el('status').textContent = '';
@@ -342,30 +360,11 @@
             status: text(value, 'status'),
             version: /** @type {number} */ (value.version),
             content_ready: Boolean(value.content_ready),
+            created_at: typeof value.created_at === 'string' ? value.created_at : '',
+            topics_count: Number.isInteger(value.topics_count) ? value.topics_count : undefined,
+            topic_previews: Array.isArray(value.topic_previews) ? value.topic_previews : [],
+            analysis: value.analysis && typeof value.analysis === 'object' ? value.analysis : null,
         };
-    }
-    /** @param {Row[]} saved */
-    function renderRecent(saved) {
-        el('recent-source-card').replaceChildren();
-        const recent = sources.find(s => s.source_id === recentSourceId && (s.status === 'READY' || s.content_ready)) || sources.find(s => s.status === 'READY') || sources.find(s => s.content_ready);
-        if (recent) {
-            el('recent-source').hidden = false;
-            const card = node('article', '', 'card');
-            card.append(node('span', recent.content_ready && recent.status !== 'READY' ? 'CONTENT_READY' : recent.status, 'badge'), node('h3', recent.filename), node('p', recent.modality + ' · Version ' + recent.version, 'muted'));
-            const active = saved.find(s => s.source_id === recent.source_id && s.source_version === recent.version && s.state === 'ACTIVE');
-            if (active) {
-                card.append(button('Continue learning', () => openSession(text(active, 'session_id'), true)));
-            } else if (recent.content_ready || recent.status === 'CONTENT_READY') {
-                card.append(button('Learn with VisualAI', async () => {
-                    el('status').textContent = 'Preparing lesson for ' + recent.filename + '…';
-                    const res = row(await post('/educational-content', { source_id: recent.source_id, source_version: recent.version }));
-                    await openEducationalLesson(text(res, 'content_id'));
-                }));
-            } else {
-                card.append(button('Explore topics', () => openSource(recent, recent.version)));
-            }
-            el('recent-source-card').append(card);
-        }
     }
 
     // Active educational lesson state
@@ -472,10 +471,18 @@
     function renderEducationalDiagram(diagramData) {
         const container = el('diagram-content');
         container.replaceChildren();
+        diagramExport = ''; diagramScope = null;
+        const svg = resources.diagramSVG(diagramData);
 
         const card = node('article', '', 'notes-diagram flowchart');
         const titleText = diagramData.title && typeof diagramData.title === 'object' ? text(row(diagramData.title), 'text') : (typeof diagramData.title === 'string' ? diagramData.title : 'Process Flowchart');
         card.append(node('h3', titleText));
+        const image = document.createElement('img');
+        image.className = 'flowchart-image'; image.alt = titleText + ' — nodes and directed connections';
+        image.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+        const viewport = node('div', '', 'flowchart-viewport');
+        viewport.tabIndex = 0; viewport.setAttribute('role','region'); viewport.setAttribute('aria-label','Flowchart image. Scroll horizontally to view all connections.');
+        viewport.append(image); card.append(viewport);
 
         const nodesCollection = node('div', '', 'notes-diagram-nodes');
         const nodes = rows(diagramData.nodes || []);
@@ -519,6 +526,7 @@
             }
         }
         container.append(card);
+        diagramExport = svg; diagramScope = currentEducationalLesson;
     }
 
     /** @param {Row} assessmentData */
@@ -932,6 +940,9 @@
 
         if (lesson.notes) {
             renderEducationalNotes(row(lesson.notes));
+            const savedDetail = row(lesson.notes).detail_level;
+            if (['concise','standard','detailed'].includes(savedDetail)) /** @type {HTMLSelectElement} */ (el('notes-detail')).value = savedDetail;
+            el('notes-status').textContent = 'Saved study notes loaded.';
         } else {
             el('notes-content').replaceChildren();
             el('notes-status').textContent = 'Click "Generate Notes" to create comprehensive structured notes.';
@@ -957,6 +968,7 @@
 
     async function loadSources() {
         const ticket = ++navigation; show('sources'); session = null; currentEducationalLesson = null;
+        history.replaceState(null, '', '/dashboard');
         if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
         notesUI.setSession(null); askUI.setSession(null); practiceUI.setSession(null);
         el('source-cards').replaceChildren(node('p', 'Loading your material…', 'muted'));
@@ -964,10 +976,13 @@
         if (ticket !== navigation) return;
         el('source-cards').replaceChildren();
         el('source-count').textContent = 'My sources (' + sources.length + ')';
-        el('recent-source-card').replaceChildren();
-        el('recent-source').hidden = true;
+        analysis.sources(sources.slice(0,5));
+        for (const item of sources.slice(0,5)) if(item.analysis && item.analysis.is_finished!==true) void trackAnalysis(item.source_id+':'+item.version,row(item.analysis));
+        await restoreAnalysisJobs();
+        if (ticket !== navigation) return;
         if (!sources.length) el('source-cards').append(node('p', 'Your learning space is ready. Add your first source above.', 'muted'));
         for (const item of sources) {
+            if (analysis.hasSource(item.source_id,item.version)) continue;
             const card = node('article', '', 'card');
             const isReady = item.status === 'READY';
             const isContentReady = item.content_ready || item.status === 'CONTENT_READY' || isReady;
@@ -996,7 +1011,7 @@
             }
             if (ticket !== navigation) return;
             el('session-cards').replaceChildren();
-            renderRecent(saved);
+            // Recent materials are shown once, directly beneath the analysis panel.
 
             if (!saved.length && !educationalLessons.length) {
                 el('session-cards').append(node('p', 'Enter a topic above or choose a source to start learning.', 'muted'));
@@ -1022,7 +1037,6 @@
         } catch (error) {
             if (ticket === navigation) el('session-cards').replaceChildren(node('p', error instanceof Error ? error.message : 'Sessions unavailable.', 'muted'));
         }
-        history.replaceState(null, '', '/dashboard');
     }
 
     /** @param {Source} item @param {number} version */
@@ -1133,6 +1147,7 @@
         const detail = /** @type {HTMLSelectElement} */ (el('notes-detail'));
         const generate = /** @type {HTMLButtonElement} */ (el('generate-notes'));
         generate.disabled = true; detail.disabled = true;
+        el('notes-content').replaceChildren();
         el('notes-status').textContent = 'Generating comprehensive structured notes…';
         try {
             const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/notes', {detail_level: detail.value}));
@@ -1149,6 +1164,7 @@
         const selected = currentEducationalLesson;
         const generate = /** @type {HTMLButtonElement} */ (el('generate-diagram'));
         generate.disabled = true;
+        diagramExport = ''; diagramScope = null; el('diagram-content').replaceChildren();
         el('diagram-status').textContent = 'Generating algorithmic flowchart diagram…';
         try {
             const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/diagram'));
@@ -1224,30 +1240,86 @@
     });
     el('complete-session').addEventListener('click', () => run(() => transition('complete')));
     el('abandon-session').addEventListener('click', () => run(() => transition('abandon')));
+    function exportText(resource,format) {
+        const scope=currentEducationalLesson || session;
+        const status=el(resource+'-export-status');
+        try {
+            if(!scope || el('session-panel').hidden) throw new Error('Open your learning resource before downloading.');
+            const content=el(resource==='lesson'?'concept-cards':'notes-content');
+            const result=resources.serialize(content,format==='md');
+            const topic=el('session-title').textContent || 'lesson';
+            const body=resource==='lesson'?(format==='md'?'# ':'')+topic+'\n\n'+result:result;
+            resources.download(document,new Blob([body],{type:format==='md'?'text/markdown;charset=utf-8':'text/plain;charset=utf-8'}),resources.filename(topic,resource,format));
+            status.textContent='Download started.';
+        } catch(error) {status.textContent=error instanceof Error?error.message:'Download failed. Please try again.';}
+    }
+    for(const [id,resource,format] of [['download-notes-md','notes','md'],['download-notes-txt','notes','txt'],['download-lesson-md','lesson','md']]) {
+        el(id).addEventListener('click',()=>exportText(resource,format));
+    }
+    for(const format of ['svg','png']) el('download-diagram-'+format).addEventListener('click',async()=>{
+        const status=el('diagram-export-status');const svg=diagramExport,scope=diagramScope;
+        const control=/** @type {HTMLButtonElement} */(el('download-diagram-'+format));control.disabled=true;
+        try {
+            if(!svg || !scope || scope!==currentEducationalLesson || el('session-panel').hidden) throw new Error('Generate a valid flowchart before downloading.');
+            const topic=el('session-title').textContent || 'lesson';
+            const blob=format==='svg'?new Blob([svg],{type:'image/svg+xml;charset=utf-8'}):await resources.png(svg);
+            if(scope!==currentEducationalLesson || svg!==diagramExport) return;
+            resources.download(document,blob,resources.filename(topic,'flowchart',format));status.textContent='Download started.';
+        } catch(error) {if(scope===diagramScope)status.textContent=error instanceof Error?error.message:'Flowchart export failed. Download SVG instead.';}
+        finally {control.disabled=false;}
+    });
     const uploadStatus = createUploadStatus(el('upload-status'));
+    const activeAnalysisJobs = new Set();
+    let jobsRestored = false;
+    function savedAnalysisJobs() {
+        try {const ids=JSON.parse(window.sessionStorage.getItem('visualai-analysis-jobs') || '[]');return Array.isArray(ids)?ids.filter(id=>typeof id==='string' && /^JOB_[a-zA-Z0-9_-]+$/.test(id)).slice(-8):[];}catch{return [];}
+    }
+    function rememberAnalysisJob(id) {
+        try {window.sessionStorage.setItem('visualai-analysis-jobs',JSON.stringify([...new Set([...savedAnalysisJobs(),id])].slice(-8)));}catch{/* Storage may be disabled; polling still works. */}
+    }
+    async function restoreAnalysisJobs() {
+        if(jobsRestored)return;jobsRestored=true;
+        await Promise.all(savedAnalysisJobs().map(async id=>{
+            try {
+                const job=row(await api('/pipeline/jobs/'+encodeURIComponent(id)));
+                const key=analysis.update(id,job,job.status==='failed'?sourceJobFailure(job.failure):'');
+                if(job.is_finished!==true) void trackAnalysis(key,job);
+            } catch {/* Another account's or expired jobs never render. */}
+        }));
+    }
+    async function trackAnalysis(initialKey,initialJob) {
+        const jobId=text(initialJob,'job_id');if(activeAnalysisJobs.has(jobId))return;
+        activeAnalysisJobs.add(jobId);rememberAnalysisJob(jobId);let key=initialKey;
+        try {
+            for(let i=0;i<MAX_JOB_POLLS;i++) {
+                const current=row(await api('/pipeline/jobs/'+encodeURIComponent(jobId)));
+                uploadStatus.progress(current);
+                const message=current.is_finished===true?(current.status==='completed'?'':sourceJobFailure(current.failure)):el('upload-status').textContent;
+                key=analysis.update(key,current,message);
+                if(current.is_finished===true) {
+                    if(current.status!=='completed'){uploadStatus.fail(current.failure);return;}
+                    uploadStatus.progress({current_stage:row(current.result).content_ready===true?'content_ready':'source_ready',result:current.result});
+                    if(!el('sources-panel').hidden) {
+                        try{await loadSources();}catch{el('status').textContent='Your material was saved. Refresh the source list to open it.';}
+                    }return;
+                }
+                await new Promise(resolve=>setTimeout(resolve,POLL_INTERVAL_MS));
+            }
+            throw new Error('Analysis is still running. Refresh your sources before retrying.');
+        }catch(error){uploadStatus.error(error);analysis.error(key,el('upload-status').textContent);}
+        finally{activeAnalysisJobs.delete(jobId);}
+    }
     el('upload-form').addEventListener('submit', e => {
         e.preventDefault(); (async () => {
             const file = /** @type {HTMLInputElement} */ (el('upload-file')).files?.[0]; if (!file) return;
-            const b = /** @type {HTMLButtonElement} */ (el('upload-button')); b.disabled = true;
+            const b = /** @type {HTMLButtonElement} */ (el('upload-button')); if(b.disabled)return;b.disabled = true;
             uploadStatus.start();
+            const key=analysis.begin(file);
             const body = new FormData(); body.append('file', file);
             try {
                 const job = row(await api('/pipeline/upload-and-assess', { method: 'POST', body }));
-                for (let i = 0; i < MAX_JOB_POLLS; i++) {
-                    const current = row(await api('/pipeline/jobs/' + encodeURIComponent(text(job, 'job_id'))));
-                    uploadStatus.progress(current);
-                    if (current.is_finished === true) {
-                        if (current.status !== 'completed') { uploadStatus.fail(current.failure); return; }
-                        recentSourceId = typeof row(current.result).source_id === 'string' ? text(row(current.result), 'source_id') : '';
-                        uploadStatus.progress({ current_stage: row(current.result).content_ready === true ? 'content_ready' : 'source_ready', result: current.result });
-                        try { await loadSources(); }
-                        catch { el('status').textContent = 'Your material was saved. Refresh the source list to open it.'; }
-                        return;
-                    }
-                    await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
-                }
-                throw new Error('Analysis is still running. Refresh your sources before retrying.');
-            } catch (error) { uploadStatus.error(error); } finally { b.disabled = false; }
+                await trackAnalysis(key,job);
+            } catch (error) {uploadStatus.error(error);analysis.error(key,el('upload-status').textContent,true);} finally { b.disabled = false; }
         })();
     });
     run(async () => {

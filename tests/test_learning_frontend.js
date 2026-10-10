@@ -185,7 +185,8 @@ test('upload progress is indeterminate and failures do not overwrite the learnin
  const script=fs.readFileSync(path.join(__dirname,'../app/static/learning.js'),'utf8');
  const start=script.indexOf("el('upload-form').addEventListener");
  const handler=script.slice(start,script.indexOf("    run(async",start));
- assert(handler.includes('uploadStatus.progress(current)'));assert(handler.includes('uploadStatus.fail(current.failure)'));
+ assert(handler.includes('trackAnalysis(key,job)'));
+ assert(script.includes('uploadStatus.progress(current)'));assert(script.includes('uploadStatus.fail(current.failure)'));
  assert(!handler.includes('status.textContent'));assert(!handler.includes('run(async'));
 });
 

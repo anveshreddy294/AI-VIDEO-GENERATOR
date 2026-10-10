@@ -14,4 +14,6 @@
 
 .upload-help .upload-guidance{border:0;border-radius:0;padding:0;margin-top:6px;background:transparent}.upload-help .upload-guidance summary{font-size:13px;font-weight:600;color:var(--green)}.upload-help .upload-guidance[open] summary{margin-bottom:6px}.upload-help p{line-height:1.45}
 
+#analysis-results{margin:1.5rem 0}.analysis-result{overflow-wrap:anywhere}.analysis-result h3{margin-top:0}.card h3{overflow-wrap:anywhere}#topic-input{min-width:0;max-width:100%}.resource-downloads{display:flex;flex-wrap:wrap;gap:.6rem;margin:1rem 0}.flowchart-viewport{max-width:100%;overflow-x:auto}.flowchart-image{display:block;width:100%;min-width:640px;height:auto;background:white;border-radius:8px}.analysis-message{white-space:pre-wrap}.resource-downloads button{max-width:100%}
+
 #practice-content fieldset label{display:flex;align-items:center;gap:.65rem;padding:.65rem}#practice-content video{width:100%;max-height:32rem}#practice-content button,#mastery-content button{margin:.5rem .5rem .5rem 0}#source-history{margin:1.5rem 0}#recent-source{margin:1.5rem 0}

@@ -30,7 +30,7 @@ const flush=async()=>{for(let i=0;i<5;i++)await new Promise(resolve=>setImmediat
 function setup(overrides={},options={}) {
     const ids=new Map();
     const document={body:{dataset:{jobPollTimeoutSeconds:'3600'}},getElementById(id){if(!ids.has(id))ids.set(id,new Element());return ids.get(id);},createElement(tag){return new Element(tag);}};
-    const calls=[];const intervals=new Map();let intervalId=0;
+    const calls=[];const downloads=[];const intervals=new Map();let intervalId=0;
     const lesson={lesson_id:'lesson-a',topic:'Binary Search Trees',content:{explanation:'Left keys are smaller; right keys are larger.',key_concepts:[],examples:[],equations:[]},video:null};
     const replies={
         '/educational-content/lesson-a':lesson,
@@ -55,10 +55,10 @@ function setup(overrides={},options={}) {
     const TestURL=class extends URL {};
     const revoked=[];
     TestURL.createObjectURL=()=> 'blob:owned-video';TestURL.revokeObjectURL=url=>revoked.push(url);
-    const window={VisualAIAuth:{protectedFetch:fetch},VisualAINotes:notes,
+    const window={VisualAIAuth:{protectedFetch:fetch},VisualAINotes:notes,VisualAIResources:{...require('../app/static/resource-exports.js'),download:(doc,blob,name)=>downloads.push({blob,name}),...options.resources},VisualAIAnalysis:require('../app/static/analysis-results.js'),
         VisualAIPractice:{createController(){return {setSession(){}};}},location:{search:'?lesson=lesson-a'},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}}};
-    vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,history:{replaceState(){}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout:options.instantTimers?(fn)=>{queueMicrotask(fn);return 0;}:setTimeout,FormData,console});
-    return {ids,document,calls,intervals,revoked};
+    vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,Blob,Error,history:{replaceState(){}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout:options.instantTimers?(fn)=>{queueMicrotask(fn);return 0;}:setTimeout,FormData,console});
+    return {ids,document,calls,downloads,intervals,revoked};
 }
 
 test('topic notes detail remains enabled and reaches notes API',async()=>{
@@ -188,9 +188,39 @@ test('completed upload remains successful if refreshing the source list fails',a
         '/sources':async()=>{throw new Error('private upstream error');}
     },{instantTimers:true});
     await flush();
+    s.ids.get('sources-panel').hidden=false;
     s.document.getElementById('upload-file').files=[new File(['synthetic'],'notes.txt',{type:'text/plain'})];
     s.ids.get('upload-form').dispatch('submit');await flush();
     assert.equal(s.ids.get('upload-status').textContent,'Extracted content is available.');
     assert.match(s.ids.get('status').textContent,/Your material was saved/);
     assert.equal(s.ids.get('upload-button').disabled,false);
+});
+
+test('notes downloads reuse actual generated content with UTF-8 MIME and safe filenames',async()=>{
+    const s=setup();await flush();s.ids.get('generate-notes').dispatch('click');await flush();
+    const count=s.calls.length;
+    for(const format of ['md','txt'])s.ids.get('download-notes-'+format).dispatch('click');await flush();
+    assert.equal(s.calls.length,count);assert.equal(s.downloads.length,2);
+    assert.equal(s.downloads[0].name,'Binary Search Trees-notes.md');assert.equal(s.downloads[1].name,'Binary Search Trees-notes.txt');
+    assert.equal(s.downloads[0].blob.type,'text/markdown;charset=utf-8');assert.equal(s.downloads[1].blob.type,'text/plain;charset=utf-8');
+    assert.match(await s.downloads[0].blob.text(),/Detailed BST notes.*\n[\s\S]*Search by comparison/);
+});
+test('empty notes and unavailable resources cannot download; navigation invalidates old content',async()=>{
+    const s=setup();await flush();s.ids.get('download-notes-md').dispatch('click');assert.equal(s.downloads.length,0);
+    assert.match(s.ids.get('notes-export-status').textContent,/Generate/);
+    s.ids.get('download-lesson-md').dispatch('click');assert.equal(s.downloads.length,1);
+    s.ids.get('sources-nav').dispatch('click');await flush();s.ids.get('download-lesson-md').dispatch('click');
+    assert.equal(s.downloads.length,1);assert.match(s.ids.get('lesson-export-status').textContent,/Open/);
+});
+test('diagram SVG is the same image displayed and exports no new provider request',async()=>{
+    const s=setup();await flush();s.ids.get('generate-diagram').dispatch('click');await flush();
+    const image=descendants(s.ids.get('diagram-content')).find(el=>el.tag==='img');assert(image);
+    const count=s.calls.length;s.ids.get('download-diagram-svg').dispatch('click');await flush();assert.equal(s.calls.length,count);
+    const svg=await s.downloads[0].blob.text();assert.equal(image.src,'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg));assert.match(svg,/Compare.*Found/);
+    assert.equal(s.downloads[0].blob.type,'image/svg+xml;charset=utf-8');
+});
+test('late PNG conversion cannot export the previous user scope after navigation',async()=>{
+    let finish;const s=setup({}, {resources:{png:()=>new Promise(resolve=>{finish=resolve;})}});
+    await flush();s.ids.get('generate-diagram').dispatch('click');await flush();s.ids.get('download-diagram-png').dispatch('click');await flush();
+    s.ids.get('sources-nav').dispatch('click');await flush();finish(new Blob(['test'],{type:'image/png'}));await flush();assert.equal(s.downloads.length,0);
 });

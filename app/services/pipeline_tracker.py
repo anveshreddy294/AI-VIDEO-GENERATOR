@@ -263,6 +263,42 @@ class DurableJobStore:
             logger.warning("[durable_job_store] Failed loading job %s: %s", job_id, exc)
             return None
 
+    def source_analysis_summaries(self, owner_id: str) -> dict[tuple[str, int], dict[str, Any]]:
+        """Read latest owned source/version status without exposing job payloads or doing work."""
+        summaries: dict[tuple[str, int], dict[str, Any]] = {}
+        with self._get_conn() as conn:
+            records = conn.execute(
+                "SELECT job_id,status,current_stage,progress_percent,is_finished,metadata_json,result_json,failure_json "
+                "FROM pipeline_jobs WHERE job_type = 'source_ingestion' "
+                "AND json_extract(metadata_json, '$.source_owner') = ? ORDER BY created_at DESC",
+                (owner_id,),
+            )
+            for record in records:
+                try:
+                    metadata = json.loads(record['metadata_json'] or '{}')
+                    result = json.loads(record['result_json'] or '{}')
+                    if not isinstance(metadata, dict) or not isinstance(result, dict):
+                        continue
+                    source_id = result.get('source_id') or metadata.get('source_id')
+                    version = result.get('version') or metadata.get('source_version')
+                    if metadata.get('source_owner') != owner_id or not isinstance(source_id, str) or type(version) is not int or version < 1:
+                        continue
+                    key = (source_id, version)
+                    if key in summaries:
+                        continue
+                    safe_result = {"source_id": source_id, "version": version, "content_ready": result.get('content_ready') is True,
+                        "warnings": [w for w in result.get('warnings', []) if w in {'PARTIAL_VISUAL_VERIFICATION', 'OPTIONAL_VISUAL_CONTENT_UNAVAILABLE'}]}
+                    if result.get('knowledge_state') == 'READY':
+                        safe_result['knowledge_state'] = 'READY'
+                    failure = SourceFailure.model_validate_json(record['failure_json']) if record['failure_json'] else None
+                    summaries[key] = {"job_id": record['job_id'], "status": record['status'], "current_stage": record['current_stage'],
+                        "progress_percent": record['progress_percent'], "is_finished": bool(record['is_finished']), "result": safe_result,
+                        "retry_supported": record['status'] == 'failed' and failure is not None and failure.retryable and metadata.get('retry_count', 0) < 3,
+                        "failure": failure.model_dump(mode='json', include={'stage', 'code', 'reason_code', 'vision_error_code', 'validation_detail', 'retryable'}) if failure else None}
+                except (ValueError, TypeError):
+                    continue
+        return summaries
+
     def recover_interrupted_jobs(self) -> list[PipelineJob]:
         """Detect and recover uncompleted jobs when server boots.
 
@@ -465,6 +501,9 @@ class JobManager:
             if job is not None:
                 self._jobs[job_id] = job
         return job
+
+    def source_analysis_summaries(self, owner_id: str) -> dict[tuple[str, int], dict[str, Any]]:
+        return self._store.source_analysis_summaries(owner_id)
 
     async def emit_event(
         self,

@@ -210,7 +210,13 @@ def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str,
 
     if repository is not None:
         sources_list = []
-        for row in repository.list_sources():
+        records = repository.list_sources()
+        from .services.pipeline_tracker import job_manager
+        try:
+            summaries = job_manager.source_analysis_summaries(repository.owner_id)
+        except Exception:
+            summaries = {}
+        for row in records:
             has_units = False
             try:
                 has_units = row.status == "READY" or repository.has_content_units(row.source_id, row.version)
@@ -224,6 +230,7 @@ def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str,
                 "created_at": row.created_at,
                 "version": row.version,
                 "content_ready": has_units or (row.status == "READY"),
+                "analysis": summaries.get((row.source_id, row.version)),
             })
         return {"sources": sources_list}
     index = _load_sources_index()

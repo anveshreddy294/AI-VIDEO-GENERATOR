@@ -35,3 +35,13 @@ def notes_script() -> FileResponse:
 @router.get("/assets/practice.js", include_in_schema=False)
 def practice_script() -> FileResponse:
     return FileResponse(STATIC / "practice.js", media_type="application/javascript", headers={"Cache-Control":"no-cache"})
+
+
+@router.get("/assets/resource-exports.js", include_in_schema=False)
+def resource_exports_script() -> FileResponse:
+    return FileResponse(STATIC / "resource-exports.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/assets/analysis-results.js", include_in_schema=False)
+def analysis_results_script() -> FileResponse:
+    return FileResponse(STATIC / "analysis-results.js", media_type="application/javascript", headers={"Cache-Control": "no-cache"})

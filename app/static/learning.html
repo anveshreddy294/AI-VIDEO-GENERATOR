@@ -2,7 +2,7 @@
 <html lang="en" data-source-provider="supabase">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisualAI · Your learning space</title><link rel="stylesheet" href="/assets/learning.css">
-<script defer src="/assets/auth.js"></script><script defer src="/assets/notes.js"></script><script defer src="/assets/practice.js"></script><script defer src="/assets/learning.js"></script></head>
+<script defer src="/assets/auth.js"></script><script defer src="/assets/resource-exports.js"></script><script defer src="/assets/analysis-results.js"></script><script defer src="/assets/notes.js"></script><script defer src="/assets/practice.js"></script><script defer src="/assets/learning.js"></script></head>
 <body data-job-poll-timeout-seconds="__JOB_POLL_TIMEOUT_SECONDS__"><header><a class="brand" href="/dashboard">Visual<span>AI</span><small>Your learning space</small></a>
 <nav aria-label="Main"><button id="sources-nav" type="button">My sources</button><button id="logout" type="button">Sign out</button></nav></header>
 <main><p class="eyebrow">EXPLORE · FOCUS · UNDERSTAND</p>
@@ -30,8 +30,8 @@
 </details>
 </div>
 <p>No quiz starts automatically. Explore your topics when processing finishes.</p></form>
-<div id="upload-status" role="status" aria-live="polite"></div>
-<section id="recent-source" hidden aria-labelledby="recent-title"><h2 id="recent-title">Ready to learn</h2><div id="recent-source-card"></div></section>
+<section id="analysis-results" aria-labelledby="analysis-title"><h2 id="analysis-title">Your analyzed materials</h2>
+<div id="upload-status" role="status" aria-live="polite"></div><div id="analysis-cards" class="grid"></div></section>
 <details id="source-history"><summary id="source-count">My sources (0)</summary><div id="source-cards" class="grid"></div></details>
 <h2>Pick up where you left off</h2><div id="session-cards" class="grid"></div></section>
 <section id="explorer-panel" hidden aria-labelledby="explorer-title"><button type="button" class="back" id="explorer-back">← My sources</button>
@@ -51,17 +51,18 @@
 <p class="muted">Answers stay within this session’s selected material.</p>
 <form id="ask-form"><label for="question">Your question</label><textarea disabled id="question" rows="3" maxlength="4000" required placeholder="What would you like to understand?"></textarea>
 <button id="ask-button" type="submit" class="primary">Ask VisualAI</button></form><p id="ask-status" role="status" aria-live="polite"></p><div id="answer" role="log" aria-live="polite" aria-label="Current session conversation"></div><ul id="citations"></ul></section>
-<section id="learn-view" class="card" aria-labelledby="learn-title"><h2 id="learn-title">Learn the essentials</h2><p class="muted">Key concepts, detailed explanations, and foundational formulas.</p><div id="concept-cards"></div></section></div>
+<section id="learn-view" class="card" aria-labelledby="learn-title"><h2 id="learn-title">Learn the essentials</h2><p class="muted">Key concepts, detailed explanations, and foundational formulas.</p><button id="download-lesson-md" type="button">Download lesson Markdown</button><p id="lesson-export-status" role="status" aria-live="polite"></p><div id="concept-cards"></div></section></div>
 <section id="notes-panel" class="card notes-panel" hidden aria-labelledby="notes-title">
 <h2 id="notes-title">Notes</h2><div class="notes-controls"><div><label for="notes-detail">Detail level</label>
 <select id="notes-detail"><option value="concise">Concise</option><option value="standard" selected>Standard</option><option value="detailed">Detailed</option></select></div>
 <button id="generate-notes" type="button" class="primary">Generate Notes</button></div>
-<p id="notes-status" role="status" aria-live="polite">Generate grounded notes for this learning session.</p><div id="notes-content"></div></section>
+<p id="notes-status" role="status" aria-live="polite">Generate grounded notes for this learning session.</p><div class="resource-downloads" aria-label="Download study notes"><button id="download-notes-md" type="button">Download notes Markdown</button><button id="download-notes-txt" type="button">Download notes text</button></div><p id="notes-export-status" role="status" aria-live="polite"></p><div id="notes-content"></div></section>
 <section id="diagram-panel" class="card" hidden aria-labelledby="diagram-title">
 <h2 id="diagram-title">Flowchart Diagram</h2>
 <p class="muted">Algorithmic process flow and structural concept mapping.</p>
 <div style="margin: 16px 0;"><button id="generate-diagram" type="button" class="primary">Generate Diagram</button></div>
 <p id="diagram-status" role="status" aria-live="polite"></p>
+<div class="resource-downloads" aria-label="Download flowchart"><button id="download-diagram-svg" type="button">Download flowchart SVG</button><button id="download-diagram-png" type="button">Download flowchart PNG</button></div><p id="diagram-export-status" role="status" aria-live="polite"></p>
 <div id="diagram-content"></div></section>
 <section id="practice-panel" class="card" hidden aria-labelledby="practice-title"><h2 id="practice-title">Practice Assessment</h2>
 <div style="margin: 16px 0;"><button id="start-practice" type="button" class="primary">Start assessment</button><button id="refresh-practice" type="button">Refresh progress</button></div>
