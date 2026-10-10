@@ -1,5 +1,43 @@
 # Video API enhancement implementation — 2026-10-11
 
+## Continuous topic visuals update
+
+Baseline: branch `new-implementations`, commit `8a97eda`; only the existing
+untracked `LEARNING_PIPELINE_AUDIT.md` was present. It was left untouched.
+The educational Video API baseline passed 31 tests. Inspection of the user
+recording showed extended empty navy frames. Existing Manim scenes can fade out
+before their requested duration; scene composition pads short visuals with their
+final frame, which can therefore be empty. Other scenes displayed long text.
+
+New educational plans use `visual_style=topic_2d_v1` in the existing renderer.
+`app/services/video/topic_visuals.py` draws continuous local 2D illustrations,
+short idea cards and changing visual focus throughout each scene. Presets cover
+BSTs, ordered arrays, photosynthesis, water cycles and illustrative orbits.
+Other topics use content-derived concept, sequence, comparison or cycle layouts.
+The model planner requests six to eight concise scenes; the lesson fallback can
+add up to two existing key-concept explanations. Scene count remains bounded by
+available content, speech budget and the existing plan validator.
+
+Grounded excerpts use source-derived cards, without adding domain-preset facts.
+Schematics are labeled as illustrations, not source evidence or photographs.
+No image API, external downloads, packages or agents were added. Narration,
+measured composition, captions, authentication, download routes and generation
+history retain their contracts. Old plans retain their rendering behavior;
+completed videos are unchanged. Select **Generate a new version** for new visuals.
+
+Verification includes decoded MP4 frames near the end of each test scene,
+nonempty illustration regions and temporal visual changes, plus existing
+educational video, audio, timeline, indexing and persistence regressions.
+Preview frames were rendered locally and visually inspected. Two initial index
+test failures were fixture assumptions about a four-scene duration; the fake
+probe now uses the fixture artifact's duration while retaining duration-mismatch
+validation. Production spoken-provider generation and browser playback of a new
+generation have not been rerun for this visual update.
+
+Regression result: **125 passed**, with two existing deprecation warnings, in
+114.73 seconds. This includes the real local educational rendering pipeline;
+synthetic test audio is not evidence of a new live spoken-provider run.
+
 ## Baseline and scope
 
 Branch: `new-implementations`, starting commit `a3c38c9`.

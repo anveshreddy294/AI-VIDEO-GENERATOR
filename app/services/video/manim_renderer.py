@@ -67,6 +67,13 @@ def render_video_plan(plan: VideoPlan, output_mp4: Path) -> Path:
     """Render a VideoPlan to an MP4 video file."""
     output_mp4.parent.mkdir(parents=True, exist_ok=True)
 
+    # Continuous 2D storyboards keep visuals present until speech finishes.
+    # Older Manim plans retain their original rendering behavior.
+    if plan.provenance.get("visual_style") == "topic_2d_v1":
+        res = _render_with_pillow_opencv(plan, output_mp4)
+        _validate_raw_video(res)
+        return res
+
     # For multi-minute videos (>60s) or fast quality settings, use high-speed OpenCV/Pillow engine
     # which renders in seconds with dynamic on-screen captions and zero display/LaTeX overhead
     if plan.duration_seconds > 60 or getattr(settings, "manim_quality", "") in ("fast", "pillow", "opencv"):
@@ -291,6 +298,20 @@ def _render_with_pillow_opencv(plan: VideoPlan, output_mp4: Path) -> Path:
     width, height = 1280, 720
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = cv2.VideoWriter(str(output_mp4), fourcc, float(fps), (width, height))
+    if not out.isOpened():
+        raise RuntimeError("Video writer could not be opened")
+
+    if plan.provenance.get("visual_style") == "topic_2d_v1":
+        from .topic_visuals import draw_topic_frame
+        try:
+            for scene in plan.scenes:
+                frames = max(1, round(scene.duration_seconds * fps))
+                for frame_index in range(frames):
+                    img = draw_topic_frame(plan, scene, frame_index / max(1, frames-1), font=font)
+                    out.write(cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR))
+        finally:
+            out.release()
+        return output_mp4
 
     # Pre-index narration text by scene_index
     narration_by_scene: dict[int, str] = {}

@@ -184,7 +184,7 @@ def test_regeneration_keeps_completed_artifact_and_pinned_history(service, monke
     asyncio.run(scenario())
 
 
-def fake_index(monkeypatch, *, broken=False):
+def fake_index(monkeypatch, *, broken=False, duration=8):
     from app.db import vector_store as vs
     class Index:
         points = {}
@@ -205,13 +205,13 @@ def fake_index(monkeypatch, *, broken=False):
     monkeypatch.setattr(vs,"semantic_filter_conditions",lambda:[])
     monkeypatch.setattr(vs,"ensure_collection",lambda *args:None)
     from app.services.video import video_compositor
-    monkeypatch.setattr(video_compositor,"validate_video_artifact",lambda *args,**kwargs:{"duration":8})
+    monkeypatch.setattr(video_compositor,"validate_video_artifact",lambda *args,**kwargs:{"duration":duration})
     return index
 
 
 def test_index_reconciliation_idempotency_search_owner_digest_and_missing_file(service, monkeypatch):
     lesson, artifact = completed(service)
-    index = fake_index(monkeypatch)
+    index = fake_index(monkeypatch, duration=artifact.duration_seconds)
     for _ in range(2):
         assert ev.reconcile_scene_index(service.repository,lesson.lesson_id,"generation-a")["indexing_status"] == "INDEXED"
     assert len(index.points) == len(lesson.video_generations["generation-a"].plan.scenes)
@@ -230,14 +230,14 @@ def test_index_reconciliation_idempotency_search_owner_digest_and_missing_file(s
 
 
 def test_index_failure_keeps_completed_video_and_retry_succeeds(service, monkeypatch):
-    lesson, _ = completed(service)
-    fake_index(monkeypatch,broken=True)
+    lesson, artifact = completed(service)
+    fake_index(monkeypatch,broken=True,duration=artifact.duration_seconds)
     result = ev.reconcile_scene_index(service.repository,lesson.lesson_id,"generation-a")
     assert result["indexing_status"] == "FAILED"
     saved = service.get_lesson(lesson.lesson_id)
     assert saved.video["status"] == "COMPLETED"
     assert "private-vector-error" not in saved.model_dump_json()
-    fake_index(monkeypatch)
+    fake_index(monkeypatch,duration=artifact.duration_seconds)
     assert ev.reconcile_scene_index(service.repository,lesson.lesson_id,"generation-a")["indexing_status"] == "INDEXED"
 
 
