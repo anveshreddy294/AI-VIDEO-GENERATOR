@@ -154,6 +154,23 @@ def validate_video_plan(plan: VideoPlan, max_duration_tolerance: float | None = 
     if not plan.narration:
         raise SceneValidationError("VideoPlan must contain at least one narration segment")
 
+    if len({scene.scene_id for scene in plan.scenes}) != len(plan.scenes):
+        raise SceneValidationError("Duplicate scene identifier")
+
+    for scene in plan.scenes:
+        for reference in scene.evidence_references:
+            if (reference.source_id != plan.source_id
+                    or reference.source_version != plan.source_version
+                    or reference.source_content_id not in plan.source_content_ids
+                    or reference.chunk_id not in plan.source_chunk_ids
+                    or reference.chunk_id not in scene.source_chunk_ids
+                    or reference.concept_id != plan.concept_id):
+                raise SceneValidationError("Scene evidence is outside the video source scope")
+            if (reference.char_end - reference.char_start != len(reference.quote)
+                    or not any(reference.quote in text for text in
+                               (scene.text or "", scene.narration or ""))):
+                raise SceneValidationError("Scene evidence does not match the quoted scene content")
+
     # Validate each scene
     total_scene_duration = 0.0
     for idx, scene in enumerate(plan.scenes):

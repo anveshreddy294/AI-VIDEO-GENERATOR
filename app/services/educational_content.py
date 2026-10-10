@@ -23,6 +23,7 @@ from .storage import atomic_json, serialized, store_lock, validate_id
 from .interest_personalization import personalize_request, build_context
 from .learning_profile import repository_preferences
 from .video.scene_schema import ScenePlan, SceneType, NarrationSegment, VideoPlan
+from .video.generation_lock import GenerationLock
 from .video.scene_validator import validate_video_plan
 from .video.manim_renderer import render_video_plan
 from .video.tts import get_tts_provider
@@ -276,6 +277,29 @@ class GeneratedAnswer(DTO):
     answer: Text
 
 
+class EducationalVideoGeneration(BaseModel):
+    """Private generation history in the established owner-scoped lesson store."""
+    job_id: str
+    prior_job_id: str | None = None
+    plan: VideoPlan
+    status: str = "QUEUED"
+    actual_duration_seconds: float | None = None
+    error_code: str | None = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    completed_at: str | None = None
+    traceability_status: Literal["UNAVAILABLE"] = "UNAVAILABLE"
+    timing_status: Literal["UNAVAILABLE"] = "UNAVAILABLE"
+    indexing_status: Literal["NOT_REQUESTED"] = "NOT_REQUESTED"
+
+
+def public_lesson_video(video: dict[str, Any] | None) -> dict[str, Any] | None:
+    if video is None:
+        return None
+    return {key: value for key, value in video.items() if key in {
+        "job_id", "status", "stage", "progress", "duration_seconds", "video_url", "error_code",
+    }}
+
+
 class EducationalLesson(BaseModel):
     model_config = ConfigDict(extra="ignore")
     _persisted_state: dict[str, Any] = PrivateAttr(default_factory=dict)
@@ -290,6 +314,7 @@ class EducationalLesson(BaseModel):
     assessment: EducationalAssessment | None = None
     submissions: list[dict[str, Any]] = Field(default_factory=list)
     video: dict[str, Any] | None = None
+    video_generations: dict[str, EducationalVideoGeneration] = Field(default_factory=dict)
     ask_history: list[dict[str, Any]] = Field(default_factory=list)
     progress: dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -309,15 +334,36 @@ class EducationalLesson(BaseModel):
 def save_educational_lesson(lesson: EducationalLesson) -> None:
     path = LESSONS_DIR / str(lesson.user_id) / f"{validate_id(lesson.lesson_id)}.json"
     with store_lock():
+        if lesson.video and (generation := lesson.video_generations.get(lesson.video.get("job_id"))):
+            generation.status = lesson.video["status"]
+            generation.error_code = lesson.video.get("error_code")
+            if generation.status == "COMPLETED":
+                generation.actual_duration_seconds = lesson.video.get("duration_seconds")
+            if generation.status in {"COMPLETED", "FAILED"} and generation.completed_at is None:
+                generation.completed_at = datetime.now(timezone.utc).isoformat()
         own_state = lesson.model_dump(mode="json")
         baseline = lesson._persisted_state
         merged = json.loads(path.read_text(encoding="utf-8")) if baseline and path.exists() else dict(own_state)
+        before_video, current_video = baseline.get("video") or {}, merged.get("video") or {}
+        own_video = own_state.get("video") or {}
+        stale_video = bool(baseline and own_video.get("job_id") == before_video.get("job_id")
+                           and current_video.get("job_id") != before_video.get("job_id"))
         for key, value in own_state.items():
             if baseline and value == baseline.get(key):
                 continue
-            if key == "progress" and baseline:
+            if key == "video" and baseline and value:
+                # A delayed worker must never replace a newer generation's status.
+                if stale_video:
+                    continue
+                merged[key] = value
+            elif key == "video_generations" and baseline:
+                history = dict(merged.get(key, {}))
+                history.update({k: v for k, v in value.items() if v != baseline.get(key, {}).get(k)})
+                merged[key] = history
+            elif key == "progress" and baseline:
                 progress = dict(merged.get(key, {}))
-                progress.update({k: v for k, v in value.items() if v != baseline.get(key, {}).get(k)})
+                progress.update({k: v for k, v in value.items() if v != baseline.get(key, {}).get(k)
+                                 and not (stale_video and k == "video_completed")})
                 merged[key] = progress
             elif key in {"ask_history", "submissions"} and baseline:
                 existing = list(merged.get(key, []))
@@ -350,11 +396,38 @@ def get_educational_lesson(user_id: UUID, lesson_id: str | UUID) -> EducationalL
                 c["user_id"] = UUID(c["user_id"])
             data["content"] = EducationalContent.model_validate(c)
         lesson = EducationalLesson.model_validate(data)
+        if lesson.user_id != user_id or lesson.content.user_id != user_id or lesson.lesson_id != vid:
+            return None
         lesson._persisted_state = lesson.model_dump(mode="json")
         return lesson
     except Exception as exc:
         logger.warning("[educational_lesson] Failed to load lesson %s: %s", lesson_id, exc)
         return None
+
+
+@serialized
+def recover_educational_video(user_id: UUID, lesson_id: str) -> EducationalLesson | None:
+    """An unlocked nonterminal job is interrupted, even after a hard process exit.
+
+    All starts hold the OS lock before saving QUEUED. Checking the same lock
+    avoids declaring another process's live work dead based on local memory.
+    """
+    lesson = get_educational_lesson(user_id, lesson_id)
+    if not lesson or not lesson.video or lesson.video.get("status") in {"COMPLETED", "FAILED", "NOT_STARTED"}:
+        return lesson
+    job_id = lesson.video.get("job_id")
+    if not job_id:
+        return lesson
+    lease = GenerationLock.acquire(settings.runtime_dir / "video_execution_locks", job_id)
+    if lease is None:
+        return lesson
+    try:
+        lesson.video.update(status="FAILED", stage="INTERRUPTED", error_code="VIDEO_JOB_INTERRUPTED")
+        lesson.updated_at = datetime.now(timezone.utc).isoformat()
+        save_educational_lesson(lesson)
+        return lesson
+    finally:
+        lease.close()
 
 
 def list_educational_lessons(user_id: UUID) -> list[dict[str, Any]]:
@@ -603,7 +676,7 @@ class EducationalContentService:
         return content
 
     def get_lesson(self, lesson_id: str) -> EducationalLesson | None:
-        return get_educational_lesson(self.repository.user.user_id, lesson_id)
+        return recover_educational_video(self.repository.user.user_id, lesson_id)
 
     def list_lessons(self) -> list[dict[str, Any]]:
         return list_educational_lessons(self.repository.user.user_id)
@@ -1036,6 +1109,9 @@ class EducationalContentService:
         total_secs = int(sum(s.duration_seconds for s in scenes))
         plan = VideoPlan(
             plan_id=f"PLAN_{uuid4().hex[:10].upper()}",
+            student_id=str(content.user_id),
+            source_id=content.source_id or "SRC_DEFAULT",
+            source_version=content.source_version,
             concept_id=f"CON_{uuid4().hex[:8]}",
             concept_name=topic,
             definition=content.explanation[:300],
@@ -1053,11 +1129,26 @@ class EducationalContentService:
 
     @serialized
     def start_video_job(self, lesson: EducationalLesson, *, plan: VideoPlan | None = None) -> dict[str, Any]:
-        latest = get_educational_lesson(lesson.user_id, lesson.lesson_id)
+        latest = self.get_lesson(lesson.lesson_id)
         if latest and latest.video and latest.video.get("status") not in {"FAILED", "NOT_STARTED"}:
             return latest.video
+        if latest is None or latest.user_id != self.repository.user.user_id:
+            raise ValueError("Lesson not found")
+        lesson = latest
         plan = plan or self.create_video_plan(lesson.content)
+        validate_video_plan(plan)
+        if (plan.student_id != str(lesson.user_id)
+                or plan.source_id != (lesson.source_id or "SRC_DEFAULT")
+                or plan.source_version != lesson.source_version):
+            raise ValueError("Video plan does not match the owned lesson")
         job_id = f"JOB_{uuid4().hex[:10].upper()}"
+        plan = plan.model_copy(deep=True, update={"video_id": job_id})
+        lease = GenerationLock.acquire(settings.runtime_dir / "video_execution_locks", job_id)
+        if lease is None:
+            raise RuntimeError("Video generation already claimed")
+        prior_job_id = lesson.video.get("job_id") if lesson.video else None
+        lesson.video_generations[job_id] = EducationalVideoGeneration(
+            job_id=job_id, prior_job_id=prior_job_id, plan=plan)
         lesson.video = {
             "job_id": job_id,
             "status": "QUEUED",
@@ -1068,23 +1159,51 @@ class EducationalContentService:
             "error_code": None,
         }
         lesson.updated_at = datetime.now(timezone.utc).isoformat()
-        save_educational_lesson(lesson)
-
         async def _run():
-            await self._render_video_pipeline(lesson.lesson_id, lesson.user_id, plan, job_id)
+            await self._render_video_pipeline(lesson.lesson_id, lesson.user_id, plan, job_id, _lease=lease)
 
         try:
-            loop = asyncio.get_running_loop()
-            task = loop.create_task(_run())
-            _video_tasks.add(task)
-            task.add_done_callback(_video_tasks.discard)
-        except RuntimeError:
-            import threading
-            threading.Thread(target=lambda: asyncio.run(_run()), daemon=True).start()
+            save_educational_lesson(lesson)
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                import threading
+                threading.Thread(target=lambda: asyncio.run(_run()), daemon=True).start()
+            else:
+                task = loop.create_task(_run())
+                _video_tasks.add(task)
+                def finished(done: asyncio.Task[None]) -> None:
+                    _video_tasks.discard(done)
+                    lease.close()  # Also covers cancellation before the coroutine starts.
+                task.add_done_callback(finished)
+        except Exception:
+            lease.close()
+            lesson.video.update(status="FAILED", stage="FAILED", error_code="VIDEO_START_FAILED")
+            save_educational_lesson(lesson)
+            raise
 
         return lesson.video
 
-    async def _render_video_pipeline(self, lesson_id: str, user_id: UUID, plan: VideoPlan, job_id: str) -> None:
+    async def _render_video_pipeline(self, lesson_id: str, user_id: UUID, plan: VideoPlan, job_id: str,
+                                     *, _lease: GenerationLock | None = None) -> None:
+        lease = _lease or GenerationLock.acquire(settings.runtime_dir / "video_execution_locks", job_id)
+        if lease is None:
+            return
+        try:
+            lesson = get_educational_lesson(user_id, lesson_id)
+            if not lesson or not lesson.video or lesson.video.get("job_id") != job_id:
+                return
+            if lesson.video.get("status") in {"COMPLETED", "FAILED"}:
+                return
+            if job_id not in lesson.video_generations:
+                lesson.video_generations[job_id] = EducationalVideoGeneration(
+                    job_id=job_id, plan=plan.model_copy(deep=True, update={"video_id": job_id}))
+                save_educational_lesson(lesson)
+            await self._execute_video_pipeline(lesson_id, user_id, plan, job_id)
+        finally:
+            lease.close()
+
+    async def _execute_video_pipeline(self, lesson_id: str, user_id: UUID, plan: VideoPlan, job_id: str) -> None:
         lesson = get_educational_lesson(user_id, lesson_id)
         if not lesson or not lesson.video:
             return

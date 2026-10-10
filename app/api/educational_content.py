@@ -25,6 +25,7 @@ from ..services.educational_content import (
     PublicDescriptive,
     PublicMCQ,
     SubmissionResult,
+    public_lesson_video,
 )
 
 router = APIRouter(prefix="/educational-content", tags=["Educational content"])
@@ -132,7 +133,7 @@ async def get_lesson_detail(lesson_id: str, repository: SourceDependency) -> dic
         "diagram": lesson.diagram.model_dump(mode="json") if lesson.diagram else None,
         "assessment": public_assessment,
         "submissions": lesson.submissions,
-        "video": lesson.video,
+        "video": public_lesson_video(lesson.video),
         "ask_history": lesson.ask_history,
         "progress": lesson.progress,
         "created_at": lesson.created_at,
@@ -222,11 +223,11 @@ async def start_lesson_video(lesson_id: str, repository: SourceDependency) -> di
     
     # If already completed or running, return status
     if lesson.video and lesson.video.get("status") in ("QUEUED", "PLANNING", "GENERATING_AUDIO", "ALIGNING", "RENDERING", "COMPOSITING", "COMPLETED"):
-        return lesson.video
+        return public_lesson_video(lesson.video)
     
     try:
         plan = await run_in_threadpool(service.create_video_plan, lesson.content)
-        return service.start_video_job(lesson, plan=plan)
+        return public_lesson_video(service.start_video_job(lesson, plan=plan))
     except ValueError:
         logger.exception("Invalid educational video plan")
         raise HTTPException(422, {"code": "VIDEO_PLAN_INVALID"}) from None
@@ -243,7 +244,7 @@ async def get_lesson_video_status(lesson_id: str, repository: SourceDependency) 
         raise HTTPException(404, {"code": "LESSON_NOT_FOUND"})
     if not lesson.video:
         return {"status": "NOT_STARTED", "progress": 0, "stage": "Not started"}
-    return lesson.video
+    return public_lesson_video(lesson.video)
 
 
 @router.get("/{lesson_id}/video/stream")
@@ -253,7 +254,7 @@ async def stream_lesson_video(lesson_id: str, repository: SourceDependency) -> F
     lesson = await run_in_threadpool(service.get_lesson, lesson_id)
     if lesson is None:
         raise HTTPException(404, {"code": "LESSON_NOT_FOUND"})
-    if not lesson.video or not lesson.video.get("video_path"):
+    if not lesson.video or lesson.video.get("status") != "COMPLETED" or not lesson.video.get("video_path"):
         raise HTTPException(404, {"code": "VIDEO_NOT_READY"})
     video_path = Path(lesson.video["video_path"])
     try:

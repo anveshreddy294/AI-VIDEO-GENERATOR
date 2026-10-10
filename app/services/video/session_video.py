@@ -12,7 +12,7 @@ from ..repositories.knowledge_repository import KnowledgeRepository, KnowledgeEr
 from ..mastery.session_learning import SessionLearningService
 from ..assessment.schemas import VideoTarget
 from ..retrieval import RetrievalRequest, RetrievalService
-from .scene_schema import VideoArtifact, VideoPlan, ScenePlan, NarrationSegment, VideoJobStatus
+from .scene_schema import VideoArtifact, VideoPlan, ScenePlan, SceneEvidenceReference, NarrationSegment, VideoJobStatus
 from .scene_validator import validate_video_plan
 from .video_compositor import validate_video_artifact
 
@@ -108,10 +108,24 @@ class SessionVideo:
         concept = self.context.get_concept(bundle.scope, job.concept_id)
         if concept is None:
             raise KnowledgeError("NOT_FOUND")
-        excerpts = list(dict.fromkeys(i.excerpt.strip() for i in bundle.items if i.excerpt.strip()))
         # Quote-only slides retain literal evidence; no model inference or unsupported explanation.
-        parts = [quote[start:start+MAX_EXCERPT_CHARACTERS] for quote in excerpts
-                 for start in range(0, len(quote), MAX_EXCERPT_CHARACTERS)]
+        parts: dict[str, list[SceneEvidenceReference]] = {}
+        for item in bundle.items:
+            quote = item.excerpt.strip()
+            leading = len(item.excerpt) - len(item.excerpt.lstrip())
+            for start in range(0, len(quote), MAX_EXCERPT_CHARACTERS):
+                text = quote[start:start+MAX_EXCERPT_CHARACTERS]
+                char_start = item.char_start + leading + start
+                if char_start + len(text) > item.char_end:
+                    raise KnowledgeError("INVALID_PROVIDER_RESPONSE")
+                reference = SceneEvidenceReference(
+                    source_id=item.source_id, source_version=item.source_version,
+                    source_content_id=item.content_id, chunk_id=item.chunk_id,
+                    concept_id=job.concept_id, quote=text, char_start=char_start,
+                    char_end=char_start + len(text), page_start=item.page_start, page_end=item.page_end)
+                references = parts.setdefault(text, [])
+                if reference not in references:
+                    references.append(reference)
         if not parts or len(parts)>MAX_VIDEO_EXCERPTS:
             raise KnowledgeError("PAYLOAD_TOO_LARGE")
         chunks = [i.chunk_id for i in bundle.items]
@@ -121,10 +135,13 @@ class SessionVideo:
             source_id=learning.source_id, concept_id=job.concept_id, concept_name=concept.name,
             target_seconds=sum(durations), chunk_ids=chunks, source_content_ids=content)
         plan = VideoPlan(student_id=target.student_id, source_id=target.source_id,
+            source_version=learning.source_version,
             concept_id=target.concept_id, concept_name=target.concept_name,
             duration_seconds=target.target_seconds, source_chunk_ids=chunks, source_content_ids=content,
             scenes=[ScenePlan(scene_index=n, title=concept.name, text=quote, narration=quote,
-                duration_seconds=durations[n], source_chunk_ids=chunks) for n,quote in enumerate(parts)],
+                duration_seconds=durations[n],
+                source_chunk_ids=list(dict.fromkeys(ref.chunk_id for ref in parts[quote])),
+                evidence_references=parts[quote]) for n,quote in enumerate(parts)],
             narration=[NarrationSegment(scene_index=n,text=quote,target_seconds=durations[n]) for n,quote in enumerate(parts)])
         validate_video_plan(plan)
         claimed = self.transact("claim", {"plan": plan.model_dump(mode="json")})
