@@ -394,3 +394,12 @@ def test_daily_quota_fails_cleanly_if_fallback_fails() -> None:
     assert caught.value.category == "PROVIDER_UNAVAILABLE"
     assert calls == 1
 
+def test_text_provider_selection_is_independent_of_cloud_vision(monkeypatch):
+    from app.core import reasoning
+    from app.core.config import settings
+    monkeypatch.setattr(settings, "reasoning_provider", "ollama")
+    assert isinstance(reasoning.get_reasoning_router(), reasoning.OllamaReasoningProvider)
+    assert isinstance(reasoning.get_cloud_reasoning_router(), reasoning.ReasoningProviderRouter)
+    monkeypatch.setattr(settings, "reasoning_provider", "cloudflare")
+    assert reasoning.get_reasoning_router() is reasoning.get_cloud_reasoning_router()
+

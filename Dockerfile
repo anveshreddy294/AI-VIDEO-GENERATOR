@@ -9,6 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    build-essential \
+    pkg-config \
+    libcairo2-dev \
+    libpango1.0-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Workdir

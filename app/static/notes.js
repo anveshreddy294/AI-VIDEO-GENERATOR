@@ -78,10 +78,11 @@
         const generate=/** @type {HTMLButtonElement} */(el('generate-notes'));
         const detail=/** @type {HTMLSelectElement} */(el('notes-detail'));
         const panel=el('notes-panel');const status=el('notes-status');const content=el('notes-content');
-        /** @type {Scope|null} */let scope=null;let revision=0;
-        function reset(){revision++;content.replaceChildren();status.textContent='Generate grounded notes for this learning session.';generate.disabled=!scope;detail.disabled=!scope;}
+        /** @type {Scope|null} */let scope=null;let revision=0;let topicMode=false;
+        function reset(){revision++;content.replaceChildren();status.textContent=topicMode?'Generate notes for this topic.':'Generate grounded notes for this learning session.';generate.disabled=!scope&&!topicMode;detail.disabled=!scope&&!topicMode;}
         /** @param {Row|null} session */
         function setSession(session){
+            topicMode=false;
             scope=null;tab.disabled=true;panel.hidden=true;tab.setAttribute('aria-expanded','false');
             if(session && session.state==='ACTIVE') {
                 const ids=session.selected_concept_ids;
@@ -107,7 +108,9 @@
         tab.addEventListener('click',()=>{if(scope){panel.hidden=!panel.hidden;tab.setAttribute('aria-expanded',String(!panel.hidden));}});
         generate.addEventListener('click',()=>{void generateNotes();});detail.addEventListener('change',reset);
         setSession(null);
-        return {setSession,generateNotes};
+        /** @param {boolean} enabled */
+        function setTopic(enabled){setSession(null);topicMode=enabled;tab.disabled=!enabled;reset();}
+        return {setSession,setTopic,generateNotes};
     }
     const api={createController,renderNotes,renderDiagram,errorMessage};
     if(typeof module!=='undefined') module.exports=api;

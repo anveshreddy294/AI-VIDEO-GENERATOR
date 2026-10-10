@@ -1,6 +1,7 @@
 """OpenAPI, browser contract and existing source boundary regression coverage."""
 from __future__ import annotations
 import inspect
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 import shutil
@@ -56,7 +57,7 @@ def test_supabase_dashboard_has_truthful_source_only_controls(monkeypatch: pytes
     assert '/assets/learning.js' in content and '/assets/auth.js' in content
     script=TestClient(app).get('/assets/learning.js').text
     assert "Reflect.get(window, 'VisualAIAuth')" in script and 'auth.protectedFetch' in script
-    assert "api('/pipeline/upload-and-assess',{method:'POST',body})" in script
+    assert "api('/pipeline/upload-and-assess',{method:'POST',body})" in re.sub(r"\s+", "", script)
 
 
 def test_file_dashboard_retains_existing_workflow(monkeypatch: pytest.MonkeyPatch) -> None:

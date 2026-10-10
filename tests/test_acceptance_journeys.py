@@ -25,7 +25,9 @@ class MockProvider:
 
     def generate(self, request: ReasoningRequest) -> ReasoningResult:
         self.requests.append(request)
-        if request.task == "notes":
+        if request.response_schema and request.response_schema.get("title") == "DescriptiveGrade":
+            resp = json.dumps({"score_fraction": 0.9, "feedback": "Correct branching and comparison."})
+        elif request.task == "notes":
             resp = json.dumps({
                 "title": "Study Notes: Binary Search Trees",
                 "summary": "A binary search tree maintains sorted keys for O(log n) lookups.",
@@ -144,7 +146,7 @@ def test_journey_a_topic_only_binary_search_trees(context: Context, monkeypatch:
         mcq_id = assessment['mcqs'][0]['question_id']
         sub_resp = client.post(
             f'/educational-content/{lesson_id}/assessment/submit',
-            json={'mcq_answers': {mcq_id: 0}, 'descriptive_answers': {}}
+            json={'mcq_answers': {mcq_id: 0}, 'descriptive_answers': {assessment['descriptive']['question_id']: 'Compare the target to the node key; go left if smaller and right if larger.'}}
         )
         assert sub_resp.status_code == 200, f"Grading failed: {sub_resp.text}"
         sub_res = sub_resp.json()
@@ -169,7 +171,7 @@ def test_journey_a_topic_only_binary_search_trees(context: Context, monkeypatch:
             time.sleep(1)
             status_resp = client.get(f'/educational-content/{lesson_id}/video/status')
             st = status_resp.json()
-            if st.get('is_finished'):
+            if st.get('status') in ('COMPLETED', 'FAILED'):
                 break
 
         assert st and st.get('status') in ('COMPLETED', 'completed'), f"Video render failed: {st}"

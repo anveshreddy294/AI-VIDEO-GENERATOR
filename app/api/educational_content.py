@@ -1,11 +1,12 @@
 """Authenticated hierarchy-independent learning entry point; no fake source/session rows."""
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.concurrency import run_in_threadpool
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,18 @@ router = APIRouter(prefix="/educational-content", tags=["Educational content"])
 
 
 class AskRequest(BaseModel):
-    question: str
+    model_config = ConfigDict(extra="forbid", strict=True)
+    question: str = Field(min_length=1, max_length=4000)
+
+
+class NotesRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    detail_level: Literal["concise", "standard", "detailed"] = "standard"
+
+
+def generation_error(code: str) -> HTTPException:
+    logger.exception("Educational lesson operation failed: %s", code)
+    return HTTPException(503, {"code": code})
 
 
 @router.post("", response_model=EducationalContent)
@@ -70,6 +82,8 @@ async def generate_content(body: ContentRequest, repository: SourceDependency) -
             422,
             {"code": "EDUCATIONAL_CONTENT_INVALID"}
         ) from None
+    except Exception:
+        raise generation_error("EDUCATIONAL_CONTENT_FAILED") from None
 
 
 @router.get("")
@@ -119,18 +133,18 @@ async def get_lesson_detail(lesson_id: str, repository: SourceDependency) -> dic
 
 
 @router.post("/{lesson_id}/notes", response_model=EducationalNotes)
-async def generate_lesson_notes(lesson_id: str, repository: SourceDependency) -> EducationalNotes:
+async def generate_lesson_notes(lesson_id: str, repository: SourceDependency, body: NotesRequest | None = None) -> EducationalNotes:
     repo = require_source_repository(repository)
     service = EducationalContentService(repo)
     lesson = await run_in_threadpool(service.get_lesson, lesson_id)
     if lesson is None:
         raise HTTPException(404, {"code": "LESSON_NOT_FOUND"})
     try:
-        return await run_in_threadpool(service.generate_notes, lesson)
+        return await run_in_threadpool(service.generate_notes, lesson, (body or NotesRequest()).detail_level)
     except ProviderFailure as error:
         raise HTTPException(503, {"code": error.category}) from None
-    except Exception as exc:
-        raise HTTPException(500, {"code": "NOTES_GENERATION_FAILED", "detail": str(exc)}) from None
+    except Exception:
+        raise generation_error("NOTES_GENERATION_FAILED") from None
 
 
 @router.post("/{lesson_id}/diagram", response_model=FlowchartDiagram)
@@ -144,8 +158,8 @@ async def generate_lesson_diagram(lesson_id: str, repository: SourceDependency) 
         return await run_in_threadpool(service.generate_diagram, lesson)
     except ProviderFailure as error:
         raise HTTPException(503, {"code": error.category}) from None
-    except Exception as exc:
-        raise HTTPException(500, {"code": "DIAGRAM_GENERATION_FAILED", "detail": str(exc)}) from None
+    except Exception:
+        raise generation_error("DIAGRAM_GENERATION_FAILED") from None
 
 
 @router.post("/{lesson_id}/assessment", response_model=PublicAssessment)
@@ -166,8 +180,8 @@ async def generate_lesson_assessment(lesson_id: str, repository: SourceDependenc
         )
     except ProviderFailure as error:
         raise HTTPException(503, {"code": error.category}) from None
-    except Exception as exc:
-        raise HTTPException(500, {"code": "ASSESSMENT_GENERATION_FAILED", "detail": str(exc)}) from None
+    except Exception:
+        raise generation_error("ASSESSMENT_GENERATION_FAILED") from None
 
 
 @router.post("/{lesson_id}/assessment/submit", response_model=SubmissionResult)
@@ -177,7 +191,16 @@ async def submit_lesson_assessment(lesson_id: str, submission: AssessmentSubmiss
     lesson = await run_in_threadpool(service.get_lesson, lesson_id)
     if lesson is None:
         raise HTTPException(404, {"code": "LESSON_NOT_FOUND"})
-    return await run_in_threadpool(service.grade_assessment, lesson, submission)
+    try:
+        return await run_in_threadpool(service.grade_assessment, lesson, submission)
+    except ProviderFailure as error:
+        raise HTTPException(503, {"code": error.category}) from None
+    except ValidationError:
+        raise generation_error("ASSESSMENT_GRADING_FAILED") from None
+    except ValueError:
+        raise HTTPException(422, {"code": "ASSESSMENT_SUBMISSION_INVALID"}) from None
+    except Exception:
+        raise generation_error("ASSESSMENT_GRADING_FAILED") from None
 
 
 @router.post("/{lesson_id}/video")
@@ -192,7 +215,14 @@ async def start_lesson_video(lesson_id: str, repository: SourceDependency) -> di
     if lesson.video and lesson.video.get("status") in ("QUEUED", "PLANNING", "GENERATING_AUDIO", "ALIGNING", "RENDERING", "COMPOSITING", "COMPLETED"):
         return lesson.video
     
-    return service.start_video_job(lesson)
+    try:
+        plan = await run_in_threadpool(service.create_video_plan, lesson.content)
+        return service.start_video_job(lesson, plan=plan)
+    except ValueError:
+        logger.exception("Invalid educational video plan")
+        raise HTTPException(422, {"code": "VIDEO_PLAN_INVALID"}) from None
+    except Exception:
+        raise generation_error("VIDEO_START_FAILED") from None
 
 
 @router.get("/{lesson_id}/video/status")
@@ -217,9 +247,13 @@ async def stream_lesson_video(lesson_id: str, repository: SourceDependency) -> F
     if not lesson.video or not lesson.video.get("video_path"):
         raise HTTPException(404, {"code": "VIDEO_NOT_READY"})
     video_path = Path(lesson.video["video_path"])
-    if not video_path.exists():
+    try:
+        video_path.resolve().relative_to(settings.renders_dir.resolve())
+    except ValueError:
+        raise HTTPException(404, {"code": "VIDEO_FILE_MISSING"}) from None
+    if not video_path.is_file():
         raise HTTPException(404, {"code": "VIDEO_FILE_MISSING"})
-    return FileResponse(video_path, media_type="video/mp4", headers={"Accept-Ranges": "bytes"})
+    return FileResponse(video_path, media_type="video/mp4", headers={"Accept-Ranges": "bytes", "Cache-Control": "private, no-store"})
 
 
 @router.post("/{lesson_id}/ask", response_model=AskResponse)
@@ -233,6 +267,8 @@ async def ask_lesson_question(lesson_id: str, body: AskRequest, repository: Sour
         return await run_in_threadpool(service.ask, lesson, body.question)
     except ProviderFailure as error:
         raise HTTPException(503, {"code": error.category}) from None
-    except ValueError as exc:
-        raise HTTPException(422, {"code": "ASK_INVALID", "detail": str(exc)}) from None
+    except ValueError:
+        raise HTTPException(422, {"code": "ASK_INVALID"}) from None
+    except Exception:
+        raise generation_error("ASK_FAILED") from None
 

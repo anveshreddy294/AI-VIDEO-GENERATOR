@@ -8,6 +8,7 @@ Analyzes normalized ContentUnits to:
 """
 
 import json
+import copy
 from contextvars import ContextVar
 from contextlib import contextmanager
 from collections.abc import Iterator
@@ -38,13 +39,13 @@ def scoped_proposal_schema(schema: dict[str, JsonValue] | None) -> Iterator[None
 
 
 def generate_educational_proposal(prompt: str) -> str:
-    """Cloudflare primary, bounded local fallback; no change to legacy/video reasoning."""
+    """Use the configured text reasoning provider with bounded output contracts."""
     from ..core.reasoning import Message, ReasoningRequest, get_reasoning_router
     from .evidence_anchors import AnchoredStructureProposal
     from .content_understanding import MODEL_OUTPUT_TOKENS
     task = "structure_repair" if "\nREPAIR:" in prompt else "content_understanding"
     from pydantic import TypeAdapter, JsonValue
-    schema: dict[str, JsonValue] = _proposal_schema.get() or TypeAdapter(dict[str, JsonValue]).validate_python(AnchoredStructureProposal.model_json_schema())
+    schema: dict[str, JsonValue] = copy.deepcopy(_proposal_schema.get() or TypeAdapter(dict[str, JsonValue]).validate_python(AnchoredStructureProposal.model_json_schema()))
     defs = schema.get("$defs")
     if isinstance(defs, dict):
         for name in ("AnchoredTopic", "AnchoredSubtopic", "AnchoredConcept"):

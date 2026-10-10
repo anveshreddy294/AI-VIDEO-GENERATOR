@@ -256,13 +256,13 @@ def test_visual_commit_before_index_and_idempotent(
     monkeypatch.setattr(structurer, "generate_educational_proposal", proposal)
     monkeypatch.setattr(vector_store, "upsert_chunks", index)
     try:
-        result = ingest_source(repo, path, "printed.png")
+        result = ingest_source(repo, path, "printed.png", enrich=True)
     except SourceIngestionFailed as error:
         raise AssertionError(error.failure.model_dump()) from None
     assert result["status"] == "READY"
     assert remote.units[0]["provenance"]["provider"] == "ollama"
     ids = [r["content_id"] for r in remote.units]
-    again = ingest_source(repo, path, "printed.png")
+    again = ingest_source(repo, path, "printed.png", enrich=True)
     assert again["source_id"] == result["source_id"]
     assert [r["content_id"] for r in remote.units] == ids and len(remote.sources) == 1
     assert provider.call_count == 1
@@ -334,6 +334,19 @@ def test_visual_vector_failure_keeps_canonical_evidence_and_retry(
     path.write_bytes((FIXTURES / "printed.png").read_bytes())
     from app.db import vector_store
     from app.services.ingestion import source_ingestion
+    from app.services import structurer
+
+    def proposal(prompt: str) -> str:
+        rows = json.loads(prompt.split("SOURCE_DATA=", 1)[1].split("\nREPAIR:", 1)[0])
+        anchor = next(row for row in rows if "Osmosis is water" in row["text"])
+        evidence = [{"anchor_id": anchor["anchor_id"]}]
+        return json.dumps({
+            "topics": [{"key": "t", "title": "Osmosis", "evidence": evidence}],
+            "subtopics": [{"key": "s", "topic_key": "t", "title": "Osmosis", "evidence": evidence}],
+            "concepts": [{"key": "c", "subtopic_key": "s", "name": "Osmosis", "definition": TEXT, "evidence": evidence}],
+            "prerequisites": [],
+        })
+    monkeypatch.setattr(structurer, "generate_educational_proposal", proposal)
 
     monkeypatch.setattr(
         vector_store,
@@ -341,7 +354,7 @@ def test_visual_vector_failure_keeps_canonical_evidence_and_retry(
         MagicMock(side_effect=RuntimeError("private provider detail")),
     )
     with pytest.raises(SupabaseError):
-        ingest_source(repo, path, "printed.png")
+        ingest_source(repo, path, "printed.png", enrich=True)
     assert (
         remote.units
         and remote.units[0]["provenance"]["visual_schema_version"] == "visual-v2"
@@ -353,7 +366,7 @@ def test_visual_vector_failure_keeps_canonical_evidence_and_retry(
         MagicMock(side_effect=AssertionError("Retry must use canonical evidence")),
     )
     monkeypatch.setattr(vector_store, "upsert_chunks", lambda chunks: len(chunks))
-    assert ingest_source(repo, path, "printed.png")["status"] == "READY"
+    assert ingest_source(repo, path, "printed.png", enrich=True)["status"] == "READY"
     assert json.dumps(remote.units, sort_keys=True) == before
     assert len(remote.sources) == len(remote.versions) == 1
     assert provider.call_count == 1
@@ -497,8 +510,11 @@ def test_authenticated_image_http_reaches_ready_and_deduplicates(
         assert upload.status_code == 200
         job = client.get("/pipeline/jobs/" + upload.json()["job_id"], headers=headers).json()
         assert job["state"] == "SUCCEEDED" and job["status"] == "completed"
-        assert job["result"]["status"] == job["result"]["knowledge_state"] == "READY"
-        assert job["result"]["chunks_synced"] > 0
+        assert job["result"]["content_ready"] is True
+        prepared = client.post('/sources/' + job['result']['source_id'] + '/retry-index', headers=headers)
+        assert prepared.status_code == 200, prepared.text
+        assert prepared.json()["status"] == prepared.json()["knowledge_state"] == "READY"
+        assert prepared.json()["chunks_synced"] > 0
         serialized = json.dumps(remote.knowledge, sort_keys=True)
         if first_knowledge is None:
             first_knowledge = serialized

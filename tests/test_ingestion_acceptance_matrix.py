@@ -115,8 +115,14 @@ def test_http_to_canonical_retrieval(kind: str, context: Context, monkeypatch: p
     assert uploaded.status_code==200, uploaded.text
     job=client.get("/pipeline/jobs/"+uploaded.json()["job_id"],headers=headers).json()
     assert job["state"]=="SUCCEEDED", job.get("failure")
-    assert job["source_lifecycle"]=="READY"
-    result=job["result"]
+    # Upload is deliberately extraction-first. Canonical indexing is a separate,
+    # explicit operation; a successful upload must not pretend it is indexed.
+    assert job["source_lifecycle"]=="CONTENT_READY"
+    assert job["result"]["content_ready"] is True
+    source_id=job["result"]["source_id"]
+    prepared=client.post(f"/sources/{source_id}/retry-index",headers=headers)
+    assert prepared.status_code==200, prepared.text
+    result=prepared.json()
     assert result["status"]==result["knowledge_state"]=="READY"
     assert remote.sources[0]["status"]==remote.versions[0]["knowledge_state"]=="READY"
     assert all(remote.knowledge[key] for key in ("topics","subtopics","concepts"))

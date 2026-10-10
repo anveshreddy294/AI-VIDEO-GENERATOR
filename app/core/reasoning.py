@@ -564,7 +564,18 @@ _router: ReasoningProviderRouter | None = None
 _router_lock = Lock()
 
 
-def get_reasoning_router() -> ReasoningProviderRouter:
+def get_reasoning_router() -> ReasoningProvider:
+    # Text routing is independent of visual routing. Explicit Ollama mode never
+    # sends teaching or student answers to a cloud text provider.
+    if settings.reasoning_provider == "ollama":
+        return OllamaReasoningProvider()
+    if settings.reasoning_provider not in {"cloudflare", "mock", "test"}:
+        raise ProviderFailure("CONFIGURATION")
+    return get_cloud_reasoning_router()
+
+
+def get_cloud_reasoning_router() -> ReasoningProviderRouter:
+    """Cloud transport policy, also used by the independently configured vision route."""
     global _router
     with _router_lock:
         if _router is None:

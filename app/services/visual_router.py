@@ -24,7 +24,7 @@ from pydantic import (
     TypeAdapter,
 )
 from ..core.config import settings
-from ..core.reasoning import CloudflareProvider, ProviderFailure, get_reasoning_router
+from ..core.reasoning import CloudflareProvider, ProviderFailure, get_cloud_reasoning_router
 from .visual_contracts import VisionExtractionData, VisualKind
 from .vision import (
     VisionExtractionFailed,
@@ -287,7 +287,7 @@ def private_image_transport(image: bytes) -> str:
 
 class CloudflareVisionProvider:
     def __init__(self, transport: CloudflareProvider | None = None) -> None:
-        self.transport = transport or CloudflareProvider(get_reasoning_router().policy)
+        self.transport = transport or CloudflareProvider(get_cloud_reasoning_router().policy)
 
     def generate(
         self,
@@ -482,6 +482,7 @@ class VisualModelRouter:
                     if not error.retryable:
                         raise VisionExtractionFailed(
                             "Cloud visual configuration/request rejected",
+                            error_code="VISION_AUTH_FAILED" if error.category == "AUTH_REJECTED" else "VISION_PROVIDER_FAILED",
                             route_trace=VisionRouteFailureTrace(cloud_attempt_count=calls, local_fallback_attempted=False)
                         ) from None
                     if error.category not in {"TIMEOUT", "NETWORK", "RATE_LIMIT", "PROVIDER_UNAVAILABLE"}:
@@ -574,5 +575,5 @@ def get_visual_router() -> VisualModelRouter:
     global _router
     with _router_lock:
         if _router is None:
-            _router = VisualModelRouter()
+            _router = VisualModelRouter(local_fallback_enabled=settings.vision_local_fallback_enabled)
         return _router

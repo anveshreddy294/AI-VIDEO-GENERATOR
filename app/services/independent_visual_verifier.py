@@ -191,10 +191,10 @@ class CloudflareIndependentVisualVerifier:
 
     def __init__(self, *, deadline: float | None = None, transport: ReviewTransport | None = None) -> None:
         from dataclasses import replace
-        from ..core.reasoning import CloudflareProvider, get_reasoning_router
+        from ..core.reasoning import CloudflareProvider, get_cloud_reasoning_router
         from .visual_router import COMPLEX_READ_TIMEOUT_SECONDS, COMPLEX_REQUEST_TIMEOUT_SECONDS
         self.deadline = deadline
-        policy = replace(get_reasoning_router().policy,
+        policy = replace(get_cloud_reasoning_router().policy,
             read_timeout=COMPLEX_READ_TIMEOUT_SECONDS, overall_timeout=COMPLEX_REQUEST_TIMEOUT_SECONDS)
         self.transport: ReviewTransport = transport or CloudflareProvider(policy)
 

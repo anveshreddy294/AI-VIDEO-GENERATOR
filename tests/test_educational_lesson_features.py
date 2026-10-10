@@ -23,7 +23,9 @@ class MockProvider:
 
     def generate(self, request: ReasoningRequest) -> ReasoningResult:
         self.requests.append(request)
-        if request.task == "notes":
+        if request.response_schema and request.response_schema.get("title") == "DescriptiveGrade":
+            resp = json.dumps({"score_fraction": 0.9, "feedback": "Correct comparison and subtree selection."})
+        elif request.task == "notes":
             resp = json.dumps({
                 "title": "Study Notes: Binary Search Trees",
                 "summary": "A binary search tree maintains sorted keys for O(log n) lookups.",
@@ -190,6 +192,119 @@ def test_educational_endpoints_via_testclient(context: Context, monkeypatch: pyt
         assert detail_resp.json()["diagram"] is not None
         assert detail_resp.json()["assessment"] is not None
         assert len(detail_resp.json()["submissions"]) == 1
+
+
+def test_detail_cache_and_concurrent_lesson_updates(context: Context) -> None:
+    _, repo, _ = context
+    provider = MockProvider()
+    service = EducationalContentService(repo, provider)
+    content = service.generate(ContentRequest(topic="Binary Search Trees"))
+    first = service.get_lesson(str(content.content_id))
+    other = service.get_lesson(str(content.content_id))
+    assert first is not None and other is not None
+    standard = service.generate_notes(first)
+    detailed = service.generate_notes(first, "detailed")
+    assert standard.detail_level == "standard" and detailed.detail_level == "detailed"
+    assert "detail_level=detailed" in provider.requests[-1].messages[-1].content
+    request_count = len(provider.requests)
+    assert service.generate_notes(first, "detailed") == detailed
+    assert len(provider.requests) == request_count
+    service.ask(other, "How does search work?")
+    # A later write by either stale snapshot must preserve the other feature.
+    service.generate_diagram(first)
+    saved = service.get_lesson(str(content.content_id))
+    assert saved and saved.notes and saved.notes.detail_level == "detailed"
+    assert saved.ask_history and saved.diagram
+    assert saved.progress["notes_viewed"] and saved.progress["diagram_viewed"]
+
+
+def test_api_validation_and_safe_video_start_error(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
+    _, repo, _ = context
+    monkeypatch.setattr("app.services.educational_content.get_reasoning_router", lambda: MockProvider())
+    with TestClient(app) as client:
+        app.dependency_overrides[source_repository] = lambda: repo
+        lesson_id = client.post("/educational-content", json={"topic": "Binary Search Trees"}).json()["content_id"]
+        base = f"/educational-content/{lesson_id}"
+        assert client.post(base + "/notes", json={"detail_level": "detailed"}).json()["detail_level"] == "detailed"
+        assert client.post(base + "/notes", json={"detail_level": "invalid"}).status_code == 422
+        assert client.post(base + "/ask", json={"question": "x" * 4001}).status_code == 422
+        assert client.post(base + "/assessment/submit", json={"mcq_answers": {"q1": 0}}).status_code == 422
+        client.post(base + "/assessment")
+        assert client.post(base + "/assessment/submit", json={"mcq_answers": {"q1": -1}, "descriptive_answer": "answer"}).status_code == 422
+        assert client.post(base + "/assessment/submit", json={"mcq_answers": {"unknown": 0}, "descriptive_answer": "answer"}).status_code == 422
+        def fail(*args, **kwargs):
+            raise RuntimeError("private server path and provider credentials")
+        monkeypatch.setattr(EducationalContentService, "create_video_plan", fail)
+        response = client.post(base + "/video")
+        assert response.status_code == 503
+        assert response.json() == {"detail": {"code": "VIDEO_START_FAILED"}}
+        assert "private" not in response.text
+
+
+def test_long_unrelated_answer_is_not_rewarded(context: Context) -> None:
+    from app.services.educational_content import get_educational_lesson
+    _, repo, _ = context
+    class GradingProvider(MockProvider):
+        def generate(self, request: ReasoningRequest) -> ReasoningResult:
+            if request.response_schema and request.response_schema.get("title") == "DescriptiveGrade":
+                self.requests.append(request)
+                assert "never answer length" in request.messages[0].content
+                return ReasoningResult(response=json.dumps({"score_fraction": 0.0, "feedback": "The answer is unrelated to BST search."}),
+                    telemetry=Telemetry(provider="ollama", task=request.task, outcome="SUCCESS", model="test", transport_latency_seconds=0.0))
+            return super().generate(request)
+    provider = GradingProvider()
+    service = EducationalContentService(repo, provider)
+    content = service.generate(ContentRequest(topic="Binary Search Trees"))
+    lesson = service.get_lesson(str(content.content_id))
+    assert lesson
+    service.generate_assessment(lesson)
+    result = service.grade_assessment(lesson, AssessmentSubmission(mcq_answers={"q1": 0}, descriptive_answer="Unrelated sports discussion. " * 20))
+    assert result.score == 70.0
+    assert result.descriptive_feedback == "The answer is unrelated to BST search."
+    assert get_educational_lesson(OWNER, lesson.lesson_id).submissions
+
+
+def test_video_and_diagram_handle_long_generated_labels(context: Context) -> None:
+    _, repo, _ = context
+    service = EducationalContentService(repo, MockProvider())
+    content = service.generate(ContentRequest(topic="Binary Search Trees"))
+    long_content = content.model_copy(update={"topic": "Topic " * 40, "explanation": "a " * 200, "equations": ["x{"], "key_concepts": []})
+    plan = service.create_video_plan(long_content)
+    assert len(plan.scenes[0].title) <= 150
+    assert all(len(scene.narration.split()) <= int(scene.duration_seconds * 3) for scene in plan.scenes)
+    assert plan.scenes[2].equation is None
+    assert "E = mc^2" not in plan.model_dump_json()
+    lesson = service.get_lesson(str(content.content_id))
+    assert lesson
+    lesson.content = long_content
+    diagram = service.generate_diagram(lesson)
+    assert all(len(node.item.text) <= 240 for node in diagram.nodes)
+
+
+
+def test_production_video_requires_spoken_audio(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+    from app.core.config import settings
+    from app.services.educational_content import save_educational_lesson
+    _, repo, _ = context
+    service = EducationalContentService(repo, MockProvider())
+    content = service.generate(ContentRequest(topic="Binary Search Trees"))
+    lesson = service.get_lesson(str(content.content_id))
+    assert lesson
+    lesson.video = {"job_id": "test-spoken", "status": "QUEUED", "stage": "QUEUED", "progress": 5}
+    save_educational_lesson(lesson)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr(settings, "tts_provider", "edge_tts")
+    calls = []
+    def spoken_provider(name, *, require_spoken=False):
+        calls.append((name, require_spoken))
+        raise RuntimeError("SPOKEN_TTS_UNAVAILABLE")
+    monkeypatch.setattr("app.services.educational_content.get_tts_provider", spoken_provider)
+    asyncio.run(service._render_video_pipeline(lesson.lesson_id, OWNER, service.create_video_plan(content), "test-spoken"))
+    assert calls == [("edge_tts", True)]
+    saved = service.get_lesson(lesson.lesson_id)
+    assert saved and saved.video["status"] == "FAILED"
+    assert saved.video["error_code"] == "VIDEO_AUDIO_FAILED"
 
 
 def test_video_generation_pipeline(context: Context) -> None:

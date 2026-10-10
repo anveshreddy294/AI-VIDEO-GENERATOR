@@ -46,6 +46,23 @@
     };
     /** @param {number} status @param {unknown} value @returns {string} */
     function safeError(status, value) {
+        if (status === 401) return 'Your session has expired. Please sign in again.';
+        const failures = {
+            VIDEO_PLAN_INVALID: 'This lesson could not be converted into a valid video plan.',
+            VIDEO_START_FAILED: 'Video generation could not start. Please retry.',
+            ASSESSMENT_SUBMISSION_INVALID: 'Answer every question before submitting this assessment.',
+            ASSESSMENT_GRADING_FAILED: 'Assessment grading is unavailable. Your answers have not been scored; please retry.',
+            NOTES_GENERATION_FAILED: 'Notes generation failed. Please retry.',
+            DIAGRAM_GENERATION_FAILED: 'Flowchart generation failed. Please retry.',
+            ASSESSMENT_GENERATION_FAILED: 'Assessment generation failed. Please retry.'
+        };
+        if (value && typeof value === 'object' && !Array.isArray(value)) {
+            const detail = row(value).detail;
+            if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+                const code = row(detail).code;
+                if (typeof code === 'string' && Object.hasOwn(failures, code)) return Reflect.get(failures, code);
+            }
+        }
         if (status === 404) return 'This source or learning session is unavailable.';
         if (status === 409) return 'This session or material is not ready for that action.';
         if ((status === 422 || status === 415) && value && typeof value === 'object' && !Array.isArray(value)) {
@@ -57,7 +74,6 @@
                 if (code === 'LESSON_NOT_FOUND') return 'The requested educational lesson was not found.';
             }
             if (Array.isArray(detail)) return 'Invalid input format. Please check your topic and try again.';
-            if (typeof detail === 'string') return detail;
         }
         if (status === 422) return 'The input topic or selected learning scope is not valid. Try another topic.';
         if (status === 503 && value && typeof value === 'object') {
@@ -258,7 +274,7 @@
     if (typeof module !== 'undefined') module.exports = {readiness, safeError, sourceJobFailure, createUploadStatus, qaPayload, location, row, rows, createAskController};
     if (typeof document === 'undefined') return;
     const auth = /** @type {{protectedFetch:(path:string,options?:RequestInit)=>Promise<Response>, logout:()=>Promise<void>}} */ (Reflect.get(window, 'VisualAIAuth'));
-    const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
+    const notesUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,safeError:(status:number,value:unknown)=>string)=>{setSession:(session:Row|null)=>void,setTopic:(enabled:boolean)=>void}}} */ (Reflect.get(window, "VisualAINotes")).createController(document, (path,options) => auth.protectedFetch(path,options), safeError);
     const practiceUI = /** @type {{createController:(doc:Document,fetch:(path:string,options?:RequestInit)=>Promise<Response>,store:Storage)=>{setSession:(session:Row|null,concepts?:Row[])=>void}}} */ (Reflect.get(window,"VisualAIPractice")).createController(document,(path,options)=>auth.protectedFetch(path,options),window.sessionStorage);
     const askUI = createAskController(document, (path,options) => auth.protectedFetch(path,options));
     /** @param {string} id @returns {HTMLElement} */
@@ -289,7 +305,7 @@
         const response = await auth.protectedFetch(path, options);
         let value;
         try { value = /** @type {unknown} */ (await response.json()); }
-        catch { throw new Error('Learning returned an invalid response. Please try again.'); }
+        catch { throw new Error(response.ok ? 'Learning returned an invalid response. Please try again.' : safeError(response.status, {})); }
         if (!response.ok) throw new Error(safeError(response.status, value));
         return value;
     }
@@ -305,6 +321,7 @@
     /** @type {Row|null} */ let knowledge = null;
     /** @param {string} panel */
     function show(panel) {
+        if (panel !== 'session') resetEducationalVideo();
         for (const name of ['sources','explorer','session']) el(name + '-panel').hidden = name !== panel;
         el('status').textContent = '';
     }
@@ -347,6 +364,19 @@
     // Active educational lesson state
     /** @type {Row|null} */ let currentEducationalLesson = null;
     /** @type {ReturnType<typeof setInterval>|null} */ let videoPollInterval = null;
+    let videoGeneration = 0;
+    let videoObjectURL = '';
+
+    function resetEducationalVideo() {
+        videoGeneration++;
+        if (videoPollInterval) clearInterval(videoPollInterval);
+        videoPollInterval = null;
+        const player = /** @type {HTMLVideoElement} */ (el('video-player'));
+        player.pause(); player.removeAttribute('src'); player.load();
+        if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
+        videoObjectURL = '';
+        el('video-player-container').style.display = 'none';
+    }
 
     /** @param {'learn'|'notes'|'diagram'|'practice'|'video'} tab */
     function switchLessonTab(tab) {
@@ -378,6 +408,7 @@
     function renderEducationalNotes(notesData) {
         const container = el('notes-content');
         container.replaceChildren();
+        if (typeof notesData.title === 'string') container.append(node('h3', notesData.title));
 
         const summaryBlock = node('div', '', 'card');
         summaryBlock.append(node('h3', 'Summary'));
@@ -394,7 +425,7 @@
             container.append(tBlock);
         }
 
-        const detailed = text(notesData, 'detailed_notes');
+        const detailed = typeof notesData.detailed_notes === 'string' ? notesData.detailed_notes : '';
         if (detailed) {
             const dBlock = node('div', '', 'card');
             dBlock.append(node('h3', 'Detailed Study Notes'));
@@ -402,6 +433,11 @@
             p.style.whiteSpace = 'pre-wrap';
             dBlock.append(p);
             container.append(dBlock);
+        }
+        for (const concept of rows(notesData.key_concepts || [])) {
+            const section = node('article', '', 'card');
+            section.append(node('h3', text(concept, 'name')), node('p', text(concept, 'explanation')));
+            container.append(section);
         }
 
         const examples = strings(notesData.examples || []);
@@ -414,7 +450,7 @@
             container.append(eBlock);
         }
 
-        const formulas = strings(notesData.formula_sheet || []);
+        const formulas = strings(notesData.formula_sheet || notesData.equations || []);
         if (formulas.length) {
             const fBlock = node('div', '', 'card');
             fBlock.append(node('h3', 'Formula Sheet'));
@@ -484,7 +520,7 @@
         container.replaceChildren();
 
         const mcqs = rows(assessmentData.mcqs || []);
-        const descs = rows(assessmentData.descriptive_questions || []);
+        const descs = assessmentData.descriptive ? [row(assessmentData.descriptive)] : [];
 
         const form = document.createElement('form');
         form.id = 'educational-assessment-form';
@@ -570,6 +606,8 @@
 
         const submitBtn = button('Submit Assessment', async () => {
             if (!currentEducationalLesson) return;
+            if (!form.reportValidity()) return;
+            const selectedLesson = currentEducationalLesson;
             /** @type {Record<string, number>} */ const mcqAnswers = {};
             for (const q of mcqs) {
                 const qId = text(q, 'question_id');
@@ -588,12 +626,12 @@
             }
 
             el('practice-status').textContent = 'Submitting answers and evaluating…';
-            const result = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/assessment' + '/submit', {
+            const result = row(await post('/educational-content/' + encodeURIComponent(text(selectedLesson, 'lesson_id')) + '/assessment' + '/submit', {
                 mcq_answers: mcqAnswers,
                 descriptive_answers: descAnswers,
             }));
 
-            renderAssessmentResults(result);
+            if (currentEducationalLesson === selectedLesson) renderAssessmentResults(result);
         });
         submitBtn.classList.add('primary');
         submitBtn.style.marginTop = '16px';
@@ -630,56 +668,64 @@
             container.append(section);
         }
 
-        const descFeedback = rows(result.descriptive_feedback || []);
-        if (descFeedback.length) {
+        const descFeedback = typeof result.descriptive_feedback === 'string' ? result.descriptive_feedback : '';
+        if (descFeedback) {
             const dSection = node('div', '', 'card');
             dSection.append(node('h4', 'Descriptive Feedback'));
-            for (const df of descFeedback) {
-                const item = node('div', '', 'concept');
-                item.append(node('span', 'Score: ' + df.points_awarded + ' pts', 'badge'));
-                item.append(node('p', text(df, 'rubric_feedback')));
-                dSection.append(item);
-            }
+            dSection.append(node('p', descFeedback));
             container.append(dSection);
         }
         el('practice-status').textContent = 'Assessment completed! See your feedback below.';
     }
 
+    /** @param {string} lessonId @param {number} ticket */
+    async function playEducationalVideo(lessonId, ticket) {
+        const response = await auth.protectedFetch('/educational-content/' + encodeURIComponent(lessonId) + '/video/stream');
+        if (!response.ok) throw new Error(safeError(response.status, {}));
+        const blob = await response.blob();
+        if (ticket !== videoGeneration) return;
+        if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
+        videoObjectURL = URL.createObjectURL(blob);
+        const player = /** @type {HTMLVideoElement} */ (el('video-player'));
+        player.src = videoObjectURL; player.load();
+        el('video-player-container').style.display = 'block';
+        el('video-status').textContent = 'Animated narrated video is ready.';
+        el('start-video-btn').textContent = 'Load Generated Video';
+    }
+
     /** @param {Row} lesson */
     function setupEducationalVideoState(lesson) {
-        const videoStatus = el('video-status');
-        const playerContainer = el('video-player-container');
-        const player = /** @type {HTMLVideoElement} */ (el('video-player'));
-        const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
-
-        if (lesson.video_status === 'COMPLETED') {
-            videoStatus.textContent = 'Animated narrated video is ready!';
-            playerContainer.style.display = 'block';
-            player.src = '/educational-content/' + encodeURIComponent(text(lesson, 'lesson_id')) + '/video/stream';
-            player.load();
-            startBtn.textContent = 'Regenerate Video';
-        } else if (lesson.video_status === 'RUNNING') {
-            videoStatus.textContent = 'Video is currently rendering…';
-            pollVideoStatus(text(lesson, 'lesson_id'));
+        const video = lesson.video ? row(lesson.video) : null;
+        const id = text(lesson, 'lesson_id');
+        if (video && video.status === 'COMPLETED') {
+            const ticket = videoGeneration;
+            void playEducationalVideo(id, ticket).catch(error => {
+                if (ticket === videoGeneration) el('video-status').textContent = error instanceof Error ? error.message : 'Video playback is unavailable.';
+            });
+        } else if (video && !['FAILED', 'NOT_STARTED'].includes(String(video.status))) {
+            pollVideoStatus(id);
         } else {
-            videoStatus.textContent = 'Click to render a 20–30-second animated video with Manim visuals and Edge-TTS narration.';
-            playerContainer.style.display = 'none';
-            startBtn.textContent = 'Generate Educational Video';
+            el('video-status').textContent = video?.status === 'FAILED' ? 'The previous render failed. You can retry video generation.' : 'Generate an animated, narrated video for this lesson.';
+            el('start-video-btn').textContent = 'Generate Educational Video';
         }
     }
 
     /** @param {string} lessonId */
     async function startEducationalVideo(lessonId) {
-        const videoStatus = el('video-status');
+        const ticket = videoGeneration;
         const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
         startBtn.disabled = true;
-        videoStatus.textContent = 'Starting video generation pipeline…';
-
+        el('video-status').textContent = 'Starting video generation pipeline…';
         try {
-            await post('/educational-content/' + encodeURIComponent(lessonId) + '/video');
-            pollVideoStatus(lessonId);
-        } catch (err) {
-            videoStatus.textContent = err instanceof Error ? err.message : 'Failed to start video.';
+            const status = row(await post('/educational-content/' + encodeURIComponent(lessonId) + '/video'));
+            if (ticket !== videoGeneration) return;
+            if (status.status === 'COMPLETED') {
+                await playEducationalVideo(lessonId, ticket);
+                startBtn.disabled = false;
+            } else pollVideoStatus(lessonId);
+        } catch (error) {
+            if (ticket !== videoGeneration) return;
+            el('video-status').textContent = error instanceof Error ? error.message : 'Failed to start video.';
             startBtn.disabled = false;
         }
     }
@@ -687,42 +733,43 @@
     /** @param {string} lessonId */
     function pollVideoStatus(lessonId) {
         if (videoPollInterval) clearInterval(videoPollInterval);
-        const videoStatus = el('video-status');
+        const ticket = videoGeneration;
         const startBtn = /** @type {HTMLButtonElement} */ (el('start-video-btn'));
-        const playerContainer = el('video-player-container');
-        const player = /** @type {HTMLVideoElement} */ (el('video-player'));
-
-        videoPollInterval = setInterval(async () => {
+        startBtn.disabled = true;
+        let pending = false;
+        let polls = 0;
+        const check = async () => {
+            if (pending || ticket !== videoGeneration) return;
+            pending = true;
             try {
-                const statusData = row(await api('/educational-content/' + encodeURIComponent(lessonId) + '/video/status'));
-                const stage = text(statusData, 'current_stage');
-                const pct = statusData.progress_percent;
-                videoStatus.textContent = 'Rendering video: ' + stage + ' (' + pct + '%)…';
-
-                if (statusData.is_finished === true) {
-                    if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
+                if (++polls > MAX_JOB_POLLS) throw new Error('Video is still processing. Reopen this lesson to check its status.');
+                const status = row(await api('/educational-content/' + encodeURIComponent(lessonId) + '/video/status'));
+                if (ticket !== videoGeneration) return;
+                const state = text(status, 'status');
+                if (!['QUEUED', 'PLANNING', 'GENERATING_AUDIO', 'ALIGNING', 'RENDERING', 'COMPOSITING', 'COMPLETED', 'FAILED', 'NOT_STARTED'].includes(state)) throw new Error('Unexpected video status. Please retry.');
+                el('video-status').textContent = 'Rendering video: ' + text(status, 'stage') + ' (' + Number(status.progress || 0) + '%)…';
+                if (['COMPLETED', 'FAILED', 'NOT_STARTED'].includes(state)) {
+                    if (videoPollInterval) clearInterval(videoPollInterval);
+                    videoPollInterval = null;
                     startBtn.disabled = false;
-
-                    if (statusData.status === 'completed') {
-                        videoStatus.textContent = 'Animated narrated video generated successfully!';
-                        playerContainer.style.display = 'block';
-                        player.src = '/educational-content/' + encodeURIComponent(lessonId) + '/video/stream';
-                        player.load();
-                        startBtn.textContent = 'Regenerate Video';
-                    } else {
-                        videoStatus.textContent = 'Video generation failed: ' + (text(statusData, 'error') || 'Unknown error');
-                    }
+                    if (state === 'COMPLETED') await playEducationalVideo(lessonId, ticket);
+                    else el('video-status').textContent = state === 'FAILED' ? (status.error_code === 'VIDEO_AUDIO_FAILED' ? 'Spoken narration could not be generated. Check the voice service and retry.' : 'Video generation failed. Please retry.') : 'Video generation has not started.';
                 }
-            } catch (e) {
-                if (videoPollInterval) { clearInterval(videoPollInterval); videoPollInterval = null; }
+            } catch (error) {
+                if (ticket !== videoGeneration) return;
+                if (videoPollInterval) clearInterval(videoPollInterval);
+                videoPollInterval = null;
                 startBtn.disabled = false;
-                videoStatus.textContent = 'Failed checking video progress.';
-            }
-        }, 1500);
+                el('video-status').textContent = error instanceof Error ? error.message : 'Failed checking video progress.';
+            } finally { pending = false; }
+        };
+        videoPollInterval = setInterval(() => { void check(); }, POLL_INTERVAL_MS);
+        void check();
     }
 
     async function askEducationalLesson() {
         if (!currentEducationalLesson) return;
+        const selected = currentEducationalLesson;
         const input = /** @type {HTMLTextAreaElement} */ (el('question'));
         const question = input.value.trim();
         if (!question) { el('ask-status').textContent = 'Enter a question first.'; return; }
@@ -734,7 +781,8 @@
         button.disabled = true;
         status.textContent = 'Generating educational response…';
         try {
-            const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/ask', { question }));
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/ask', { question }));
+            if (selected !== currentEducationalLesson) return;
             const turn = document.createElement('article');
             turn.className = 'ask-turn';
             turn.append(node('h3', 'You'), node('p', question), node('h3', 'VisualAI'), node('p', 'AI Educational Tutor', 'ask-evidence-status'), node('p', text(res, 'answer'), 'ask-answer'));
@@ -748,15 +796,17 @@
             status.textContent = '';
             input.value = '';
         } catch (e) {
-            status.textContent = e instanceof Error ? e.message : 'Failed to ask question.';
+            if (selected === currentEducationalLesson) status.textContent = e instanceof Error ? e.message : 'Failed to ask question.';
         } finally {
-            button.disabled = false;
+            if (selected === currentEducationalLesson) button.disabled = false;
         }
     }
 
     /** @param {string} lessonId */
     async function openEducationalLesson(lessonId) {
         const ticket = ++navigation;
+        resetEducationalVideo();
+        notesUI.setSession(null); askUI.setSession(null); practiceUI.setSession(null);
         show('session');
         session = null;
         currentEducationalLesson = null;
@@ -771,9 +821,11 @@
         const lesson = row(await api('/educational-content/' + encodeURIComponent(lessonId)));
         if (ticket !== navigation) return;
         currentEducationalLesson = lesson;
+        notesUI.setTopic(true);
+        el('mastery-content').replaceChildren();
 
         const topic = typeof lesson.topic === 'string' ? lesson.topic : 'Educational Lesson';
-        el('session-source').textContent = lesson.source_scope ? ('Source: ' + text(row(lesson.source_scope), 'source_id')) : 'Independent Topic Lesson';
+        el('session-source').textContent = typeof lesson.source_id === 'string' ? ('Uploaded learning material · version ' + Number(lesson.source_version)) : 'Independent Topic Lesson';
         el('session-title').textContent = topic;
         el('session-subtitle').textContent = 'Interactive AI-generated lesson: explanation, notes, flowcharts, assessments, and video';
         el('session-state').textContent = typeof lesson.status === 'string' ? lesson.status : 'READY';
@@ -983,6 +1035,8 @@
 
     /** @param {string} id @param {boolean} resume */
     async function openSession(id, resume) {
+        resetEducationalVideo();
+        currentEducationalLesson = null;
         const ticket = ++navigation; show('session'); session = null; currentEducationalLesson = null;
         notesUI.setSession(null); askUI.setSession(null); practiceUI.setSession(null);
         switchLessonTab('learn');
@@ -1038,26 +1092,51 @@
     // Generation triggers
     el('generate-notes').addEventListener('click', () => run(async () => {
         if (!currentEducationalLesson) return;
+        const selected = currentEducationalLesson;
+        const detail = /** @type {HTMLSelectElement} */ (el('notes-detail'));
+        const generate = /** @type {HTMLButtonElement} */ (el('generate-notes'));
+        generate.disabled = true; detail.disabled = true;
         el('notes-status').textContent = 'Generating comprehensive structured notes…';
-        const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/notes'));
-        renderEducationalNotes(row(res.notes || res));
-        el('notes-status').textContent = 'Structured educational notes ready.';
+        try {
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/notes', {detail_level: detail.value}));
+            if (selected !== currentEducationalLesson) return;
+            renderEducationalNotes(row(res.notes || res));
+            el('notes-status').textContent = 'Structured educational notes ready.';
+        } catch (error) {
+            if (selected === currentEducationalLesson) el('notes-status').textContent = error instanceof Error ? error.message : 'Notes generation failed.';
+        } finally { if (selected === currentEducationalLesson) { generate.disabled = false; detail.disabled = false; } }
     }));
 
     el('generate-diagram').addEventListener('click', () => run(async () => {
         if (!currentEducationalLesson) return;
+        const selected = currentEducationalLesson;
+        const generate = /** @type {HTMLButtonElement} */ (el('generate-diagram'));
+        generate.disabled = true;
         el('diagram-status').textContent = 'Generating algorithmic flowchart diagram…';
-        const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/diagram'));
-        renderEducationalDiagram(row(res.diagram || res));
-        el('diagram-status').textContent = 'Flowchart diagram rendered.';
+        try {
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/diagram'));
+            if (selected !== currentEducationalLesson) return;
+            renderEducationalDiagram(row(res.diagram || res));
+            el('diagram-status').textContent = 'Flowchart diagram rendered.';
+        } catch (error) {
+            if (selected === currentEducationalLesson) el('diagram-status').textContent = error instanceof Error ? error.message : 'Flowchart generation failed.';
+        } finally { if (selected === currentEducationalLesson) generate.disabled = false; }
     }));
 
     el('start-practice').addEventListener('click', () => run(async () => {
         if (!currentEducationalLesson) return;
+        const selected = currentEducationalLesson;
+        const start = /** @type {HTMLButtonElement} */ (el('start-practice'));
+        start.disabled = true;
         el('practice-status').textContent = 'Generating practice assessment questions…';
-        const res = row(await post('/educational-content/' + encodeURIComponent(text(currentEducationalLesson, 'lesson_id')) + '/assessment'));
-        renderEducationalAssessment(row(res.assessment || res));
-        el('practice-status').textContent = 'Assessment questions ready.';
+        try {
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/assessment'));
+            if (selected !== currentEducationalLesson) return;
+            renderEducationalAssessment(row(res.assessment || res));
+            el('practice-status').textContent = 'Assessment questions ready.';
+        } catch (error) {
+            if (selected === currentEducationalLesson) el('practice-status').textContent = error instanceof Error ? error.message : 'Assessment generation failed.';
+        } finally { if (selected === currentEducationalLesson) start.disabled = false; }
     }));
 
     el('start-video-btn').addEventListener('click', () => run(async () => {
@@ -1101,6 +1180,10 @@
         } else {
             run(() => ask());
         }
+    });
+    el('ask-nav').addEventListener('click', () => {
+        switchLessonTab('learn');
+        el('question').focus();
     });
     el('complete-session').addEventListener('click', () => run(() => transition('complete')));
     el('abandon-session').addEventListener('click', () => run(() => transition('abandon')));

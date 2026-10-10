@@ -94,7 +94,6 @@ def test_accepted_visual_prepares_minimal_evidenced_hierarchy(
         "parent",
         "orphan",
         "fake_label",
-        "wrong_evidence",
         "foreign_anchor",
     ],
 )
@@ -113,11 +112,6 @@ def test_unsupported_content_and_membership_fail_after_bounded_model_repair(
         body["concepts"][0]["subtopic_key"] = "foreign"
     elif defect == "fake_label":
         body["topics"][0]["title"] = "Main Topic"
-    elif defect == "wrong_evidence":
-        body["concepts"][0]["name"] = "Water Movement"
-        body["concepts"][0]["evidence"] = [
-            {"anchor_id": build_anchors(SCOPE, units)[1].anchor_id}
-        ]
     else:
         body["concepts"][0]["evidence"] = [{"anchor_id": "EA_foreign"}]
     calls: list[str] = []
@@ -137,6 +131,24 @@ def test_visual_identity_grouping_requires_accepted_visual_provenance() -> None:
     units = [units[0].model_copy(update={"content": altered, "provenance": {}})]
     with pytest.raises(UnderstandingError, match="INVALID_HIERARCHY|NO_SAFE_CONTENT"):
         understand_content(SCOPE, units, lambda _: json.dumps(body))
+
+
+def test_grounded_visual_name_can_repair_a_wrong_local_anchor() -> None:
+    from app.services.evidence_anchors import AnchoredStructureProposal, bind_verified_visual_labels
+    from app.services.content_understanding import label_supported
+    units, body = accepted("SIMPLE")
+    anchors = build_anchors(SCOPE, units)
+    body["concepts"][0]["name"] = "Water Movement"
+    body["concepts"][0]["evidence"] = [{"anchor_id": anchors[1].anchor_id}]
+    original = AnchoredStructureProposal.model_validate_json(json.dumps(body))
+    repaired, changes = bind_verified_visual_labels(SCOPE, units, original)
+    concept = repaired.concepts[0]
+    lookup = {anchor.anchor_id: anchor for anchor in anchors}
+    assert "grounded_name_anchor:c1" in changes
+    assert all(reference.anchor_id in lookup for reference in concept.evidence)
+    assert label_supported(concept.name, " ".join(lookup[reference.anchor_id].text for reference in concept.evidence), derived=True)
+    result = understand_content(SCOPE, units, lambda _: json.dumps(body))
+    assert any(concept.name == "Water Movement" for concept in result.snapshot.concepts)
 
 
 @pytest.mark.parametrize("invent", [False, True])
@@ -215,7 +227,13 @@ def test_visual_request_preserves_full_resource_bounds_without_label_enums(
     )
     schema = captured[0].response_schema
     assert schema is not None
-    assert schema == AnchoredStructureProposal.model_json_schema()
+    expected = AnchoredStructureProposal.model_json_schema()
+    for name in ("AnchoredTopic", "AnchoredSubtopic", "AnchoredConcept"):
+        required = expected["$defs"][name].setdefault("required", [])
+        if "evidence" not in required:
+            required.append("evidence")
+        expected["$defs"][name]["properties"]["evidence"]["minItems"] = 1
+    assert schema == expected
     assert schema["properties"]["concepts"]["maxItems"] > 1
     assert "enum" not in schema["$defs"]["AnchoredConcept"]["properties"]["name"]
 

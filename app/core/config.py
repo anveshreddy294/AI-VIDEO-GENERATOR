@@ -77,6 +77,7 @@ class Settings:
         self.mastery_threshold: int = int(os.getenv("MASTERY_THRESHOLD", "2"))
         self.kill_switch_limit: int = int(os.getenv("KILL_SWITCH_LIMIT", "3"))
         self.llm_provider: str = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+        self.reasoning_provider: str = os.getenv("REASONING_PROVIDER", self.llm_provider).strip().lower()
         self.ollama_base_url: str = (os.getenv("OLLAMA_BASE_URL") or os.getenv("OLLAMA_URL", "http://localhost:11434")).rstrip("/")
         self.ollama_url: str = self.ollama_base_url
         self.ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
@@ -125,8 +126,9 @@ class Settings:
         self.max_pending_jobs: int = int(os.getenv("MAX_PENDING_JOBS", "20"))
         self.job_retention_max: int = int(os.getenv("JOB_RETENTION_MAX", "100"))
 
-        # --- Cloud-primary visual routing; local vision is explicit/offline only. ---
+        # --- Cloud-primary vision with configurable operational local fallback. ---
         self.vision_provider: str = os.getenv("VISION_PROVIDER", "cloudflare").strip().lower()
+        self.vision_local_fallback_enabled: bool = os.getenv("VISION_LOCAL_FALLBACK_ENABLED", "true").strip().lower() in {"1", "true", "yes"}
         self.visual_independent_verifier: str = os.getenv("VISUAL_INDEPENDENT_VERIFIER", "none").strip().lower()
         if self.visual_independent_verifier not in ("none", "ollama", "cloudflare"):
             raise ValueError("VISUAL_INDEPENDENT_VERIFIER must be none, ollama or cloudflare")
