@@ -40,5 +40,5 @@ if __name__ == "__main__":
         port=8000,
         reload=True,
         reload_dirs=[str(app_dir)],
-        reload_excludes=[str(venv_dir), str(storage_dir)],
+        reload_excludes=[".venv*", "storage*", "*.pyc", "__pycache__*"],
     )
