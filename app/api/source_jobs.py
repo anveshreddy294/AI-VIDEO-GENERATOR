@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from uuid import uuid5, NAMESPACE_URL
 from typing import TYPE_CHECKING
+from contextlib import asynccontextmanager
 if TYPE_CHECKING:
     from .pipeline import JobCreationResponse
 from fastapi import BackgroundTasks, HTTPException
@@ -22,11 +23,38 @@ from ..core.config import settings
 from ..core.inference_budget import processing_budget
 from ..services.ingestion.failures import SourceFailure, SourceIngestionFailed, SourceIndexFailed
 
+SOURCE_HEARTBEAT_SECONDS = 15.0
+
+
+@asynccontextmanager
+async def source_execution_slot():
+    semaphore = job_manager.get_semaphore()
+    await asyncio.wait_for(semaphore.acquire(), timeout=settings.source_job_timeout_seconds)
+    try:
+        yield
+    finally:
+        semaphore.release()
+
+
+async def wait_for_source_worker(job_id: str, worker: asyncio.Task, started: float):
+    """Observe work without restarting it or cancelling a committing thread."""
+    while True:
+        done, _ = await asyncio.wait({worker}, timeout=SOURCE_HEARTBEAT_SECONDS)
+        if done:
+            return await worker
+        job = job_manager.get_job(job_id)
+        if job is not None:
+            elapsed = time.monotonic() - started
+            logging.getLogger(__name__).info("SOURCE_JOB_WAITING job_id=%s stage=%s elapsed_seconds=%.1f", job_id, job.current_stage, elapsed)
+            await job_manager.emit_event(job_id=job_id, stage=job.current_stage, status='running',
+                message=f'Processing continues in this stage ({int(elapsed)} seconds elapsed).',
+                progress_percent=job.progress_percent, metadata={'duration_ms': int(elapsed * 1000)})
+
 
 async def complete_source_job(job_id: str, result: dict[str, JsonValue]) -> None:
     """Publish the terminal job only after the canonical operation has completed."""
     job = job_manager.get_job(job_id)
-    logging.getLogger(__name__).info("SOURCE_JOB_TERMINAL job_id=%s status=completed readiness=%s warnings=%s", job_id, "CONTENT_READY" if result.get("content_ready") else "READY", result.get("warnings", []))
+    logging.getLogger(__name__).info("SOURCE_JOB_TERMINAL job_id=%s status=completed readiness=%s content_units=%s warnings=%s", job_id, "CONTENT_READY" if result.get("content_ready") else "READY", result.get("content_units", 0), result.get("warnings", []))
     if job:
         job.metadata['source_id'] = result['source_id']
         job.result = result
@@ -46,6 +74,7 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
     if task:
         job_manager.attach_task(job_id, task)
     worker: asyncio.Task[dict[str, JsonValue]] | None = None
+    job_started = time.monotonic()
     loop = asyncio.get_running_loop()
     stage_started = time.monotonic()
     last_stage: str = "queued"
@@ -68,10 +97,10 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
             message=messages[stage], progress_percent=percent), loop).result(timeout=5)
 
     try:
-        async with job_manager.get_semaphore():
+        async with source_execution_slot():
             await job_manager.emit_event(job_id=job_id, stage='ingesting_source', status='running',
                 message='Extracting and saving reusable content; enrichment is optional.', progress_percent=5)
-            with source_progress(progress), processing_budget(settings.source_job_timeout_seconds):
+            with source_progress(progress), processing_budget(max(.001, settings.source_job_timeout_seconds - (time.monotonic() - job_started)), job_id=job_id):
                 if record is not None:
                     worker = asyncio.create_task(asyncio.to_thread(index_committed_source, repo, record))
                 elif path is not None:
@@ -82,7 +111,7 @@ async def execute_source_job(job_id: str, repo: SupabaseSourceRepository, path: 
                 else:
                     raise ValueError('Source job has no input')
             try:
-                result = await asyncio.shield(worker)
+                result = await wait_for_source_worker(job_id, worker, job_started)
             except asyncio.CancelledError:
                 # A thread cannot be cancelled: settle its actual publication outcome.
                 result = await asyncio.shield(worker)

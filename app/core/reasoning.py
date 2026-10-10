@@ -17,7 +17,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SecretStr, ValidationError
 
 from .config import settings
-from .inference_budget import effective_deadline, check_budget, local_inference_slot
+from .inference_budget import effective_deadline, check_budget, local_inference_slot, current_job_id
 
 logger = logging.getLogger(__name__)
 Task = Literal[
@@ -221,9 +221,19 @@ class CloudflareProvider:
         policy = self.policy
         started = self.clock()
         try:
-            body = self.fetch_payload(
-                request.model_dump(mode="json", exclude_none=True), deadline
-            )
+            payload = request.model_dump(mode="json", exclude_none=True)
+            if request.response_schema is not None:
+                # Older deployed Workers forward JSON mode only for designated
+                # structured tasks. Keep the exact contract in model-visible
+                # instructions too; the server validator remains authoritative.
+                instruction = "Return only JSON matching JSON_SCHEMA=" + json.dumps(request.response_schema, separators=(",", ":"))
+                messages = payload["messages"]
+                system = next((message for message in messages if message["role"] == "system"), None)
+                if system is not None:
+                    system["content"] += "\n" + instruction
+                else:
+                    messages.insert(0, {"role": "system", "content": instruction})
+            body = self.fetch_payload(payload, deadline)
             if policy.secret.get_secret_value().encode() in body:
                 raise ProviderFailure("INVALID_RESPONSE")
             try:
@@ -301,7 +311,7 @@ class CloudflareProvider:
             remaining = deadline - self.clock()
             if remaining <= 0:
                 raise ProviderFailure("TIMEOUT", True)
-            logger.info("AI_TRANSPORT_STARTED task=%s payload_bytes=%d", payload.get("task"), len(json.dumps(payload).encode()))
+            logger.info("AI_TRANSPORT_STARTED job_id=%s task=%s payload_bytes=%d", current_job_id(), payload.get("task"), len(json.dumps(payload).encode()))
             return asyncio.run(self._fetch(url, payload, timeout, remaining))
         except (httpx.TimeoutException, TimeoutError):
             raise ProviderFailure("TIMEOUT", True) from None
@@ -500,6 +510,15 @@ class ReasoningProviderRouter:
         )
 
     def generate(self, request: ReasoningRequest) -> ReasoningResult:
+        return self._generate(request)
+
+    def generate_validated(self, request: ReasoningRequest,
+                           validate: Callable[[ReasoningResult], None]) -> ReasoningResult:
+        """Reject unusable primary output before reporting success; validate fallback identically."""
+        return self._generate(request, validate)
+
+    def _generate(self, request: ReasoningRequest,
+                  validate: Callable[[ReasoningResult], None] | None = None) -> ReasoningResult:
         if not isinstance(request, ReasoningRequest):
             raise ProviderFailure("REQUEST_REJECTED")
         reason: FailureCategory = "CIRCUIT_OPEN"
@@ -524,6 +543,11 @@ class ReasoningProviderRouter:
                         if isinstance(self.primary, CloudflareProvider)
                         else self.primary.generate(request)
                     )
+                    if validate is not None:
+                        try:
+                            validate(result)
+                        except ValueError:
+                            raise ProviderFailure("INVALID_RESPONSE") from None
                     self.circuit.succeeded()
                     record(result.telemetry)
                     logger.info(
@@ -559,6 +583,9 @@ class ReasoningProviderRouter:
                         },
                     )
                     if not error.retryable:
+                        if error.category == "INVALID_RESPONSE" and validate is not None:
+                            self.circuit.succeeded()
+                            break
                         if error.category == "QUOTA_EXHAUSTED":
                             self.circuit.failed(reason)
                             break
@@ -580,6 +607,11 @@ class ReasoningProviderRouter:
         fallback_started = self.clock()
         try:
             result = self.fallback.generate(request)
+            if validate is not None:
+                try:
+                    validate(result)
+                except ValueError:
+                    raise ProviderFailure("INVALID_RESPONSE") from None
             record(result.telemetry)
             logger.info(
                 "AI_FALLBACK_SUCCEEDED",

@@ -1,5 +1,7 @@
 # Cloudflare-first reliability implementation — fixext
 
+**Later repair update:** See [critical-repair.md](critical-repair.md) for the teaching contract fixes and newer successful Cloudflare text/vision checks. The failures below record the earlier run and are not the latest availability result.
+
 This records repository changes and actual checks on 2026-10-10. The implementation is local and uncommitted. No Worker deployment, package installation, schema change in Supabase, or new learning loop was performed. A reliable live Cloudflare upload journey is **not yet accepted**: the configured deployed Worker responds to health checks but rejects real inference with HTTP 502.
 
 **1. Confirmed root causes and unresolved upstream failure**

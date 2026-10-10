@@ -80,7 +80,9 @@ async def generate_content(body: ContentRequest, repository: SourceDependency) -
 
         raise HTTPException(
             422,
-            {"code": "EDUCATIONAL_CONTENT_INVALID"}
+            {"code": "EDUCATIONAL_CONTENT_INVALID",
+             "message": "The model returned an invalid lesson. Retry generation; no lesson was saved.",
+             "retryable": True}
         ) from None
     except Exception:
         raise generation_error("EDUCATIONAL_CONTENT_FAILED") from None

@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {configuredTimeout,handleVisual} from '../src/visual.js';
+import {configuredTimeout,handleVisual,providerFailure} from '../src/visual.js';
 import fs from 'node:fs';
+
+for(const code of [5007,3042])test('missing model '+code+' has bounded-fallback classification without raw errors',()=>{
+    assert.deepEqual(providerFailure(new Error(code+': unavailable private-error-body')),
+        {error:'AI_MODEL_UNAVAILABLE',status:503,native_code:code});
+});
 
 test('task budgets accept long environment overrides and reject non-finite values',()=>{
     assert.equal(configuredTimeout('240000',180000),240000);

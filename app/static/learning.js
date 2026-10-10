@@ -49,6 +49,7 @@
     function safeError(status, value) {
         if (status === 401) return 'Your session has expired. Please sign in again.';
         const failures = {
+            INVALID_RESPONSE: 'The model returned invalid output. No generated result was saved. Retry generation.',
             VIDEO_PLAN_INVALID: 'This lesson could not be converted into a valid video plan.',
             VIDEO_START_FAILED: 'Video generation could not start. Please retry.',
             ASSESSMENT_SUBMISSION_INVALID: 'Answer every question before submitting this assessment.',
@@ -71,7 +72,7 @@
             if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
                 const code = row(detail).code;
                 if (typeof code === 'string' && Object.hasOwn(uploadValidation, code)) return uploadValidation[code];
-                if (code === 'EDUCATIONAL_CONTENT_INVALID') return 'Could not generate educational lesson for this topic. Please try again.';
+                if (code === 'EDUCATIONAL_CONTENT_INVALID') return 'The model returned an invalid lesson. No lesson was saved. Retry generation.';
                 if (code === 'LESSON_NOT_FOUND') return 'The requested educational lesson was not found.';
             }
             if (Array.isArray(detail)) return 'Invalid input format. Please check your topic and try again.';
@@ -337,7 +338,7 @@
         return {
             source_id: text(value, 'source_id'),
             filename: text(value, 'filename'),
-            modality: typeof value.source_type === 'string' ? value.source_type : 'material',
+            modality: typeof value.modality === 'string' ? value.modality : typeof value.source_type === 'string' ? value.source_type : 'material',
             status: text(value, 'status'),
             version: /** @type {number} */ (value.version),
             content_ready: Boolean(value.content_ready),
@@ -346,11 +347,11 @@
     /** @param {Row[]} saved */
     function renderRecent(saved) {
         el('recent-source-card').replaceChildren();
-        const recent = sources.find(s => s.source_id === recentSourceId && s.status === 'READY') || sources.find(s => s.status === 'READY') || sources.find(s => s.content_ready);
+        const recent = sources.find(s => s.source_id === recentSourceId && (s.status === 'READY' || s.content_ready)) || sources.find(s => s.status === 'READY') || sources.find(s => s.content_ready);
         if (recent) {
             el('recent-source').hidden = false;
             const card = node('article', '', 'card');
-            card.append(node('span', recent.status, 'badge'), node('h3', recent.filename), node('p', recent.modality + ' · Version ' + recent.version, 'muted'));
+            card.append(node('span', recent.content_ready && recent.status !== 'READY' ? 'CONTENT_READY' : recent.status, 'badge'), node('h3', recent.filename), node('p', recent.modality + ' · Version ' + recent.version, 'muted'));
             const active = saved.find(s => s.source_id === recent.source_id && s.source_version === recent.version && s.state === 'ACTIVE');
             if (active) {
                 card.append(button('Continue learning', () => openSession(text(active, 'session_id'), true)));
@@ -791,7 +792,20 @@
             if (selected !== currentEducationalLesson) return;
             const turn = document.createElement('article');
             turn.className = 'ask-turn';
-            turn.append(node('h3', 'You'), node('p', question), node('h3', 'VisualAI'), node('p', 'AI Educational Tutor', 'ask-evidence-status'), node('p', text(res, 'answer'), 'ask-answer'));
+            turn.append(node('h3', 'You'), node('p', question), node('h3', 'VisualAI'), node('p', 'AI-enriched supplemental explanation', 'ask-evidence-status'), node('p', text(res, 'answer'), 'ask-answer'));
+            const citations = rows(res.citations || []);
+            if (citations.length > MAX_CITATIONS) throw new Error('Invalid citations');
+            if (citations.length) {
+                const list = node('ul', '', 'ask-citations');
+                for (const citation of citations) {
+                    if (!selected.source_id || citation.source_id !== selected.source_id || citation.source_version !== selected.source_version || citation.verified !== true) throw new Error('Invalid citation scope');
+                    const label = text(citation, 'location');
+                    const quote = text(citation, 'quote');
+                    if (!label.trim() || label.length > MAX_CITATION_LOCATION_CHARS || quote.length > MAX_QUESTION_CHARS) throw new Error('Invalid citation');
+                    list.append(node('li', label + ' · Version ' + citation.source_version + ' — ' + quote));
+                }
+                turn.append(node('h4', 'Source observations'), list);
+            }
             const keyPoints = strings(res.key_points || []);
             if (keyPoints.length) {
                 const kpUl = document.createElement('ul');
@@ -829,6 +843,7 @@
         currentEducationalLesson = lesson;
         notesUI.setTopic(true);
         el('mastery-content').replaceChildren();
+        el('ask-status').textContent = 'Ask a follow-up question about this lesson.';
 
         const topic = typeof lesson.topic === 'string' ? lesson.topic : 'Educational Lesson';
         el('session-source').textContent = typeof lesson.source_id === 'string' ? ('Uploaded learning material · version ' + Number(lesson.source_version)) : 'Independent Topic Lesson';
@@ -854,6 +869,22 @@
         overviewBlock.append(node('h3', 'Core Explanation'));
         overviewBlock.append(node('p', typeof teaching.explanation === 'string' ? teaching.explanation : ''));
         el('concept-cards').append(overviewBlock);
+
+        for (const [key, title] of [['mathematical_notation', 'Mathematical Notation'], ['common_misconceptions', 'Common Misconceptions']]) {
+            const entries = teaching[key];
+            if (!Array.isArray(entries) || !entries.length) continue;
+            const section = node('article', '', 'concept');
+            section.append(node('h3', title));
+            const list = document.createElement('ul');
+            for (const entry of entries) {
+                const value = typeof entry === 'string' ? entry : key === 'mathematical_notation'
+                    ? text(row(entry), 'symbol') + ': ' + text(row(entry), 'meaning')
+                    : text(row(entry), 'misconception') + ' — ' + text(row(entry), 'correction');
+                list.append(node('li', value));
+            }
+            section.append(list);
+            el('concept-cards').append(section);
+        }
 
         const concepts = rows(teaching.key_concepts || []);
         if (concepts.length) {
@@ -940,7 +971,7 @@
             const card = node('article', '', 'card');
             const isReady = item.status === 'READY';
             const isContentReady = item.content_ready || item.status === 'CONTENT_READY' || isReady;
-            card.append(node('span', item.status, 'badge'), node('h3', item.filename), node('p', 'Version ' + item.version, 'muted'));
+            card.append(node('span', isContentReady && !isReady ? 'CONTENT_READY' : item.status, 'badge'), node('h3', item.filename), node('p', 'Version ' + item.version, 'muted'));
             if (isContentReady) {
                 card.append(button('Learn with VisualAI', async () => {
                     el('status').textContent = 'Preparing lesson for ' + item.filename + '…';
@@ -1208,7 +1239,10 @@
                     if (current.is_finished === true) {
                         if (current.status !== 'completed') { uploadStatus.fail(current.failure); return; }
                         recentSourceId = typeof row(current.result).source_id === 'string' ? text(row(current.result), 'source_id') : '';
-                        await loadSources(); uploadStatus.progress({ current_stage: row(current.result).content_ready === true ? 'content_ready' : 'source_ready', result: current.result }); return;
+                        uploadStatus.progress({ current_stage: row(current.result).content_ready === true ? 'content_ready' : 'source_ready', result: current.result });
+                        try { await loadSources(); }
+                        catch { el('status').textContent = 'Your material was saved. Refresh the source list to open it.'; }
+                        return;
                     }
                     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS));
                 }

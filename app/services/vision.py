@@ -57,7 +57,7 @@ SAFE_VISION_ERROR_CODES: frozenset[str] = frozenset({
 class VisionRouteFailureTrace(BaseModel):
     """Fixed operational classifications only; no upstream payload or transport URL."""
     model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
-    cloud_failure_category: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "QUOTA_EXHAUSTED", "PROVIDER_UNAVAILABLE"] | None = None
+    cloud_failure_category: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "QUOTA_EXHAUSTED", "PROVIDER_UNAVAILABLE", "INVALID_RESPONSE"] | None = None
     cloud_attempt_count: int = Field(ge=0, le=2)
     local_fallback_attempted: bool
     local_failure_code: VisionErrorCode | None = None

@@ -409,7 +409,7 @@ class JobManager:
         """Return per-process concurrency control semaphore for background tasks."""
         if self._semaphore is None:
             from ..core.config import settings
-            limit = max(1, int(getattr(settings, "ollama_max_concurrency", getattr(settings, "max_background_jobs", 1))))
+            limit = max(1, int(settings.max_background_jobs))
             self._semaphore = asyncio.Semaphore(limit)
         return self._semaphore
 

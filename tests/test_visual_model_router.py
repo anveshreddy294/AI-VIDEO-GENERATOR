@@ -197,19 +197,20 @@ def test_operational_chains_only(
         {"visible_text": [], "confidence": 0.9},
     ],
 )
-def test_invalid_quality_never_operational_fallback(output: dict[str, object]) -> None:
+def test_invalid_cloud_quality_is_discarded_before_validated_local_fallback(output: dict[str, object]) -> None:
     cloud = CloudDouble([output])
     local = LocalDouble()
-    with pytest.raises(VisionExtractionFailed):
-        VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(
-            FIXTURE.read_bytes(), "printed.png", VisualSignals(semantic_kind="TEXT")
-        )
-    assert len(cloud.calls) == 1 and local.calls == 0
+    result = VisualModelRouter(cloud, local, local_fallback_enabled=True).extract(
+        FIXTURE.read_bytes(), "printed.png", VisualSignals(semantic_kind="TEXT"))
+    assert len(cloud.calls) == 1 and local.calls == 1
+    assert result._actual_provider == "ollama"
+    assert result.visible_text == DATA["visible_text"]
+    assert result._routing_provenance["fallback_reason"] == "INVALID_RESPONSE"
 
 
 @pytest.mark.parametrize(
     "category",
-    ["AUTH_REJECTED", "CONFIGURATION", "INVALID_RESPONSE", "REQUEST_REJECTED"],
+    ["AUTH_REJECTED", "CONFIGURATION", "REQUEST_REJECTED"],
 )
 def test_request_config_failure_never_local(category: str) -> None:
     cloud = CloudDouble([ProviderFailure(category)])

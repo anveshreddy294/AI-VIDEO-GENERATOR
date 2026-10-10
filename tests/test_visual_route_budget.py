@@ -100,7 +100,7 @@ def test_two_cloud_attempts_share_cutoff_then_one_local(monkeypatch) -> None:
     assert cloud.deadlines == [40, 40]
     assert local.calls == 1 and clock.now == 85
 
-@pytest.mark.parametrize("failure", [ProviderFailure("AUTH", False), ProviderFailure("CONFIG", False), ProviderFailure("INVALID_REQUEST", False), VisionExtractionFailed("schema invalid", "VISION_INVALID_RESPONSE")])
+@pytest.mark.parametrize("failure", [ProviderFailure("AUTH", False), ProviderFailure("CONFIG", False), ProviderFailure("INVALID_REQUEST", False)])
 def test_nonoperational_failure_never_falls_back(failure: Exception) -> None:
     clock = Clock()
     local = Local(clock, 45)

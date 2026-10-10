@@ -213,7 +213,7 @@ def get_sources(repository: SourceDependency = None) -> dict[str, list[dict[str,
         for row in repository.list_sources():
             has_units = False
             try:
-                has_units = bool(repository.get_content_units(row.source_id, row.version))
+                has_units = row.status == "READY" or repository.has_content_units(row.source_id, row.version)
             except Exception:
                 has_units = False
             sources_list.append({

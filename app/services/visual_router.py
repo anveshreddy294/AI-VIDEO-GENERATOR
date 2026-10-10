@@ -25,6 +25,7 @@ from pydantic import (
     TypeAdapter,
 )
 from ..core.config import settings
+from ..core.inference_budget import current_job_id
 from ..core.reasoning import CloudflareProvider, ProviderFailure, get_cloud_reasoning_router, retry_pause
 from .visual_contracts import VisionExtractionData, VisualKind
 from .vision import (
@@ -472,7 +473,7 @@ class VisualModelRouter:
         triage_ms = 0.0
         provider_ms = 0.0
         validation_ms = 0.0
-        fallback_reason: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "QUOTA_EXHAUSTED", "PROVIDER_UNAVAILABLE"] | None = None
+        fallback_reason: Literal["TIMEOUT", "NETWORK", "RATE_LIMIT", "QUOTA_EXHAUSTED", "PROVIDER_UNAVAILABLE", "INVALID_RESPONSE"] | None = None
         candidate: VisionExtractionData | None = None
         request_id = str(uuid4())
         model = decision.selected_model
@@ -485,7 +486,7 @@ class VisualModelRouter:
                 if calls >= MAX_ROUTE_CALLS - 1 or self.clock() >= cloud_deadline:
                     break
                 calls += 1
-                logger.info("VISUAL_ATTEMPT provider=cloudflare model=%s attempt=%d workload=%s", MODELS[tier], calls, decision.workload)
+                logger.info("VISUAL_ATTEMPT job_id=%s provider=cloudflare model=%s attempt=%d workload=%s", current_job_id(), MODELS[tier], calls, decision.workload)
                 call_started = time.perf_counter()
                 try:
                     response = self.cloud.generate(
@@ -500,6 +501,9 @@ class VisualModelRouter:
                     break
                 except ProviderFailure as error:
                     provider_ms += (time.perf_counter() - call_started) * 1000
+                    if error.category == "INVALID_RESPONSE":
+                        fallback_reason = "INVALID_RESPONSE"
+                        break
                     if error.category == "QUOTA_EXHAUSTED":
                         fallback_reason = "QUOTA_EXHAUSTED"
                         break
@@ -516,6 +520,12 @@ class VisualModelRouter:
                     if attempt + 1 < len(tiers) and not retry_pause(error, attempt, cloud_deadline, clock=self.clock):
                         break
                 except VisionExtractionFailed as error:
+                    if error.error_code == VISION_INVALID_RESPONSE:
+                        # Discard the unusable proposal; fallback must still pass
+                        # this validator and independent pixel review before publication.
+                        candidate = None
+                        fallback_reason = "INVALID_RESPONSE"
+                        break
                     error.route_trace = VisionRouteFailureTrace(cloud_failure_category=fallback_reason,
                         cloud_attempt_count=calls, local_fallback_attempted=False)
                     raise
@@ -523,7 +533,7 @@ class VisualModelRouter:
                 candidate = None
             if candidate is None:
                 if not self.local_fallback_enabled:
-                    codes = {"TIMEOUT": "VISION_TIMEOUT", "RATE_LIMIT": "VISION_RATE_LIMIT"}
+                    codes = {"TIMEOUT": "VISION_TIMEOUT", "RATE_LIMIT": "VISION_RATE_LIMIT", "INVALID_RESPONSE": VISION_INVALID_RESPONSE}
                     raise VisionExtractionFailed("Cloud visual route unavailable",
                         codes.get(fallback_reason, "VISION_PROVIDER_FAILED"),
                         route_trace=VisionRouteFailureTrace(cloud_failure_category=fallback_reason,

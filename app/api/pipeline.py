@@ -1022,15 +1022,8 @@ async def get_job_status(job_id: str, repository: SourceDependency = None) -> di
         raise HTTPException(404, "Job not found")
     if not job:
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found.")
-    if repository is not None and job.status == "failed":
-        source_id = job.metadata.get("source_id")
-        if isinstance(source_id, str):
-            current = await asyncio.to_thread(repository.get_source, source_id)
-            if current is not None and current.status == "READY":
-                from .source_jobs import complete_source_job
-                from ..services.ingestion.source_ingestion import index_committed_source
-                result = await asyncio.to_thread(index_committed_source, repository, current)
-                await complete_source_job(job_id, result)
+    # Recovery belongs to the worker or explicit retry route. GET polling is
+    # observational and must never start generation, indexing or persistence.
     return job.model_dump()
 
 

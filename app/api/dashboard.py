@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 router = APIRouter(tags=["dashboard"])
 
 DASHBOARD_HTML = """<!DOCTYPE html>
-<html lang="en" data-theme="light" data-source-provider="__SOURCE_PROVIDER__">
+<html lang="en" data-theme="light" data-source-provider="__SOURCE_PROVIDER__" data-job-poll-timeout-seconds="__JOB_POLL_TIMEOUT_SECONDS__">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1764,7 +1764,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
 
         const supabaseMode = document.documentElement.dataset.sourceProvider === 'supabase';
         const SOURCE_POLL_INTERVAL_MS = 1000;
-        const SOURCE_JOB_TIMEOUT_MS = 10 * 60 * 1000;
+        const SOURCE_JOB_TIMEOUT_MS = (Number(document.documentElement.dataset.jobPollTimeoutSeconds) || 3600) * 1000;
 
         /** @param {string} path @param {RequestInit} [options] */
         function sourceFetch(path, options = {}) {
@@ -1801,9 +1801,10 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 const response = await sourceFetch('/pipeline/jobs/' + encodeURIComponent(jobId));
                 if (!response.ok) throw new Error('Could not retrieve the source job.');
                 const job = await response.json();
-                document.getElementById('sourceResult').textContent = 'Analyzing material: ' + (job.progress_percent || 0) + '%';
+                const stage = typeof job.current_stage === 'string' ? job.current_stage : 'processing';
+                document.getElementById('sourceResult').textContent = 'Analyzing material: ' + (job.progress_percent || 0) + '% — ' + stage;
                 if (job.is_finished) {
-                    if (job.status !== 'completed' || job.result?.status !== 'READY') {
+                    if (job.status !== 'completed' || !(job.result?.status === 'READY' || job.result?.content_ready === true)) {
                         const failure = job.failure;
                         const safeStages = ['EXTRACTION', 'NORMALIZATION', 'STRUCTURING', 'CHUNKING', 'PERSISTENCE', 'INDEXING'];
                         if (failure && safeStages.includes(failure.stage) && typeof failure.message === 'string') {
@@ -1834,7 +1835,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
                 if (!response.ok) throw new Error('Source upload was not accepted.');
                 const created = await response.json();
                 const result = await waitForSourceJob(created.job_id);
-                output.textContent = 'SOURCE_READY: ' + result.filename + ' — ' + result.content_units +
+                output.textContent = (result.content_ready === true ? 'CONTENT_READY: ' : 'SOURCE_READY: ') + result.filename + ' — ' + result.content_units +
                     ' content units; source ' + result.source_id;
                 await loadSources();
             } catch (error) {
@@ -3843,7 +3844,7 @@ def dashboard():
     if settings.database_provider == 'supabase':
         from .learner import learning_page
         return learning_page()
-    content = DASHBOARD_HTML.replace('__SOURCE_PROVIDER__', 'supabase' if settings.database_provider == 'supabase' else 'file')
+    content = DASHBOARD_HTML.replace('__SOURCE_PROVIDER__', 'supabase' if settings.database_provider == 'supabase' else 'file').replace('__JOB_POLL_TIMEOUT_SECONDS__', str(settings.frontend_job_poll_timeout_seconds))
     if settings.database_provider == 'supabase':
         # Hide legacy identity/assessment controls before JavaScript initialization.
         content = content.replace('value="student_1"', 'value="" disabled')

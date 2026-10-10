@@ -17,6 +17,38 @@ from app.services.visual_router import CloudflareVisionProvider, VisualModelRout
 from app.services.vision import VisionExtractionFailed
 from app.services.independent_visual_verifier import CloudflareIndependentVisualVerifier
 from app.services.visual_verifier import VisualEvidenceVerifier, verification_summary
+from app.services.educational_content import Teaching, normalize_teaching_json
+from pydantic import ValidationError
+
+
+def check_text_task(task: str, *, teaching: bool = False) -> bool:
+    started = time.monotonic()
+    phase = "transport_envelope"
+    try:
+        instruction = ('Return strict JSON teaching about binary search trees. explanation must be a string. '
+                       'Include topic, explanation, key_concepts, examples, equations, relationships. '
+                       'Keep the explanation to two sentences.' if teaching else
+                       'Return only JSON: {"answer":"A binary search tree orders smaller keys to the left and larger keys to the right."}')
+        # Reasoning models may spend their output budget before visible answer
+        # content. Use a realistic budget instead of treating a 128-token probe
+        # as equivalent to the application's lesson workload.
+        result = get_cloud_reasoning_router().primary.generate(ReasoningRequest(task=task,
+            messages=[Message(role="user", content=instruction)], max_tokens=2048,
+            response_schema=Teaching.model_json_schema() if teaching else None))
+        if teaching:
+            phase = "lesson_contract"
+            Teaching.model_validate(normalize_teaching_json(result.response))
+        else:
+            parsed = json.loads(result.response)
+            assert isinstance(parsed.get("answer"), str) and parsed["answer"].strip()
+        print(json.dumps({"task": task, "status": "PASS", "provider": result.telemetry.provider,
+            "model": result.telemetry.model, "elapsed_seconds": round(time.monotonic()-started, 3)}))
+        return True
+    except (ProviderFailure, ValueError, AssertionError) as error:
+        print(json.dumps({"task": task, "status": "FAIL", "category": error.category if isinstance(error, ProviderFailure) else "INVALID_RESPONSE",
+            "phase": phase, "validation_errors": [{"field": item['loc'][0] if item['loc'] and item['loc'][0] in Teaching.model_fields else "unknown", "type": item['type']} for item in error.errors(include_input=False)] if isinstance(error, ValidationError) else [],
+            "elapsed_seconds": round(time.monotonic()-started, 3)}))
+        return False
 
 
 def main() -> int:
@@ -30,20 +62,9 @@ def main() -> int:
         print(json.dumps({"status":"NOT_RUN", "reason":"Missing Cloudflare credentials"}))
         return 2
     failures = 0
-    started = time.monotonic()
-    try:
-        # Direct configured primary: a local result cannot masquerade as a cloud pass.
-        result = get_cloud_reasoning_router().primary.generate(ReasoningRequest(task="qa",
-            messages=[Message(role="user",content='Return only JSON: {"answer":"A binary search tree orders smaller keys to the left and larger keys to the right."}')],
-            max_tokens=128))
-        parsed = json.loads(result.response)
-        assert isinstance(parsed.get("answer"), str) and parsed["answer"].strip()
-        print(json.dumps({"task":"text", "status":"PASS", "provider":result.telemetry.provider,
-            "model":result.telemetry.model,"elapsed_seconds":round(time.monotonic()-started,3)}))
-    except (ProviderFailure, ValueError, AssertionError) as error:
-        failures += 1
-        print(json.dumps({"task":"text","status":"FAIL","category":error.category if isinstance(error,ProviderFailure) else "INVALID_RESPONSE",
-            "elapsed_seconds":round(time.monotonic()-started,3)}))
+    for task in ("qa", "content_understanding", "reasoning"):
+        if not check_text_task(task, teaching=task == "reasoning"):
+            failures += 1
     image = Image.new("RGB",(800,300),"white")
     ImageDraw.Draw(image).text((40,50),"Binary Search Tree\nRoot: 10\nLeft child: 5\nRight child: 15",fill="black",font_size=28)
     buffer = io.BytesIO()

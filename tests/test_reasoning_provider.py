@@ -93,6 +93,7 @@ def test_worker_request_schema_and_primary_success() -> None:
         }
         assert "model" not in body
         assert body["response_schema"] == {"type": "object"}
+        assert any(message["role"] == "system" and 'JSON_SCHEMA={"type":"object"}' in message["content"] for message in body["messages"])
         return httpx.Response(200, json=envelope())
 
     route, fallback = router(handler)
@@ -101,6 +102,7 @@ def test_worker_request_schema_and_primary_success() -> None:
     )
     assert json.loads(result.response) == {"ready": True} and fallback.calls == 0
     assert result.telemetry.usage and result.telemetry.usage.neurons == 2.5
+    assert all('JSON_SCHEMA' not in message.content for message in REQUEST.messages)
 
 
 @pytest.mark.parametrize("status", [429, 500, 502, 503])

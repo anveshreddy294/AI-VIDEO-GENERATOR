@@ -93,6 +93,19 @@ test('source job polling displays the safe failure stage', async()=>{
         /STRUCTURING: Could not extract grounded concepts from the source/);
 });
 
+test('source polling accepts durable CONTENT_READY and preserves warnings',async()=>{
+    const dashboard=fs.readFileSync(path.join(__dirname,'../app/api/dashboard.py'),'utf8');
+    const start=dashboard.indexOf('async function waitForSourceJob(');
+    const end=dashboard.indexOf('async function runSourceUpload(',start);
+    let calls=0;
+    const result={status:'INDEXING',content_ready:true,source_id:'owned-source',warnings:['OPTIONAL_VISUAL_CONTENT_UNAVAILABLE']};
+    const context={Date,Error,SOURCE_JOB_TIMEOUT_MS:1000,SOURCE_POLL_INTERVAL_MS:1,
+        document:{getElementById:()=>({textContent:''})},sourceFetch:async()=>{calls++;return json({status:'completed',is_finished:true,result});}};
+    const actual=await vm.runInNewContext(dashboard.slice(start,end)+'\nwaitForSourceJob("owned-job")',context);
+    assert.deepEqual(actual,result);
+    assert.equal(calls,1);
+});
+
 test('signup without confirmation stores returned session',async()=>{
     const env=environment([json(envelope('signup-access'))]);
     assert.equal(await env.api.signup('unit@example.test','unit-password','Unit User'),true);

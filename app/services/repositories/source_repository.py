@@ -108,6 +108,11 @@ class SupabaseSourceRepository:
         return [ContentUnit.model_validate(row) for row in self._rows(
             'content_units', source_id='eq.' + source_id, source_version='eq.' + str(version))]
 
+    def has_content_units(self, source_id: str, version: int) -> bool:
+        """Read one owned identity rather than downloading a document to list it."""
+        return bool(self._rows('content_units', source_id='eq.' + source_id,
+            source_version='eq.' + str(version), select='content_id,user_id', limit='1'))
+
     def commit_ingestion(self, record: SourceRecord, version: SourceVersion,
                          units: list[ContentUnit]) -> SourceRecord:
         """One HTTP RPC = one PostgreSQL transaction; never separate table writes."""

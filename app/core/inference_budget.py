@@ -9,6 +9,11 @@ from .config import settings
 _local_slots = BoundedSemaphore(max(1, settings.ollama_max_concurrency))
 
 _deadline: ContextVar[float | None] = ContextVar("inference_deadline", default=None)
+_job_id: ContextVar[str | None] = ContextVar("inference_job_id", default=None)
+
+
+def current_job_id() -> str | None:
+    return _job_id.get()
 
 
 def effective_deadline(deadline: float) -> float:
@@ -34,10 +39,12 @@ def local_inference_slot(deadline: float) -> Iterator[None]:
 
 
 @contextmanager
-def processing_budget(seconds: float) -> Iterator[None]:
+def processing_budget(seconds: float, *, job_id: str | None = None) -> Iterator[None]:
     token = _deadline.set(effective_deadline(time.monotonic() + seconds))
+    job_token = _job_id.set(job_id or _job_id.get())
     try:
         check_budget()
         yield
     finally:
         _deadline.reset(token)
+        _job_id.reset(job_token)

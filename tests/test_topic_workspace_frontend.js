@@ -72,6 +72,17 @@ test('topic notes detail remains enabled and reaches notes API',async()=>{
     assert.equal(s.ids.get('notes-status').textContent,'Structured educational notes ready.');
 });
 
+test('teaching notation and misconceptions render as text without HTML execution',async()=>{
+    const s=setup({'/educational-content/lesson-a':{lesson_id:'lesson-a',topic:'Force',content:{
+        explanation:'F = ma',mathematical_notation:[{symbol:'F',meaning:'Net force'}],
+        common_misconceptions:[{misconception:'<script>unsafe</script>',correction:'Force changes velocity'}]
+    }}});
+    await flush();
+    const rendered=text(s.ids.get('concept-cards'));
+    assert.match(rendered,/Mathematical Notation.*F: Net force/);
+    assert.match(rendered,/Common Misconceptions.*<script>unsafe<\/script>.*Force changes velocity/);
+});
+
 test('topic flowchart renders actual backend contract',async()=>{
     const s=setup();await flush();s.ids.get('diagram-tab').dispatch('click');
     s.ids.get('generate-diagram').dispatch('click');await flush();
@@ -102,12 +113,23 @@ test('video polling accepts backend status and playback uses authenticated fetch
 
 test('Ask navigation reveals form after another tab hides it',async()=>{
     const s=setup();await flush();s.ids.get('video-tab').dispatch('click');
+    assert.equal(s.ids.get('ask-status').textContent,'Ask a follow-up question about this lesson.');
     assert.equal(s.ids.get('learning-main-columns').style.display,'none');
     s.ids.get('ask-nav').dispatch('click');
     assert.equal(s.ids.get('learning-main-columns').style.display,'grid');
     assert.equal(s.ids.get('question').focused,true);
     s.ids.get('question').value='How does search work?';s.ids.get('ask-form').dispatch('submit');await flush();
     assert.match(text(s.ids.get('answer')),/Compare keys/);
+});
+
+for (const foreign of [false,true]) test('uploaded lesson Ask validates citation scope: foreign='+foreign,async()=>{
+    const s=setup({
+        '/educational-content/lesson-a':{lesson_id:'lesson-a',topic:'Force',source_id:'source-a',source_version:1,content:{explanation:'F = ma'}},
+        '/educational-content/lesson-a/ask':{answer:'Six newtons.',citations:[{source_id:foreign?'source-b':'source-a',source_version:1,verified:true,location:'Page 1',quote:'F = ma'}]}
+    });
+    await flush();s.ids.get('question').value='What force?';s.ids.get('ask-form').dispatch('submit');await flush();
+    if(foreign){assert.equal(text(s.ids.get('answer')),'');assert.match(s.ids.get('ask-status').textContent,/Invalid citation scope/);}
+    else{assert.match(text(s.ids.get('answer')),/AI-enriched supplemental explanation.*Source observations.*Page 1.*Version 1.*F = ma/);}
 });
 
 test('non-JSON server failure gives safe error and allows video retry',async()=>{
@@ -157,4 +179,18 @@ test('upload polls beyond the old four-minute ceiling and stops on completion wi
     assert.match(s.ids.get('upload-status').textContent,/Some optional visual evidence/);
     assert.equal(s.ids.get('upload-button').disabled,false);
     await flush();assert.equal(polls,123);
+});
+
+test('completed upload remains successful if refreshing the source list fails',async()=>{
+    const s=setup({
+        '/pipeline/upload-and-assess':{job_id:'saved-job'},
+        '/pipeline/jobs/saved-job':{status:'completed',is_finished:true,result:{source_id:'saved-source',content_ready:true}},
+        '/sources':async()=>{throw new Error('private upstream error');}
+    },{instantTimers:true});
+    await flush();
+    s.document.getElementById('upload-file').files=[new File(['synthetic'],'notes.txt',{type:'text/plain'})];
+    s.ids.get('upload-form').dispatch('submit');await flush();
+    assert.equal(s.ids.get('upload-status').textContent,'Extracted content is available.');
+    assert.match(s.ids.get('status').textContent,/Your material was saved/);
+    assert.equal(s.ids.get('upload-button').disabled,false);
 });

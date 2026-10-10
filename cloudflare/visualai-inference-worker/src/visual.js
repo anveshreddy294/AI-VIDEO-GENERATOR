@@ -16,7 +16,8 @@ class VisualTimeout extends Error {}
 /** Only documented native error codes leave the Worker, never raw error text. @param {unknown} error */
 export function providerFailure(error){
     if(error instanceof VisualTimeout)return {error:'AI_PROVIDER_TIMEOUT',status:502,native_code:null};
-    const code=error instanceof Error?/(?:^|\b)(3036|3040|3007|5035|3023)(?=:|\s|$)/.exec(error.message)?.[1]:undefined;
+    const code=error instanceof Error?/(?:^|\b)(3036|3040|3007|5035|3023|5007|3042)(?=:|\s|$)/.exec(error.message)?.[1]:undefined;
+    if(code==='5007'||code==='3042')return {error:'AI_MODEL_UNAVAILABLE',status:503,native_code:Number(code)};
     if(code==='3036')return {error:'AI_QUOTA_EXCEEDED',status:429,native_code:3036};
     if(code==='3040')return {error:'AI_CAPACITY_EXCEEDED',status:429,native_code:3040};
     if(code==='3007')return {error:'AI_PROVIDER_TIMEOUT',status:502,native_code:3007};
