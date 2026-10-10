@@ -41,6 +41,7 @@ class RetrievalRequest(Contract):
     subtopic_id: Identifier | None = None
     concept_ids: Annotated[list[Identifier], Field(max_length=64)] | None = None
     content_ids: Annotated[list[Identifier], Field(max_length=64)] | None = None
+    chunk_ids: Annotated[list[Identifier], Field(max_length=64)] | None = None
     purpose: Literal[
         "qa", "notes", "assessment", "video", "roadmap", "remediation", "agent"
     ] = "qa"
@@ -350,18 +351,22 @@ class RetrievalService:
         rejected: Counter[str] = Counter()
         search_start = time.perf_counter()
         space = EmbeddingSpace() if request.retrieval_mode == "semantic" else None
-        if selected and not allowed or request.content_ids == []:
+        if selected and not allowed or request.content_ids == [] or request.chunk_ids == []:
             candidates: list[Candidate] = []
         elif request.retrieval_mode == "exact":
-            if not selected and request.content_ids is None:
+            if not selected and request.content_ids is None and request.chunk_ids is None:
                 raise KnowledgeError("INVALID_SCOPE")
             candidates = [
                 Candidate(point_id=c.chunk_id, score=0.0, payload={}) for c in chunks
+                if request.chunk_ids is None or c.chunk_id in request.chunk_ids
             ]
         else:
             candidates = self.index.search(
                 request, scope, sorted(allowed) if selected else None
             )
+        if request.chunk_ids is not None:
+            candidates = [candidate for candidate in candidates if
+                (str(candidate.payload.get("chunk_id")) if space else candidate.point_id) in request.chunk_ids]
         search_seconds = time.perf_counter() - search_start
         items: list[EvidenceItem] = []
         occupied: dict[str, list[tuple[int, int]]] = {}

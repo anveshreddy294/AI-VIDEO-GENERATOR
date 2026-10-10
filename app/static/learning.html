@@ -70,14 +70,25 @@
 <p id="practice-status" role="status" aria-live="polite"></p><div id="practice-content"></div><h3>Your concept progress</h3><div id="mastery-content"></div></section>
 <section id="video-panel" class="card" hidden aria-labelledby="video-title">
 <h2 id="video-title">Animated Narrated Video</h2>
-<p class="muted">20–30-second animated video with Manim visuals, Edge-TTS narration, and synchronized subtitles.</p>
+<p class="muted">Topic-specific scenes with narration, captions and a navigable scene timeline. Actual length depends on narration.</p>
 <div class="video-controls" style="margin: 16px 0;">
+  <label for="video-duration">Target duration</label><select id="video-duration"><option value="30">30 seconds</option><option value="45" selected>45 seconds</option><option value="60">60 seconds</option><option value="90">90 seconds</option></select>
+  <label for="video-difficulty">Level</label><select id="video-difficulty"><option value="foundational">Foundational</option><option value="intermediate" selected>Intermediate</option><option value="advanced">Advanced</option></select>
+  <label><input id="video-grounded" type="checkbox"> Use only retrieved source evidence (requires indexed material)</label>
+  <label for="video-instructions">Optional presentation preferences</label><input id="video-instructions" maxlength="1000" placeholder="For example, focus on a worked example">
   <button id="start-video-btn" type="button" class="primary" style="background:#2563eb;border-color:#2563eb;">Generate Educational Video</button>
+  <button id="regenerate-video-btn" type="button">Generate a new version</button>
 </div>
 <p id="video-status" role="status" aria-live="polite">Click to start rendering your animated educational video.</p>
 <div id="video-player-container" style="margin-top: 16px; display: none;">
-  <video id="video-player" controls style="width: 100%; max-height: 480px; border-radius: 12px; background: #000;" playsinline></video>
+  <video id="video-player" controls style="width: 100%; max-height: 480px; border-radius: 12px; background: #000;" playsinline><track id="video-captions-track" kind="captions" srclang="en" label="English — scene timed" default></video>
 </div>
+<p id="video-details-status" role="status" aria-live="polite"></p>
+<p id="video-index-status" role="status" aria-live="polite"></p><button id="retry-video-index" type="button" disabled>Retry scene indexing</button>
+<nav id="video-scenes" aria-label="Video scenes"></nav>
+<section aria-label="Evidence for selected scene"><div id="video-evidence"></div></section>
+<form id="video-scene-search-form"><label for="video-scene-search">Search your generated video scenes</label><input id="video-scene-search" maxlength="1000" required><button type="submit">Search scenes</button></form>
+<div id="video-scene-search-results" role="status" aria-live="polite"></div>
 </section>
 <div class="session-footer"><button type="button" id="complete-session">Complete session</button><button type="button" id="abandon-session">Leave this session</button></div></section>
 <noscript>JavaScript is required to sign in and load your private learning material.</noscript></main></body></html>

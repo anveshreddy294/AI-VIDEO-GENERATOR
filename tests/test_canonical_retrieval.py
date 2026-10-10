@@ -203,6 +203,19 @@ def request(**kwargs: JsonValue) -> RetrievalRequest:
     )
 
 
+@pytest.mark.parametrize("mode", ["exact", "semantic"])
+def test_chunk_selection_uses_canonical_manifest(fixture, mode):
+    repo, candidate = fixture
+    index = IndexDouble([candidate])
+    chunk_id = candidate.payload["chunk_id"]
+    result = RetrievalService(index).retrieve(repo, request(retrieval_mode=mode,chunk_ids=[chunk_id]))
+    assert result.outcome == "READY"
+    assert {i.chunk_id for i in result.items} == {chunk_id}
+    missing = RetrievalService(index).retrieve(repo,request(retrieval_mode=mode,chunk_ids=["foreign-chunk"]))
+    assert missing.outcome == "INSUFFICIENT_EVIDENCE"
+    assert missing.items == []
+
+
 @pytest.mark.parametrize(
     "field,value",
     [

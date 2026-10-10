@@ -53,6 +53,20 @@ class SceneElement(BaseModel):
     position: str | None = None  # e.g., "top", "center", "bottom"
 
 
+class SceneEvidenceReference(BaseModel):
+    """Literal evidence used in this scene; source offsets, not video timing."""
+    source_id: str = Field(min_length=1)
+    source_version: int = Field(ge=1)
+    source_content_id: str = Field(min_length=1)
+    chunk_id: str = Field(min_length=1)
+    concept_id: str = Field(min_length=1)
+    quote: str = Field(min_length=1)
+    char_start: int = Field(ge=0)
+    char_end: int = Field(gt=0)
+    page_start: int | None = None
+    page_end: int | None = None
+
+
 class ScenePlan(BaseModel):
     """Structured plan for a single deterministic animation scene."""
     scene_id: str = Field(default_factory=lambda: f"scene_{uuid4().hex[:8]}")
@@ -76,8 +90,17 @@ class ScenePlan(BaseModel):
     summary_points: list[str] = Field(default_factory=list)
     elements: list[SceneElement] = Field(default_factory=list)
     source_chunk_ids: list[str] = Field(default_factory=list)
+    evidence_references: list[SceneEvidenceReference] = Field(default_factory=list)
     page_start: int | None = None
     page_end: int | None = None
+
+
+class SceneTimelineEntry(BaseModel):
+    scene_id: str
+    scene_index: int
+    start_seconds: float = Field(ge=0, allow_inf_nan=False)
+    end_seconds: float = Field(gt=0, allow_inf_nan=False)
+    duration_seconds: float = Field(gt=0, allow_inf_nan=False)
 
 
 class NarrationSegment(BaseModel):
@@ -102,8 +125,10 @@ class VideoPlan(BaseModel):
     video_id: str | None = None
     student_id: str = "STU_DEFAULT"
     source_id: str = "SRC_DEFAULT"
+    source_version: int | None = Field(default=None, ge=1)
     concept_id: str
     concept_name: str
+    concept_ids: list[str] = Field(default_factory=list)
     definition: str = ""
     duration_seconds: int = 45  # 30, 45, or 60 per specification
     target_seconds: int | None = None
@@ -166,3 +191,7 @@ class VideoArtifact(BaseModel):
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
     completed_at: str | None = None
+    scene_timeline: list[SceneTimelineEntry] = Field(default_factory=list)
+    timing_status: Literal["UNAVAILABLE", "MEASURED"] = "UNAVAILABLE"
+    caption_quality: Literal["UNAVAILABLE", "ESTIMATED", "ALIGNED", "SCENE_TIMED"] = "UNAVAILABLE"
+    media_properties: dict[str, Any] = Field(default_factory=dict)

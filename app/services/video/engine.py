@@ -214,6 +214,32 @@ async def execute_video_generation_job(
         artifact.provenance_kind = plan.provenance_kind
         persist(artifact)
 
+        if plan.provenance.get("scene_media_version") == 1:
+            from .scene_media import assemble_scene_media
+            artifact.status = VideoJobStatus.GENERATING_AUDIO
+            persist(artifact)
+            explicit_mock = mock_tts is True or mock_mode or (
+                mock_tts is None and (settings.tts_provider in ("mock", "test") or os.environ.get("PYTEST_CURRENT_TEST")))
+            factory = getattr(canonical, "tts_provider_factory", get_tts_provider)
+            tts = factory("mock" if explicit_mock else settings.tts_provider, require_spoken=not explicit_mock)
+            def progress(state: str, stage: str, percent: int) -> None:
+                artifact.status = VideoJobStatus(state)
+                artifact.stage, artifact.progress = stage, percent
+                persist(artifact)
+            async with asyncio.timeout(max(300.0, settings.video_timeout * 2)):
+                media = await assemble_scene_media(plan, jid, tts, progress)
+            artifact.video_path = media["video_path"]
+            artifact.subtitle_path = media["subtitle_path"]
+            artifact.duration_seconds = media["duration"]
+            artifact.scene_timeline = media["timeline"]
+            artifact.timing_status = "MEASURED"
+            artifact.caption_quality = "SCENE_TIMED"
+            artifact.media_properties = {k:v for k,v in media["validation"].items() if k != "path"}
+            artifact.status, artifact.stage, artifact.progress = VideoJobStatus.COMPLETED, "COMPLETED", 100
+            artifact.completed_at = datetime.now(timezone.utc).isoformat()
+            persist(artifact)
+            return artifact
+
         # 2. Narration & Audio Synthesis (TTS)
         artifact.status = VideoJobStatus.GENERATING_AUDIO
         artifact.stage = "Synthesizing Narration Audio"
