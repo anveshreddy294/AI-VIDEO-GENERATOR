@@ -9,6 +9,16 @@ router = APIRouter(tags=["Learning experience"])
 STATIC = Path(__file__).resolve().parent.parent / "static"
 
 
+@router.get('/profile', include_in_schema=False)
+def profile_page() -> HTMLResponse:
+    return HTMLResponse((STATIC / 'learning-profile.html').read_text(encoding='utf-8'), headers={'Cache-Control': 'no-store'})
+
+
+@router.get('/assets/learning-profile.js', include_in_schema=False)
+def profile_script() -> FileResponse:
+    return FileResponse(STATIC / 'learning-profile.js', media_type='application/javascript', headers={'Cache-Control': 'no-cache'})
+
+
 @router.get("/learn", include_in_schema=False)
 def learning_page() -> HTMLResponse:
     return HTMLResponse(

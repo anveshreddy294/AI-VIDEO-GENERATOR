@@ -56,10 +56,26 @@ function setup(overrides={},options={}) {
     const revoked=[];
     TestURL.createObjectURL=()=> 'blob:owned-video';TestURL.revokeObjectURL=url=>revoked.push(url);
     const window={VisualAIAuth:{protectedFetch:fetch},VisualAINotes:notes,VisualAIResources:{...require('../app/static/resource-exports.js'),download:(doc,blob,name)=>downloads.push({blob,name}),...options.resources},VisualAIAnalysis:require('../app/static/analysis-results.js'),
+        VisualAILearningProfile:options.profile,
         VisualAIPractice:{createController(){return {setSession(){}};}},location:{search:'?lesson=lesson-a'},sessionStorage:{getItem(){return null;},setItem(){},removeItem(){}}};
     vm.runInNewContext(fs.readFileSync('app/static/learning.js','utf8'),{document,window,URL:TestURL,URLSearchParams,Blob,Error,history:{replaceState(){}},setInterval(fn){const id=++intervalId;intervals.set(id,fn);return id;},clearInterval(id){intervals.delete(id);},setTimeout:options.instantTimers?(fn)=>{queueMicrotask(fn);return 0;}:setTimeout,FormData,console});
     return {ids,document,calls,downloads,intervals,revoked};
 }
+
+test('incomplete profile stops dashboard resource requests before loading a lesson',async()=>{
+    const s=setup({}, {profile:{ensure:async()=>null}});await flush();
+    assert.equal(s.calls.length,0);
+});
+test('completed profile unlocks dashboard and summarizes preferences',async()=>{
+    const s=setup({}, {profile:{ensure:async()=>({preferences:{personalization_enabled:true,interested_domains:['Sports'],custom_interest:''}})}});await flush();
+    assert.match(s.ids.get('profile-summary').textContent,/Sports/);
+    assert.equal(s.ids.get('learning-main').hidden,false);
+    assert.ok(s.calls.some(c=>c.path==='/educational-content/lesson-a'));
+});
+test('failed profile check gives retry and does not load private resources',async()=>{
+    const s=setup({}, {profile:{ensure:async()=>{throw Error('unavailable');}}});await flush();
+    assert.equal(s.calls.length,0);assert.equal(s.ids.get('profile-gate-retry').hidden,false);
+});
 
 test('topic notes detail remains enabled and reaches notes API',async()=>{
     const s=setup();await flush();

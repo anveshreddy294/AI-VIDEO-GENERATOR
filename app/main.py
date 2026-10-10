@@ -37,6 +37,7 @@ from .api.qa import router as qa_router
 from .api.models import router as models_router
 from .api.learning import router as learning_router
 from .api.auth import router as auth_router
+from .api.learning_profile import router as learning_profile_router
 from .core.supabase import close_supabase_runtime, get_supabase_runtime, SupabaseConfigurationError
 
 # ---------------------------------------------------------------------------
@@ -102,6 +103,7 @@ app.include_router(qa_router)
 app.include_router(models_router)
 app.include_router(learning_router, dependencies=[Depends(legacy_learning_boundary)])
 app.include_router(auth_router)
+app.include_router(learning_profile_router)
 app.include_router(sources_router)
 app.include_router(knowledge_router)
 app.include_router(learning_sessions_router)

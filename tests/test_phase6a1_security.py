@@ -79,8 +79,9 @@ def boundary_runtime(monkeypatch: pytest.MonkeyPatch, supabase_storage_mode: Non
                 'file_hash': 'hash', 'file_location': 'owned-original.txt'}])
         raise AssertionError('Unexpected canonical operation')
 
+    # These authorization-boundary fixtures must not expire during a long full-suite run.
     runtime = SupabaseRuntime(SupabaseConfig(URL, 'public-test-key', 'secret-never-use'),
-                              transport=httpx.MockTransport(remote))
+                              transport=httpx.MockTransport(remote), clock=lambda: TEST_TOKEN_EXPIRY - 1)
     monkeypatch.setattr(auth, 'get_supabase_runtime', lambda: runtime)
     monkeypatch.setattr(sources, 'get_runtime', lambda: runtime)
     yield runtime, calls
@@ -262,7 +263,8 @@ def test_canonical_database_outage_cannot_read_local_snapshot(
                                              'created_at': 'now', 'updated_at': 'now'}])
         return httpx.Response(500, json={'message': 'secret-never-expose'})
     settings.registry_dir.joinpath('sources_index.json').write_text(json.dumps({'SRC_owned': {'private': 'local-data'}}))
-    runtime = SupabaseRuntime(SupabaseConfig(URL, 'public-test-key'), transport=httpx.MockTransport(remote))
+    runtime = SupabaseRuntime(SupabaseConfig(URL, 'public-test-key'), transport=httpx.MockTransport(remote),
+                              clock=lambda: TEST_TOKEN_EXPIRY - 1)
     monkeypatch.setattr(auth, 'get_supabase_runtime', lambda: runtime)
     monkeypatch.setattr(sources, 'get_runtime', lambda: runtime)
     try:

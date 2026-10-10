@@ -167,7 +167,7 @@ class SupabaseRuntime:
     def close(self) -> None:
         self._http.close()
 
-    def _request(self, method: Literal['GET', 'POST', 'DELETE'], path: str, *,
+    def _request(self, method: Literal['GET', 'POST', 'DELETE', 'PATCH'], path: str, *,
                  token: str | None = None, admin: bool = False,
                  params: Mapping[str, str] | None = None,
                  body: dict[str, JsonValue] | None = None,
@@ -220,7 +220,7 @@ class SupabaseRuntime:
         """Backend-only transport; callers MUST separately authorize their operation."""
         return self._request(method, path, admin=True, params=params, body=body)
 
-    def user_request(self, method: Literal['GET', 'POST', 'DELETE'], path: str, *, token: str,
+    def user_request(self, method: Literal['GET', 'POST', 'DELETE', 'PATCH'], path: str, *, token: str,
                      params: Mapping[str, str] | None = None,
                      body: dict[str, JsonValue] | None = None) -> JsonValue:
         """Use the caller token with a public API key, preserving database RLS."""

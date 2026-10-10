@@ -2,10 +2,11 @@
 <html lang="en" data-source-provider="supabase">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>VisualAI · Your learning space</title><link rel="stylesheet" href="/assets/learning.css">
-<script defer src="/assets/auth.js"></script><script defer src="/assets/resource-exports.js"></script><script defer src="/assets/analysis-results.js"></script><script defer src="/assets/notes.js"></script><script defer src="/assets/practice.js"></script><script defer src="/assets/learning.js"></script></head>
+<script defer src="/assets/auth.js"></script><script defer src="/assets/learning-profile.js"></script><script defer src="/assets/resource-exports.js"></script><script defer src="/assets/analysis-results.js"></script><script defer src="/assets/notes.js"></script><script defer src="/assets/practice.js"></script><script defer src="/assets/learning.js"></script></head>
 <body data-job-poll-timeout-seconds="__JOB_POLL_TIMEOUT_SECONDS__"><header><a class="brand" href="/dashboard">Visual<span>AI</span><small>Your learning space</small></a>
-<nav aria-label="Main"><button id="sources-nav" type="button">My sources</button><button id="logout" type="button">Sign out</button></nav></header>
-<main><p class="eyebrow">EXPLORE · FOCUS · UNDERSTAND</p>
+<nav aria-label="Main"><a href="/profile">Learning profile</a><button id="sources-nav" type="button">My sources</button><button id="logout" type="button">Sign out</button></nav></header>
+<p id="profile-gate-status" role="status" aria-live="polite">Checking your learning profile…</p><button id="profile-gate-retry" type="button" hidden>Retry profile check</button>
+<main id="learning-main" hidden><p class="eyebrow">EXPLORE · FOCUS · UNDERSTAND</p><p id="profile-summary" class="muted"></p>
 <div id="status" role="status" aria-live="polite"></div>
 <section id="sources-panel" aria-labelledby="sources-title"><h1 id="sources-title">What will you learn today?</h1>
 <p class="intro">Choose your material, explore its topics, and focus on one thing at a time.</p>

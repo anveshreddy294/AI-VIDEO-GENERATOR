@@ -74,6 +74,18 @@ def service(repo: InMemoryMasteryRepository, sample_kg: KnowledgeGraph) -> Perso
     return PersonalizationService(mastery_repo=repo, dependency_provider=dep_provider)
 
 
+def test_interest_themes_do_not_change_prerequisites_mastery_or_next_action(service, sample_kg):
+    from app.services.learning_profile import LearningPreferences
+    profile=LearningPreferences(education_level='Secondary',interested_domains=['Sports'])
+    original=service.get_roadmap(user_id='user_1',source_id='SRC_PHYSICS',knowledge_graph=sample_kg)
+    themed=service.get_roadmap(user_id='user_1',source_id='SRC_PHYSICS',knowledge_graph=sample_kg,learning_profile=profile)
+    assert themed.blocked_concepts==original.blocked_concepts
+    assert themed.current_concept==original.current_concept
+    assert themed.next_action.concept_id==original.next_action.concept_id
+    assert themed.next_action.action_type==original.next_action.action_type
+    assert themed.example_themes['C_B']['appropriate'] is True
+
+
 def test_01_new_source_unassessed_selects_first_eligible_concept(
     service: PersonalizationService, sample_kg: KnowledgeGraph
 ):

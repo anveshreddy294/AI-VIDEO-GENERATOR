@@ -150,8 +150,9 @@ _EXPLANATION_SCHEMA = {
 class AIExplanationService:
     """Explains arbitrary educational topics and provides supplemental teaching."""
 
-    def __init__(self, provider: ReasoningProvider | None = None) -> None:
+    def __init__(self, provider: ReasoningProvider | None = None, personalization_repository=None) -> None:
         self.provider = provider
+        self.personalization_repository = personalization_repository
 
     def explain(
         self,
@@ -201,6 +202,9 @@ class AIExplanationService:
             response_schema=_EXPLANATION_SCHEMA,
         )
 
+        if self.personalization_repository is not None:
+            from .interest_personalization import personalize_request
+            reasoning_req = personalize_request(reasoning_req, self.personalization_repository, effective_topic, 'explanation', '\n'.join(source_observations or []))
         router = self.provider or get_reasoning_router()
         result = router.generate(reasoning_req)
 

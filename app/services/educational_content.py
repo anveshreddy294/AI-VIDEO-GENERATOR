@@ -20,6 +20,8 @@ from .repositories.source_repository import SupabaseSourceRepository
 from .security.content_sanitizer import SanitizedContent
 from .security.source_scope import require_source_scope
 from .storage import atomic_json, serialized, store_lock, validate_id
+from .interest_personalization import personalize_request, build_context
+from .learning_profile import repository_preferences
 from .video.scene_schema import ScenePlan, SceneType, NarrationSegment, VideoPlan
 from .video.scene_validator import validate_video_plan
 from .video.manim_renderer import render_video_plan
@@ -534,8 +536,10 @@ class EducationalContentService:
         if repo.runtime.verify_user(repo._token).user_id != repo.user.user_id:
             raise PermissionError("Educational content unavailable")
         observations: list[SourceObservation] = []
+        topic_hint = request.topic or 'Uploaded learning material'
         if request.source_id is not None and request.source_version is not None:
             _, version = require_source_scope(repo, request.source_id, request.source_version)
+            topic_hint = request.topic or Path(version.filename).stem
             safe = {row.content_id: row for row in (
                 SanitizedContent.model_validate(r) for r in version.sanitized_content)}
             for unit in repo.get_content_units(request.source_id, request.source_version):
@@ -570,6 +574,7 @@ class EducationalContentService:
             )), Message(role="user", content=json.dumps({"topic": request.topic,
                 "source_observations": context, "omitted_paragraphs": omitted},
                 ensure_ascii=False, separators=(",", ":")))])
+        prompt = personalize_request(prompt, repo, topic_hint, 'explanation', context)
         teaching: Teaching | None = None
         def validate_output(result: ReasoningResult) -> None:
             nonlocal teaching
@@ -603,8 +608,8 @@ class EducationalContentService:
     def list_lessons(self) -> list[dict[str, Any]]:
         return list_educational_lessons(self.repository.user.user_id)
 
-    def generate_notes(self, lesson: EducationalLesson, detail_level: Literal["concise", "standard", "detailed"] = "standard") -> EducationalNotes:
-        if lesson.notes is not None and lesson.notes.detail_level == detail_level:
+    def generate_notes(self, lesson: EducationalLesson, detail_level: Literal["concise", "standard", "detailed"] = "standard", regenerate: bool = False) -> EducationalNotes:
+        if not regenerate and lesson.notes is not None and lesson.notes.detail_level == detail_level:
             return lesson.notes
         
         c = lesson.content
@@ -616,6 +621,7 @@ class EducationalContentService:
             "detailed": "Provide expanded explanations, worked examples, relationships, edge cases and common mistakes where relevant.",
         }
         prompt = prompt.model_copy(update={"messages": [*prompt.messages, Message(role="user", content=f"Notes detail_level={detail_level}. {instructions[detail_level]}")]})
+        prompt = personalize_request(prompt, self.repository, c.topic, 'notes', c.explanation)
         notes = None
         try:
             notes = self._model(prompt, EducationalNotes)
@@ -644,13 +650,14 @@ class EducationalContentService:
         save_educational_lesson(lesson)
         return notes
 
-    def generate_diagram(self, lesson: EducationalLesson) -> FlowchartDiagram:
-        if lesson.diagram is not None:
+    def generate_diagram(self, lesson: EducationalLesson, regenerate: bool = False) -> FlowchartDiagram:
+        if not regenerate and lesson.diagram is not None:
             return lesson.diagram
 
         c = lesson.content
         prompt = teaching_request(c, lesson.user_id, "flowchart",
             response_schema=TypeAdapter(dict[str, JsonValue]).validate_python(FlowchartDiagram.model_json_schema()))
+        prompt = personalize_request(prompt, self.repository, c.topic, 'flowchart', c.explanation)
         diagram = None
         try:
             diagram = self._model(prompt, FlowchartDiagram)
@@ -733,6 +740,7 @@ class EducationalContentService:
         c = lesson.content
         prompt = teaching_request(c, lesson.user_id, "assessment",
             response_schema=TypeAdapter(dict[str, JsonValue]).validate_python(EducationalAssessment.model_json_schema()))
+        prompt = personalize_request(prompt, self.repository, c.topic, 'assessment', c.explanation)
         assessment = None
         try:
             assessment = self._model(prompt, EducationalAssessment)
@@ -878,6 +886,7 @@ class EducationalContentService:
             raise ValueError("ASK requires a question")
         prompt = teaching_request(c, lesson.user_id, "ask", question=question,
             response_schema=TypeAdapter(dict[str, JsonValue]).validate_python(GeneratedAnswer.model_json_schema()))
+        prompt = personalize_request(prompt, self.repository, c.topic, 'ask', c.explanation)
         ans_text = ""
         def validate_answer(result: ReasoningResult) -> None:
             nonlocal ans_text
@@ -993,10 +1002,23 @@ class EducationalContentService:
         scenes.append(s2)
         narrations.append(NarrationSegment(scene_index=2, text=s2.narration or "", target_seconds=8.0))
 
-        # Scene 3: Summary
+        # An illustrative interest scene supplements the factual explanation; it is
+        # never added to source observations, citations, equations or dependencies.
+        personal = build_context(repository_preferences(self.repository), '', topic, content.explanation, 'video')
+        if personal.appropriate:
+            connection = personal.connections[0]
+            example_scene = ScenePlan(scene_index=len(scenes), scene_type=SceneType.EXAMPLE,
+                title=('Illustrative example: ' + connection.interest)[:150],
+                text=connection.visual_scenario[:250], duration_seconds=8.0,
+                narration=connection.example[:250])
+            scenes.append(example_scene)
+            narrations.append(NarrationSegment(scene_index=example_scene.scene_index,
+                text=example_scene.narration or '', target_seconds=8.0))
+
+        # Summary follows the optional illustrative scene.
         pts = [c.name for c in content.key_concepts[:3]] if content.key_concepts else ["Foundational Structure", "Key Operations"]
         s3 = ScenePlan(
-            scene_index=3,
+            scene_index=len(scenes),
             scene_type=SceneType.SUMMARY,
             title="Summary & Next Steps",
             summary_points=pts,
@@ -1004,7 +1026,7 @@ class EducationalContentService:
             narration=f"In summary, understanding {topic} equips you to solve practical challenges with confidence."
         )
         scenes.append(s3)
-        narrations.append(NarrationSegment(scene_index=3, text=s3.narration or "", target_seconds=6.0))
+        narrations.append(NarrationSegment(scene_index=s3.scene_index, text=s3.narration or "", target_seconds=6.0))
 
         for scene, segment in zip(scenes, narrations):
             narration = " ".join((scene.narration or "").split()[:int(scene.duration_seconds * 3)])

@@ -114,6 +114,7 @@ class LearningRoadmap(BaseModel):
 
     completed: bool = Field(default=False)
     next_action: NextLearningAction
+    example_themes: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)

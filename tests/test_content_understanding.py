@@ -389,12 +389,15 @@ def test_real_atomic_publication_index_failure_retry_and_isolation(
             raise RuntimeError("private downstream error")
 
         monkeypatch.setattr(vector_store, "upsert_chunks", fail)
-        with pytest.raises(SourceIndexFailed):
-            ingest_source(repo, path, path.name)
+        # Extraction commits first; optional knowledge/index work is explicit.
+        ingest_source(repo, path, path.name)
         rows = repo.list_sources()
         assert len(rows) == 2  # Includes isolated migration's historical fixture.
         record = next(r for r in rows if r.filename == path.name)
-        assert record.status == "FAILED"
+        assert record.status == "INDEXING"
+        with pytest.raises(SourceIndexFailed):
+            index_committed_source(repo, record)
+        assert repo.get_source(record.source_id).status != 'FAILED'
         before = database.sql(
             "SELECT to_jsonb(v) FROM public.source_versions v WHERE source_id="
             + literal(record.source_id)

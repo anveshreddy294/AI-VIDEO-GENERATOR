@@ -17,6 +17,8 @@ from .dependency_provider import ConceptDependencyProvider
 from .models import DomainInvariantViolation, MasteryRecord, MasteryState
 from .repository import MasteryRepository
 from .roadmap_models import LearningActionType, LearningRoadmap, NextLearningAction, ReasonCode
+from ..learning_profile import LearningPreferences
+from ..interest_personalization import build_context
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +40,7 @@ class PersonalizationService:
         source_id: str,
         session_id: str | None = None,
         knowledge_graph: KnowledgeGraph | None = None,
+        learning_profile: LearningPreferences | None = None,
     ) -> LearningRoadmap:
         """Compute the full deterministic learning roadmap for a learner and grounded source."""
         clean_user_id = user_id.strip() if user_id else ""
@@ -119,6 +122,11 @@ class PersonalizationService:
                     elif state == MasteryState.NEEDS_SUPPORT:
                         needs_support_concepts.append(cid)
 
+        # Presentation themes are separate from curriculum partitions and selection.
+        example_themes = {cid: build_context(learning_profile, '', kg.concepts[cid].name,
+            kg.concepts[cid].definition or '', 'roadmap').model_dump(mode='json')
+            for cid in curriculum_concepts} if learning_profile else {}
+
         # 6. Deterministic Next-Action Selection
         next_action = self._select_next_action(
             user_id=clean_user_id,
@@ -158,6 +166,7 @@ class PersonalizationService:
             needs_support_concepts=needs_support_concepts,
             completed=completed,
             next_action=next_action,
+            example_themes=example_themes,
         )
 
     def get_next_action(

@@ -161,7 +161,7 @@ def validate_proposal(
 
 
 def _generate_ai_supplemental(
-    request: CanonicalQARequest, bundle_id: str, started: float
+    request: CanonicalQARequest, bundle_id: str, started: float, context: KnowledgeRepository | None = None
 ) -> QAResponse:
     router = get_reasoning_router()
     system = (
@@ -175,8 +175,7 @@ def _generate_ai_supplemental(
         user_prompt += "\nPREVIOUS QUESTIONS:\n" + "\n".join(
             f"- {q}" for q in request.previous_questions[-3:]
         )
-    result = router.generate(
-        ReasoningRequest(
+    generation_request = ReasoningRequest(
             task="content_understanding",
             messages=[
                 Message(role="system", content=system),
@@ -184,7 +183,10 @@ def _generate_ai_supplemental(
             ],
             max_tokens=QA_MAX_OUTPUT_TOKENS,
         )
-    )
+    if context is not None:
+        from ..interest_personalization import personalize_request
+        generation_request = personalize_request(generation_request, context, request.query, 'ask')
+    result = router.generate(generation_request)
     cleaned = result.response.strip()
     if "<think>" in cleaned and "</think>" in cleaned:
         cleaned = cleaned.split("</think>", 1)[-1].strip()
@@ -228,8 +230,12 @@ def generate_canonical_answer(
 
     session_id = getattr(request, "session_id", None) or getattr(context, "session_id", None)
     prev_q_key = tuple(q.strip().lower() for q in request.previous_questions)
+    from ..learning_profile import repository_preferences
+    preferences = repository_preferences(context) if request.allow_ai_supplemental else None
+    preference_key = preferences.model_dump_json() if preferences else ''
     early_cache_key = (
         context.user.user_id,
+        preference_key,
         session_id,
         request.source_id,
         request.source_version,
@@ -284,6 +290,7 @@ def generate_canonical_answer(
 
     cache_key = (
         context.user.user_id,
+        preference_key,
         session_id,
         bundle.manifest_digest,
         request.query.strip().lower(),
@@ -305,7 +312,7 @@ def generate_canonical_answer(
         or not any(i.excerpt.strip() for i in bundle.items)
     ):
         if not is_source_specific and request.allow_ai_supplemental:
-            ai_resp = _generate_ai_supplemental(request, bundle.evidence_bundle_id, started)
+            ai_resp = _generate_ai_supplemental(request, bundle.evidence_bundle_id, started, context)
             _set_cached_qa(cache_key, ai_resp)
             _set_cached_qa(early_cache_key, ai_resp)
             return ai_resp
@@ -386,7 +393,7 @@ def generate_canonical_answer(
             answer_validation_ms += (time.perf_counter() - validation_started) * 1000
     refusal = proposal is None or proposal.refusal
     if refusal and not is_source_specific and request.allow_ai_supplemental:
-        ai_resp = _generate_ai_supplemental(request, bundle.evidence_bundle_id, started)
+        ai_resp = _generate_ai_supplemental(request, bundle.evidence_bundle_id, started, context)
         _set_cached_qa(cache_key, ai_resp)
         return ai_resp
     trace: dict[str, object] = {

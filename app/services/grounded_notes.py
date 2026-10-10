@@ -20,6 +20,8 @@ from .repositories.knowledge_repository import KnowledgeRepository, KnowledgeErr
 from .retrieval import RetrievalService, RetrievalRequest, EvidenceBundle
 from .qa.canonical_answer import SupportedClaim, AnswerProposal, validate_proposal
 from .schemas import Citation
+from .learning_profile import repository_preferences
+from .interest_personalization import personalize_request
 
 MAX_NOTES_RESPONSE_BYTES = 262144
 MAX_NOTES_OUTPUT_TOKENS = 4096
@@ -341,7 +343,7 @@ class GroundedNotesService:
         topic_title = session_view.topic_title or "Focused Study Material"
 
         gen_started = time.perf_counter()
-        ai_service = AIExplanationService(provider=self.provider)
+        ai_service = AIExplanationService(provider=self.provider, personalization_repository=self.context)
         source_obs = (
             [i.excerpt for i in bundle.items if i.excerpt.strip()]
             if bundle and bundle.items
@@ -520,8 +522,11 @@ class GroundedNotesService:
         ) != len(request.selected_concept_ids):
             raise KnowledgeError("INVALID_SCOPE")
 
+        preferences = repository_preferences(self.context) if request.include_ai_supplemental else None
+        preference_key = preferences.model_dump_json() if preferences else ''
         early_notes_key = (
             self.context.user.user_id,
+            preference_key,
             request.session_id,
             narrowed.source_id,
             narrowed.source_version,
@@ -586,6 +591,7 @@ class GroundedNotesService:
 
         cache_key = (
             self.context.user.user_id,
+            preference_key,
             request.session_id,
             bundle.manifest_digest,
             request.detail_level,
@@ -616,8 +622,7 @@ class GroundedNotesService:
             schema["properties"]["diagram_specs"]["maxItems"] = 0
             instructions += " No explicit source arrow chain is available; diagram_specs must be empty."
         stage = time.perf_counter()
-        result = (self.provider or get_reasoning_router()).generate(
-            ReasoningRequest(
+        generation_request = ReasoningRequest(
                 task="notes",
                 messages=[
                     Message(role="system", content=instructions),
@@ -626,7 +631,10 @@ class GroundedNotesService:
                 max_tokens=MAX_NOTES_OUTPUT_TOKENS,
                 response_schema=schema,
             )
-        )
+        if request.include_ai_supplemental and preferences is not None:
+            topic_title = self.sessions.get(request.session_id).topic_title or 'Focused study material'
+            generation_request = personalize_request(generation_request, self.context, topic_title, 'notes', '\n'.join(i.excerpt for i in bundle.items))
+        result = (self.provider or get_reasoning_router()).generate(generation_request)
         generation_ms = (time.perf_counter() - stage) * 1000
         stage = time.perf_counter()
         try:

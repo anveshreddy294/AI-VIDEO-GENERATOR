@@ -38,6 +38,12 @@ class AskRequest(BaseModel):
 class NotesRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     detail_level: Literal["concise", "standard", "detailed"] = "standard"
+    regenerate: bool = False
+
+
+class ResourceRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    regenerate: bool = False
 
 
 def generation_error(code: str) -> HTTPException:
@@ -142,7 +148,8 @@ async def generate_lesson_notes(lesson_id: str, repository: SourceDependency, bo
     if lesson is None:
         raise HTTPException(404, {"code": "LESSON_NOT_FOUND"})
     try:
-        return await run_in_threadpool(service.generate_notes, lesson, (body or NotesRequest()).detail_level)
+        options = body or NotesRequest()
+        return await run_in_threadpool(service.generate_notes, lesson, options.detail_level, options.regenerate)
     except ProviderFailure as error:
         raise HTTPException(503, {"code": error.category}) from None
     except Exception:
@@ -150,14 +157,14 @@ async def generate_lesson_notes(lesson_id: str, repository: SourceDependency, bo
 
 
 @router.post("/{lesson_id}/diagram", response_model=FlowchartDiagram)
-async def generate_lesson_diagram(lesson_id: str, repository: SourceDependency) -> FlowchartDiagram:
+async def generate_lesson_diagram(lesson_id: str, repository: SourceDependency, body: ResourceRequest | None = None) -> FlowchartDiagram:
     repo = require_source_repository(repository)
     service = EducationalContentService(repo)
     lesson = await run_in_threadpool(service.get_lesson, lesson_id)
     if lesson is None:
         raise HTTPException(404, {"code": "LESSON_NOT_FOUND"})
     try:
-        return await run_in_threadpool(service.generate_diagram, lesson)
+        return await run_in_threadpool(service.generate_diagram, lesson, (body or ResourceRequest()).regenerate)
     except ProviderFailure as error:
         raise HTTPException(503, {"code": error.category}) from None
     except Exception:

@@ -41,7 +41,8 @@ def test_typed_topic_no_source_or_storage(context: Context) -> None:
     assert result.user_id == OWNER and result.status == "READY"
     assert result.source_id is None and result.source_version is None and not result.source_observations
     assert result.provenance_kind == "AI_ENRICHED" and result.equations == ["F = ma"]
-    assert not remote.sources and not remote.versions and not remote.calls
+    assert not remote.sources and not remote.versions
+    assert remote.calls == ['/rest/v1/profiles']  # Read-only account presentation preferences.
     assert len(provider.requests) == 1
 
 

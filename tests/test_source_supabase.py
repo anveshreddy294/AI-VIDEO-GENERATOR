@@ -49,7 +49,7 @@ class Remote:
             return httpx.Response(401)
         if request.method == 'GET':
             table = path.rsplit('/',1)[-1]
-            rows = {'sources':self.sources, 'source_versions':self.versions, 'content_units':self.units,**self.knowledge}[table]
+            rows = {'profiles':[{'id':str(OWNER),'full_name':None,'learning_preferences':{}}], 'sources':self.sources, 'source_versions':self.versions, 'content_units':self.units,**self.knowledge}[table]
             filtered = [dict(row) for row in rows if all(
                 not value.startswith('eq.') or str(row.get(key)) == value[3:]
                 for key,value in request.url.params.items())]

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Personalize your learning · VisualAI</title>
+<link rel="stylesheet" href="/assets/learning.css"><script defer src="/assets/auth.js"></script><script defer src="/assets/learning-profile.js"></script></head>
+<body><header><a class="brand" href="/dashboard">Visual<span>AI</span><small>Your learning space</small></a><button id="profile-logout" type="button">Sign out</button></header>
+<main class="profile-main"><p class="eyebrow">YOUR LEARNING PREFERENCES</p><h1>Personalize your learning.</h1>
+<p class="intro">Choose familiar themes for examples. Definitions, equations and source evidence stay the same.</p>
+<form id="profile-form" class="card">
+<label for="profile-name">Display name (optional)</label><input id="profile-name" maxlength="200" autocomplete="nickname">
+<label for="profile-level">Education level</label><select id="profile-level" required><option value="">Choose a level</option><option>Primary</option><option>Secondary</option><option>Undergraduate</option><option>Other</option></select>
+<fieldset id="profile-interests" tabindex="-1" aria-describedby="interest-help"><legend>Interested domains (required)</legend></fieldset>
+<p id="interest-help" class="muted">Select one or more. We use interests only when they help explain the topic.</p>
+<div id="custom-interest-row" hidden><label for="profile-custom">Custom interest</label><input id="profile-custom" maxlength="80" placeholder="A short interest name"></div>
+<label for="profile-language">Preferred learning language</label><select id="profile-language"><option>English</option></select><p class="muted">English is the currently supported learning language.</p>
+<label for="profile-goal">Learning goal (optional)</label><select id="profile-goal"><option value="">No preference</option> <option>Exam preparation</option><option>Concept understanding</option><option>Revision</option><option>Skill development</option></select>
+<label class="profile-toggle"><input id="profile-personalize" type="checkbox" checked> Use interest-based examples for future resources</label>
+<p class="muted">Turn this off for conventional explanations. You can edit these preferences later in Learning profile.</p>
+<div id="profile-status" role="status" aria-live="polite"></div><div class="actions"><button id="profile-save" class="primary" type="submit" disabled>Save profile and continue</button><button id="profile-retry" type="button" hidden>Retry loading profile</button><a id="profile-cancel" href="/dashboard" hidden>Back to learning</a></div>
+</form></main></body></html>

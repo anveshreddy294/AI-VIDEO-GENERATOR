@@ -1150,7 +1150,7 @@
         el('notes-content').replaceChildren();
         el('notes-status').textContent = 'Generating comprehensive structured notes…';
         try {
-            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/notes', {detail_level: detail.value}));
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/notes', {detail_level: detail.value, regenerate: true}));
             if (selected !== currentEducationalLesson) return;
             renderEducationalNotes(row(res.notes || res));
             el('notes-status').textContent = 'Structured educational notes ready.';
@@ -1167,7 +1167,7 @@
         diagramExport = ''; diagramScope = null; el('diagram-content').replaceChildren();
         el('diagram-status').textContent = 'Generating algorithmic flowchart diagram…';
         try {
-            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/diagram'));
+            const res = row(await post('/educational-content/' + encodeURIComponent(text(selected, 'lesson_id')) + '/diagram', {regenerate:true}));
             if (selected !== currentEducationalLesson) return;
             renderEducationalDiagram(row(res.diagram || res));
             el('diagram-status').textContent = 'Flowchart diagram rendered.';
@@ -1322,7 +1322,21 @@
             } catch (error) {uploadStatus.error(error);analysis.error(key,el('upload-status').textContent,true);} finally { b.disabled = false; }
         })();
     });
-    run(async () => {
+    async function initializeLearning() {
+        const profileUI = Reflect.get(window,'VisualAILearningProfile');
+        if(profileUI) {
+            el('profile-gate-status').textContent='Checking your learning profile…';
+            el('profile-gate-retry').hidden=true;
+            let profile;
+            try {profile=await profileUI.ensure(auth);}
+            catch {el('profile-gate-status').textContent='Could not load your learning profile. Please retry.';el('profile-gate-retry').hidden=false;return;}
+            if(!profile)return;
+            el('profile-summary').textContent=profile.preferences.personalization_enabled?
+                'Learning examples personalized for: '+profile.preferences.interested_domains.map(v=>v==='Other'?profile.preferences.custom_interest:v).join(', ')+'.':
+                'Conventional explanations selected. You can edit this in Learning profile.';
+            el('profile-gate-status').hidden=true;
+        }
+        el('learning-main').hidden=false;
         const params = new URLSearchParams(window.location.search);
         if (params.has('lesson')) {
             await openEducationalLesson(params.get('lesson') || '');
@@ -1334,5 +1348,7 @@
             const version = Number(params.get('version'));
             if (selected && Number.isInteger(version) && version > 0) await openSource(selected, version);
         }
-    });
+    }
+    el('profile-gate-retry').addEventListener('click',()=>run(initializeLearning));
+    run(initializeLearning);
 })();
