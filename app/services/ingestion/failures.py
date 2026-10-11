@@ -56,6 +56,11 @@ def ingestion_stage(stage: Stage) -> Iterator[None]:
     except SourceIngestionFailed:
         raise
     except Exception as error:
+        from ...core.postgres import VideoDatabaseError
+        if isinstance(error, VideoDatabaseError) and error.code == 'SOURCE_METADATA_COPY_PENDING':
+            raise SourceIngestionFailed(SourceFailure(stage='PERSISTENCE',
+                code='SOURCE_METADATA_COPY_PENDING', retryable=True,
+                message='Canonical source is available in Supabase; its local metadata copy failed. Retry this source after PostgreSQL recovers.')) from None
         from ..vision import VisionExtractionFailed
         from ..visual_verifier import VisualVerificationFailed
         if isinstance(error, VisualVerificationFailed):

@@ -98,5 +98,10 @@ def readiness():
         row = connection.execute("SELECT to_regclass('visualai_video.schema_migrations')").fetchone()
         if not row or row[0] is None:
             raise VideoDatabaseError("VIDEO_DATABASE_MIGRATION_REQUIRED")
-        if connection.execute("SELECT version FROM visualai_video.schema_migrations WHERE version = '001_video_persistence.sql'").fetchone() is None:
+        if connection.execute("SELECT count(*) FROM visualai_video.schema_migrations WHERE version IN ('001_video_persistence.sql','002_source_metadata.sql')").fetchone()[0] != 2:
             raise VideoDatabaseError("VIDEO_DATABASE_MIGRATION_REQUIRED")
+        for table in ('lessons', 'generations', 'sources', 'source_versions'):
+            permitted = connection.execute("SELECT bool_and(has_table_privilege(current_user,%s,privilege)) FROM unnest(ARRAY['SELECT','INSERT','UPDATE']) AS privilege",
+                ('visualai_video.' + table,)).fetchone()
+            if not permitted or not permitted[0]:
+                raise VideoDatabaseError('VIDEO_DATABASE_PERMISSIONS_REQUIRED')

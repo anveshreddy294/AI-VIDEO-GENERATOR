@@ -49,7 +49,7 @@ def test_migration_and_role_are_ready(postgres_mode):
     postgres.readiness()
     with postgres.transaction() as connection:
         assert connection.execute("SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user").fetchone() == (False,False)
-        assert connection.execute("SELECT count(*) FROM visualai_video.schema_migrations").fetchone()[0] == 1
+        assert connection.execute("SELECT count(*) FROM visualai_video.schema_migrations").fetchone()[0] == 2
 
 
 def test_checksum_changes_fail_without_reapplying(postgres_mode,monkeypatch,tmp_path):

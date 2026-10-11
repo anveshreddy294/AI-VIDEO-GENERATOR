@@ -128,7 +128,7 @@ app.include_router(educational_content_router)
 @app.exception_handler(SourceIngestionFailed)
 async def source_processing_failure(request: Request, error: SourceIngestionFailed) -> JSONResponse:
     """Expose safe stage/reason categories for direct uploads as well as background jobs."""
-    unavailable=error.failure.reason_code in {'MODEL_TIMEOUT','MODEL_UNAVAILABLE'} or error.failure.code=='PROVIDER_UNAVAILABLE'
+    unavailable=error.failure.reason_code in {'MODEL_TIMEOUT','MODEL_UNAVAILABLE'} or error.failure.code in {'PROVIDER_UNAVAILABLE','SOURCE_METADATA_COPY_PENDING'}
     return JSONResponse(status_code=503 if unavailable else 422,
         content={'detail':error.failure.model_dump(mode='json')},headers={'Cache-Control':'private, no-store'})
 

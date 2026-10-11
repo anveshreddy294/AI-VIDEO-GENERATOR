@@ -125,7 +125,8 @@ CREATE ROLE visualai_app LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 \password visualai_app
 GRANT USAGE ON SCHEMA visualai_video TO visualai_app;
 GRANT SELECT ON visualai_video.schema_migrations TO visualai_app;
-GRANT SELECT, INSERT, UPDATE ON visualai_video.lessons, visualai_video.generations TO visualai_app;
+GRANT SELECT, INSERT, UPDATE ON visualai_video.lessons, visualai_video.generations,
+    visualai_video.sources, visualai_video.source_versions TO visualai_app;
 \q
 ```
 
@@ -134,6 +135,114 @@ If this role already exists, review it rather than recreating it. Do not give th
 runtime role CREATE, DELETE, SUPERUSER or BYPASSRLS privileges. Configure
 `POSTGRES_DSN` with this restricted role, and set
 `LESSON_PERSISTENCE_PROVIDER=postgres` before importing.
+
+## Source metadata copies (October 11 update)
+
+The baseline for this update was branch `postgre-implementation`, commit `7430cc0`,
+with only the unrelated untracked `LEARNING_PIPELINE_AUDIT.md`; that file is preserved.
+The targeted existing baseline passed 79 tests, one existing Starlette warning.
+Live Docker PostgreSQL 18.3 was healthy, published only on `127.0.0.1:5433`, with
+the existing named volume mounted at `/var/lib/postgresql`. The configured
+restricted runtime role connected successfully. Lessons and generation JSONB
+already persisted plans, narration, caption paths, history and versions.
+Source metadata was the confirmed missing storage category.
+
+The approved design keeps Supabase as the canonical source/content/knowledge
+transaction boundary and adds durable **metadata copies**, not a second canonical
+ingestion engine. Apply the additive `002_source_metadata.sql` through the same
+explicit migration runner and grant the runtime role access to the two new tables
+as above. Startup now checks both migrations and SELECT/INSERT/UPDATE privileges.
+There is no automatic DDL and no destructive migration.
+
+- `visualai_video.sources`: owner, source ID, latest version, source metadata JSONB
+  (filename, type, hashes, status, timestamps, etc.) and copy timestamp.
+- `visualai_video.source_versions`: owner/source/version key and version metadata
+  (hashes, filename, file location, provenance), with copy timestamp.
+- Both tables enable and force owner RLS. No credentials, binary media, extracted
+  content arrays, rich chunks, topic blueprints or knowledge diagnostics are copied.
+- Authenticated canonical source reads, successful ingestion RPC results and
+  indexing status updates refresh copies. Version reads refresh the selected
+  version; reading an older version cannot roll back the latest version number.
+- Supabase and local PostgreSQL cannot share a transaction. A failed local copy
+  returns a safe retryable `SOURCE_METADATA_COPY_PENDING` error (503 for HTTP),
+  explicitly stating that canonical data remains in Supabase. It never rolls back
+  or deletes a successful remote commit. Retry an owned source/version read or
+  source indexing after PostgreSQL recovers to repair the copy.
+
+Existing sources are copied lazily as authenticated users access them. To reconcile
+all versions for one user, run this explicit command and enter that user's valid
+Supabase access token at the hidden local prompt (never paste it in chat, shell
+arguments, logs or Git):
+
+```powershell
+.\.venv\Scripts\python.exe -m app.db.sync_source_metadata
+```
+
+The command verifies the user through Supabase Auth, reads only that user's rows
+using their JWT and RLS, and prints aggregate counts only. It is idempotent and
+can repair partially copied batches. Repeat per user when a complete historical
+backfill is required; it has no admin bypass. Remote reads remain necessary for
+authorization and canonical content: these copies do not provide offline source
+access. External Supabase edits are reflected on the next canonical read or
+explicit reconciliation, not through a continuous replication service.
+
+Docker-backed tests can opt in without touching the developer DSN or real volume:
+
+```powershell
+$env:VISUALAI_VIDEO_TEST_DOCKER_WSL = 'Ubuntu'
+.\.venv\Scripts\python.exe -B -m pytest tests/test_source_metadata_postgres.py tests/test_video_postgres.py -q -p no:cacheprovider
+```
+
+The fixture uses the already available `postgres:18.3` image, a unique disposable
+container and volume, and an explicitly reserved loopback port. It removes only
+its own container and anonymous volume. Existing local-binary test mode remains
+available through `VISUALAI_VIDEO_TEST_PG_BIN`.
+
+### Verification of the update
+
+The additive migration was applied to the user's local Docker database, and the
+existing restricted runtime role received only SELECT/INSERT/UPDATE on the two
+new tables. `/health/database` returned `ready`; PostgreSQL and its existing named
+volume were not restarted, reset or replaced. All four application tables have
+both RLS flags enabled. Aggregate live inspection found 32 existing lessons and
+8 completed video generations, all with scene plans; 7 contain caption paths
+(legacy records are allowed to lack captions). Authenticated dashboard listing
+created 24 source metadata copies, and opening an uploaded source created a
+source-version copy. This does not assert a complete historical backfill for all
+users or versions.
+
+The signed-in browser loaded an existing Binary Search Trees lesson and its
+saved generation. Authenticated stream, scene metadata and captions requests
+returned HTTP 200. The video reached readyState 4 without a media error, with
+duration 35.356575 seconds, one caption track and five scene-navigation buttons.
+Clicking the worked-example scene updated the selected scene evidence. This
+checks existing saved media; it is not a claim that a new live AI render or all
+providers were verified.
+
+The first Docker test run exposed test-fixture issues: content-derived source IDs
+collided across cases, and an automatically published port changed on container
+restart. Tests now use unique source content and explicitly reserve the published
+port, waiting for SQL readiness after restart. The final focused Docker run passed
+32 tests, one existing Starlette deprecation warning. This includes actual SQL/RLS,
+copy-failure repair, stale-metadata protection, reconciliation, database restart,
+process termination/recovery and the existing real-renderer completion test with
+synthetic test narration/provider doubles.
+
+The final combined regression command (source metadata, video PostgreSQL,
+Supabase source orchestration, educational content/lesson features, generation
+foundation, video reliability/process recovery/enhancements and canonical
+retrieval) passed **172 tests**, one existing Starlette warning, in 107.23 seconds.
+FastAPI was restarted with the final code; PostgreSQL readiness remained `ready`,
+Supabase Auth remained connected and the new uploaded-material lesson restored
+successfully after the application restart. `git diff --check` passed. No commit,
+push, environment-file edit or modification of the unrelated audit file was made.
+
+Qdrant's API remained connected, but its existing running container reports
+unhealthy because an older health check invokes unavailable `wget`. Repository
+Compose already has a replacement health check. The running Qdrant service was
+not recreated as part of the PostgreSQL changes. The saved video also reports an
+unavailable embedding model; playback remains available, and indexing/search
+verification requires that model to be restored separately.
 
 ## Preserve existing JSON lessons/history
 

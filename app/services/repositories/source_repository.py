@@ -8,6 +8,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 
 from ...core.supabase import AuthenticatedUser, SupabaseRuntime, SupabaseResponseError
+from ...core import postgres
+from .source_metadata_store import copy_source, copy_version
 from ..schemas import ContentUnit, KnowledgeGraph, SourceRecord
 
 JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -66,7 +68,9 @@ class SupabaseSourceRepository:
             raise SupabaseResponseError("Source ownership mismatch")
         data = {key: value for key, value in row.items() if key in SourceRecord.model_fields}
         data.update(user_id=self.owner_id, owner_user_id=self.owner_id, uploaded_by=self.owner_id)
-        return SourceRecord.model_validate(data)
+        record = SourceRecord.model_validate(data)
+        copy_source(self.owner_id, record)
+        return record
 
     def encode_source(self, record: SourceRecord) -> dict[str, JsonValue]:
         data = JSON_OBJECT.validate_python(record.model_dump(mode='json'))
@@ -91,13 +95,36 @@ class SupabaseSourceRepository:
         return max((self.decode_source(row) for row in rows), key=lambda r: r.version, default=None)
 
     def get_source_version(self, source_id: str, version: int | None = None) -> SourceVersion | None:
-        if version is None:
+        if version is None or postgres.enabled():
             record = self.get_source(source_id)
             if record is None:
                 return None
-            version = record.version
+            if version is None:
+                version = record.version
         rows = self._rows('source_versions', source_id='eq.' + source_id, version='eq.' + str(version))
-        return SourceVersion.model_validate(rows[0]) if rows else None
+        result = SourceVersion.model_validate(rows[0]) if rows else None
+        if result is not None:
+            if result.source_id != source_id or result.version != version:
+                raise SupabaseResponseError('Source/version mismatch')
+            copy_version(self.owner_id, result)
+        return result
+
+    def sync_metadata(self) -> dict[str, int]:
+        """Explicit, authenticated reconciliation of all owned metadata versions."""
+        if not postgres.enabled():
+            raise postgres.VideoDatabaseError('VIDEO_DATABASE_CONFIGURATION_INVALID')
+        if self.runtime.verify_user(self._token).user_id != self.user.user_id:
+            raise SupabaseResponseError('Source ownership mismatch')
+        sources = self.list_sources()
+        versions = 0
+        for source in sources:
+            for row in self._rows('source_versions', source_id='eq.' + source.source_id):
+                version = SourceVersion.model_validate(row)
+                if version.source_id != source.source_id:
+                    raise SupabaseResponseError('Source/version mismatch')
+                copy_version(self.owner_id, version)
+                versions += 1
+        return {'sources': len(sources), 'source_versions': versions}
 
     def get_content_units(self, source_id: str, version: int | None = None) -> list[ContentUnit]:
         if version is None:
@@ -130,7 +157,13 @@ class SupabaseSourceRepository:
         result = self.runtime.user_request('POST', '/rest/v1/rpc/visualai_commit_source_ingestion',
             token=self._token, body={'p_source': self.encode_source(record),
                                     'p_version': version_row, 'p_units': unit_rows})
-        return self.decode_source(JSON_OBJECT.validate_python(result))
+        committed = self.decode_source(JSON_OBJECT.validate_python(result))
+        if postgres.enabled():
+            # Read the committed version, including idempotent RPC responses; never
+            # copy a proposed version that Supabase may not have accepted.
+            if self.get_source_version(committed.source_id, committed.version) is None:
+                raise postgres.VideoDatabaseError('SOURCE_METADATA_COPY_PENDING')
+        return committed
 
     def mark_status(self, record: SourceRecord, status: Literal['INDEXING', 'READY', 'FAILED'],
                     error_message: str | None = None) -> SourceRecord:
