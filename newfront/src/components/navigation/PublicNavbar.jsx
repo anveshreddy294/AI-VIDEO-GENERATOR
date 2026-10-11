@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { GlyphBrandMark, GlyphArrowRight } from '../ui/AtelierGlyphs';
 
 export default function PublicNavbar() {
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const navLinks = [
     { label: 'Platform', path: '/platform' },
@@ -26,7 +27,8 @@ export default function PublicNavbar() {
         </Link>
 
         {/* Center Editorial Links */}
-        <nav className="navbar-links" aria-label="Public Navigation">
+        <button type="button" className="public-menu-button btn-atelier-outline" aria-expanded={menuOpen} aria-controls="public-navigation" onClick={() => setMenuOpen(!menuOpen)}>Menu</button>
+        <nav id="public-navigation" className={`navbar-links ${menuOpen ? 'open' : ''}`} aria-label="Public Navigation" onKeyDown={event => { if (event.key === 'Escape') { setMenuOpen(false); document.querySelector('.public-menu-button')?.focus(); } }}>
           {navLinks.map(link => {
             const isActive = location.pathname === link.path;
             return (
@@ -34,6 +36,8 @@ export default function PublicNavbar() {
                 key={link.path} 
                 to={link.path} 
                 className={`nav-link ${isActive ? 'active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => setMenuOpen(false)}
               >
                 {link.label}
               </Link>

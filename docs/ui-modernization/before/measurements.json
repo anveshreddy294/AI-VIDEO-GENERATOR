@@ -1,0 +1,266 @@
+{
+  "measurements": [
+    {
+      "page": "landing",
+      "width": 375,
+      "documentWidth": 375,
+      "heading": "From informationto understanding.",
+      "headingSize": "38px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "floating-stream-track",
+        "floating-stream-card stream-card-alt-1",
+        "stream-card-media",
+        "stream-card-img floating-media-core",
+        "stream-card-overlay-tag",
+        "stream-card-body",
+        "stream-card-title",
+        "stream-card-formula"
+      ]
+    },
+    {
+      "page": "demo",
+      "width": 375,
+      "documentWidth": 375,
+      "heading": "Interactive Product Demonstration",
+      "headingSize": "44px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "dashboard",
+      "width": 375,
+      "documentWidth": 638,
+      "heading": "What would you like to learn today?",
+      "headingSize": "46px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "app-top-center",
+        "app-context-crumb",
+        "crumb-concept",
+        "app-top-right",
+        "app-telemetry-chip",
+        "status-live-beacon",
+        "",
+        "app-user-pill"
+      ]
+    },
+    {
+      "page": "materials",
+      "width": 375,
+      "documentWidth": 638,
+      "heading": "My Materials",
+      "headingSize": "38px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "app-top-center",
+        "app-context-crumb",
+        "crumb-concept",
+        "app-top-right",
+        "app-telemetry-chip",
+        "status-live-beacon",
+        "",
+        "app-user-pill"
+      ]
+    },
+    {
+      "page": "learn",
+      "width": 375,
+      "documentWidth": 638,
+      "heading": "Binary Search Trees",
+      "headingSize": "38px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "app-top-center",
+        "app-context-crumb",
+        "crumb-concept",
+        "app-top-right",
+        "app-telemetry-chip",
+        "status-live-beacon",
+        "",
+        "app-user-pill"
+      ]
+    },
+    {
+      "page": "video",
+      "width": 375,
+      "documentWidth": 638,
+      "heading": "Binary Search Trees",
+      "headingSize": "38px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "app-top-center",
+        "app-context-crumb",
+        "crumb-concept",
+        "app-top-right",
+        "app-telemetry-chip",
+        "status-live-beacon",
+        "",
+        "app-user-pill"
+      ]
+    },
+    {
+      "page": "learning",
+      "width": 375,
+      "documentWidth": 638,
+      "heading": "My Learning",
+      "headingSize": "38px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "app-top-center",
+        "app-context-crumb",
+        "crumb-concept",
+        "app-top-right",
+        "app-telemetry-chip",
+        "status-live-beacon",
+        "",
+        "app-user-pill"
+      ]
+    },
+    {
+      "page": "profile",
+      "width": 375,
+      "documentWidth": 375,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "signin",
+      "width": 375,
+      "documentWidth": 375,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "terms",
+      "width": 375,
+      "documentWidth": 375,
+      "heading": "Terms of Service",
+      "headingSize": "44px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "privacy",
+      "width": 375,
+      "documentWidth": 375,
+      "heading": "Privacy Policy",
+      "headingSize": "44px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "landing",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "From informationto understanding.",
+      "headingSize": "54px",
+      "buttonRadius": "2px",
+      "overflow": [
+        "floating-stream-track",
+        "floating-stream-card stream-card-alt-1",
+        "stream-card-media",
+        "stream-card-img floating-media-core",
+        "stream-card-overlay-tag",
+        "stream-card-body",
+        "stream-card-title",
+        "stream-card-formula"
+      ]
+    },
+    {
+      "page": "demo",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Interactive Product Demonstration",
+      "headingSize": "44px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "dashboard",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "materials",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "learn",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "video",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "learning",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "profile",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "signin",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Workspace Sign In",
+      "headingSize": "28px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "terms",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Terms of Service",
+      "headingSize": "44px",
+      "buttonRadius": "2px",
+      "overflow": []
+    },
+    {
+      "page": "privacy",
+      "width": 1366,
+      "documentWidth": 1366,
+      "heading": "Privacy Policy",
+      "headingSize": "44px",
+      "buttonRadius": "2px",
+      "overflow": []
+    }
+  ],
+  "errors": []
+}

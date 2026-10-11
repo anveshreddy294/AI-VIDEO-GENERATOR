@@ -19,9 +19,6 @@ export default function PublicFooter() {
               From information to understanding. Transforming complex educational texts, 
               diagrams, and lectures into mathematically grounded visual learning modules.
             </p>
-            <div className="footer-spec-badge">
-              <span>CANONICAL SYSTEM · v0.4.0</span>
-            </div>
           </div>
 
           <div className="footer-links-col">
@@ -51,10 +48,10 @@ export default function PublicFooter() {
 
         <div className="footer-bottom-bar">
           <div className="footer-copy-left">
-            <span>© 2026 VisualAI Project · Repository: anveshreddy294/AI-VIDEO-GENERATOR</span>
+            <span>© 2026 VisualAI</span>
           </div>
           <div className="footer-copy-right">
-            <span>STRICT ADHERENCE TO 30 DESIGN RULES · ZERO MOCK FABRICATIONS</span>
+            <Link to="/terms">Terms</Link><Link to="/privacy">Privacy</Link>
           </div>
         </div>
       </div>

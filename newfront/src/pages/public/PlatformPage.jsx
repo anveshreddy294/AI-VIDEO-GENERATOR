@@ -10,25 +10,25 @@ export default function PlatformPage() {
       num: '01',
       title: 'Curriculum & Textbook Ingestion',
       desc: 'Ingests PDF textbooks, lecture slides, and student notes. Extracts key principles, equations, and chapter outlines faithfully from your course material.',
-      plate: '/assets/library_books_hall.jpg'
+      plate: '/assets/chapter_source.jpg'
     },
     {
       num: '02',
       title: 'Step-by-Step Concept Roadmap',
       desc: 'Organizes complex subject matter into clear prerequisite learning paths. Ensures foundational principles are understood before moving to advanced topics.',
-      plate: '/assets/student_studying.jpg'
+      plate: '/assets/plate_tensor.jpg'
     },
     {
       num: '03',
       title: 'Targeted Practice & Self-Assessment',
       desc: 'Diagnostic practice questions that pinpoint specific misunderstandings, giving immediate friendly explanations to help you master every topic.',
-      plate: '/assets/physics_blackboard.jpg'
+      plate: '/assets/math_geometry_compass.jpg'
     },
     {
       num: '04',
       title: 'Animated Video Lessons & Notes',
       desc: 'Generates intuitive animated video walkthroughs paired with authentic handwritten study notes, transforming abstract ideas into crystal-clear understanding.',
-      plate: '/assets/study_desk_mac.jpg'
+      plate: '/assets/act4_learning_experience.jpg'
     }
   ];
 
@@ -49,7 +49,7 @@ export default function PlatformPage() {
 
           <div className="instruments-stacked-list">
             {instruments.map(inst => (
-              <div key={inst.num} className="instrument-card-row">
+              <div key={inst.num} className="blueprint-frame instrument-card-row">
                 <div className="instrument-media-mount">
                   <img src={inst.plate} alt={inst.title} className="instrument-img floating-media-core" />
                   <span className="instrument-num-tag">{inst.num}</span>

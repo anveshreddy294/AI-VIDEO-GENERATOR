@@ -5,33 +5,36 @@
 
 :root {
   /* Surface System — Material & Architectural */
-  --canvas: #EAE7DF;
-  --surface-secondary: #DCD8CF;
+  --canvas: #E7E3DA;
+  --surface-secondary: #D8D3C9;
   --surface-panel: #F0EEE8;
-  --surface-subtle: #E2DFD6;
+  --surface-subtle: #DDD9D0;
   --surface-dark-stage: #1C1917;
   --surface-dark-panel: #262320;
 
   /* Ink & Typography Hierarchy */
-  --ink-primary: #1C1917;
+  --ink-primary: #202724;
   --ink-secondary: #57534E;
-  --ink-muted: #78716C;
+  --ink-muted: #615E57;
   --ink-faint: #A8A29E;
   --ink-inverse: #F0EEE8;
   --ink-inverse-muted: #D6D3CD;
 
-  /* Structural & Accent Colors (Terracotta from "understanding" replaces olive green) */
-  --evergreen: #A46047;
-  --evergreen-hover: #8E523C;
-  --olive: #A46047;
-  --terracotta: #A46047;
-  --terracotta-muted: #8E523C;
-  --terracotta-hover: #8E523C;
-  --terracotta-subtle: rgba(164, 96, 71, 0.12);
+  /* One accent; legacy aliases keep existing components consistent. */
+  --evergreen: #355F52;
+  --evergreen-hover: #294B41;
+  --olive: #355F52;
+  --terracotta: var(--evergreen);
+  --terracotta-muted: var(--evergreen-hover);
+  --terracotta-hover: var(--evergreen-hover);
+  --terracotta-subtle: rgba(53, 95, 82, 0.08);
+  --success: #355F52;
+  --warning: #795018;
+  --danger: #943B35;
 
   /* Architectural Hairlines & Rules */
-  --border: #B9B7AE;
-  --border-strong: #96948B;
+  --border: #B8B3A8;
+  --border-strong: #8D8A81;
   --border-subtle: rgba(37, 54, 48, 0.14);
   --border-inverse: rgba(240, 238, 232, 0.16);
 
@@ -45,11 +48,11 @@
   --shadow-none: none;
 
   /* Typography Families (Zero Inter, Zero Geist, Zero Space Grotesk) */
-  --font-serif: 'IBM Plex Serif', Georgia, serif;
   --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-serif: var(--font-sans);
   --font-mono: 'IBM Plex Mono', 'SFMono-Regular', monospace;
-  --font-editorial: 'Newsreader', 'IBM Plex Serif', Georgia, serif;
-  --font-handwritten: 'Caveat', cursive, sans-serif;
+  --font-editorial: var(--font-sans);
+  --font-handwritten: var(--font-sans);
 
   /* Fluid Spacing Scale */
   --space-2xs: 4px;
@@ -66,4 +69,7 @@
   --max-width-site: 1380px;
   --max-width-prose: 68ch;
   --header-height: 64px;
+
+  --control-height: 40px;
+  --control-height-compact: 34px;
 }

@@ -8,6 +8,7 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import './styles/tokens.css';
 import './styles/reset.css';
 import './styles/atelier.css';
+import './styles/workspace-theme.css';
 
 const container = document.getElementById('root');
 if (container) {

@@ -1,37 +1,26 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import PublicNavbar from '../../components/navigation/PublicNavbar';
 import PublicFooter from '../../components/navigation/PublicFooter';
 import TransformationSpecimen from '../../components/ui/TransformationSpecimen';
+import { useHeroEntrance } from '../../animations';
 import { 
   GlyphArrowRight, 
   GlyphArrowUpRight, 
   GlyphDocument, 
   GlyphEvidence, 
   GlyphDag, 
-  GlyphCheckmark,
+  GlyphCheckmark, 
   GlyphCrosshair,
   GlyphPlay
 } from '../../components/ui/AtelierGlyphs';
 
 export default function LandingPage() {
   const heroRef = useRef(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  const handleMouseMove = (e) => {
-    if (!heroRef.current) return;
-    const rect = heroRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width - 0.5) * 2;
-    const y = ((e.clientY - rect.top) / rect.height - 0.5) * 2;
-    setMousePos({ 
-      x: Math.max(-1, Math.min(1, x)), 
-      y: Math.max(-1, Math.min(1, y)) 
-    });
-  };
+  // GSAP 3 entrance sequence with safe React cleanup and reduced-motion fallback
+  useHeroEntrance(heroRef);
 
-  const handleMouseLeave = () => {
-    setMousePos({ x: 0, y: 0 });
-  };
 
   const specimens = [
     {
@@ -66,40 +55,40 @@ export default function LandingPage() {
 
   const streamItems = [
     {
-      plate: '/assets/study_desk_mac.jpg',
-      code: 'STUDIO 01 · STUDY SETUP',
-      title: 'Interactive Study Workspace',
-      formula: 'Active Lecture Note Ingestion'
+      plate: '/assets/chapter_source.jpg',
+      code: 'INGESTION 01 · TEXTBOOK SCAN',
+      title: 'Multimodal Source Ingestion',
+      formula: 'Optical OCR Grounded Proof'
     },
     {
-      plate: '/assets/notebook_handwritten.jpg',
-      code: 'NOTES 02 · STUDENT NOTES',
-      title: 'Handwritten Key Takeaways',
-      formula: 'Summary Checkpoints & Rules'
+      plate: '/assets/specimen_math_wave.jpg',
+      code: 'HARMONICS 02 · WAVE MECHANICS',
+      title: 'Fourier Harmonic Transforms',
+      formula: 'f(t) = a_0/2 + ∑ [a_n cos(nωt)]'
     },
     {
-      plate: '/assets/library_books_hall.jpg',
-      code: 'ARCHIVE 03 · TEXTBOOK REPOSITORY',
-      title: 'Course Literature Archive',
-      formula: 'Full Library Ingestion'
+      plate: '/assets/specimen_biology_dna.jpg',
+      code: 'GENOMICS 03 · BIOMOLECULAR',
+      title: 'Cellular Base Pairing Dynamics',
+      formula: 'Hydrogen Bond Affinity: A-T, G-C'
     },
     {
-      plate: '/assets/student_studying.jpg',
-      code: 'SESSION 04 · ACTIVE PRACTICE',
-      title: 'Focused Concept Checkpoints',
-      formula: 'Mock Questions & Self-Tests'
+      plate: '/assets/plate_quantum.jpg',
+      code: 'QUANTUM 04 · PROBABILITY',
+      title: 'Quantum State Traversal',
+      formula: '|ψ⟩ = α|0⟩ + β|1⟩, |α|² + |β|² = 1'
     },
     {
-      plate: '/assets/physics_blackboard.jpg',
-      code: 'DERIVATION 05 · APPLIED PHYSICS',
-      title: 'Classroom Formula Proofs',
-      formula: 'Step-by-Step Derivations'
+      plate: '/assets/plate_tensor.jpg',
+      code: 'TENSORS 05 · MULTILINEAR',
+      title: 'Multilinear Manifold Projection',
+      formula: 'T_{ijk} = ∑ U_{ia} V_{jb} W_{kc}'
     },
     {
-      plate: '/assets/astronomy_telescope_galaxy.jpg',
-      code: 'COSMOLOGY 06 · ASTROPHYSICS',
-      title: 'Planetary Mechanics & Orbits',
-      formula: 'Gravitational Field Calculations'
+      plate: '/assets/plate_interferometer.jpg',
+      code: 'OPTICS 06 · INTERFEROMETRY',
+      title: 'Laser Phase Interference',
+      formula: 'I(δ) = 2 I_0 [1 + cos(δ)]'
     }
   ];
 
@@ -112,19 +101,12 @@ export default function LandingPage() {
         <section 
           ref={heroRef}
           className="atelier-hero-section"
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          style={{
-            '--mx': mousePos.x,
-            '--my': mousePos.y
-          }}
         >
 
           <div className="atelier-container" style={{ position: 'relative', zIndex: 2 }}>
             {/* Top Registration Index */}
             <div className="hero-registration-line">
-              <span className="coord-label">LAT 37.7749° N · SYSTEM DESIGN SPECIFICATION · REF 2026.4</span>
-              <span className="coord-label">ARCHITECTURAL EDITION · THE KNOWLEDGE ATELIER</span>
+              <span className="coord-label">VISUALAI · THE KNOWLEDGE ATELIER</span>
             </div>
 
             <div className="hero-grid-layout">
@@ -138,9 +120,7 @@ export default function LandingPage() {
                 </h1>
 
                 <p className="hero-lead-text">
-                  Turn dense textbooks, technical notes, and problem sets into 
-                  optically verified evidence, topological concept graphs, and 
-                  adaptive video lessons.
+                   Bring a topic or your own study material. Build understanding with clear explanations, connected concepts, practice and narrated video.
                 </p>
 
                 <div className="hero-actions-group">
@@ -175,7 +155,7 @@ export default function LandingPage() {
                 {/* Floating Precision Micro-Chips */}
                 <div className="hero-floating-chip chip-top-left">
                   <GlyphEvidence size={12} />
-                  <span>OCR REGISTRATION [142, 288]</span>
+                  <span>EXPLORE CONNECTED IDEAS</span>
                 </div>
 
                 <div className="hero-floating-chip chip-mid-left">
@@ -191,7 +171,7 @@ export default function LandingPage() {
                   </div>
                   <div className="sat-plate-media">
                     <img 
-                      src="/assets/astronomy_telescope_galaxy.jpg" 
+                      src="/assets/specimen_physics_orbit.jpg" 
                       alt="Planetary Mechanics and Orbits" 
                       className="sat-plate-img floating-media-core" 
                     />
@@ -205,7 +185,7 @@ export default function LandingPage() {
                 <div className="hero-mount-card floating-hero-plate">
                   <div className="mount-meta-header">
                     <span className="coord-label">FIG 01 · OPTICAL KNOWLEDGE STAGE</span>
-                    <span className="mount-status-dot">ACTIVE ENGINE</span>
+                    <span className="mount-status-dot">ILLUSTRATED EXAMPLE</span>
                   </div>
 
                   <div className="mount-contained-media">
@@ -216,7 +196,7 @@ export default function LandingPage() {
                     />
                     <div className="mount-overlay-badge">
                       <GlyphCrosshair size={13} />
-                      <span>VERIFIED CURRICULUM · OPTICALLY GROUNDED</span>
+                      <span>LEARNING THROUGH WORDS AND VISUALS</span>
                     </div>
                   </div>
 
@@ -237,7 +217,7 @@ export default function LandingPage() {
                   </div>
                   <div className="sat-plate-media">
                     <img 
-                      src="/assets/notebook_handwritten.jpg" 
+                      src="/assets/specimen_analog_notebook.jpg" 
                       alt="Student Study Notebook" 
                       className="sat-plate-img floating-media-core" 
                     />
@@ -264,7 +244,7 @@ export default function LandingPage() {
               <span className="coord-label">01 / THE CORE PEDAGOGICAL INSTRUMENT</span>
               <h2 className="section-title">The Complete Knowledge Transformation</h2>
               <p className="section-subtext">
-                Every learning journey follows six verified states: from raw textbook scan to targeted cognitive improvement.
+                Explore the tools you can use at your own pace, from reading material to reviewing a lesson.
               </p>
             </div>
 
@@ -279,18 +259,17 @@ export default function LandingPage() {
             <div className="stream-header-strip">
               <div className="stream-header-left">
                 <span className="coord-label">02 / CONTINUOUS EXTRACTION STREAM</span>
-                <h2 className="stream-title">Autonomous Curriculum Specimen Corridor</h2>
+                <h2 className="stream-title">Ideas across disciplines</h2>
                 <p className="stream-subtext">
-                  Continuous optical extraction across mathematics, astrophysics, analog systems, and biology.
+                  Illustrated topics from mathematics, physics and biology.
                 </p>
               </div>
-              <span className="coord-label">AUTONOMOUS GLIDE · 6 CONCURRENT PLATES</span>
             </div>
           </div>
 
           <div className="floating-stream-viewport">
             <div className="floating-stream-track">
-              {[...streamItems, ...streamItems].map((item, idx) => (
+              {streamItems.map((item, idx) => (
                 <div 
                   key={`${item.code}-${idx}`} 
                   className={`floating-stream-card stream-card-alt-${(idx % 3) + 1}`}

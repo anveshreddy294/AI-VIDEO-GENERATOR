@@ -3,31 +3,25 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAtelierWorkspace } from '../../context/WorkspaceContext';
 import { 
   GlyphBrandMark, 
-  GlyphDocument, 
-  GlyphEvidence, 
-  GlyphDag, 
-  GlyphPlay, 
-  GlyphCheckmark, 
+  GlyphDocument,
+  GlyphEvidence,
+  GlyphDag,
   GlyphUser, 
-  GlyphRotate,
   GlyphGrid
 } from '../ui/AtelierGlyphs';
 
 export default function AppLayout() {
-  const { user, toggleRole, activeSource, activeConcept, notification } = useAtelierWorkspace();
+  const { user, activeSource, activeConcept, notification } = useAtelierWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
-    { label: 'Dashboard', path: '/app/dashboard', glyph: GlyphGrid, desc: 'Active topics, progress & recommendations' },
-    { label: 'Source Library', path: '/app/library', glyph: GlyphDocument, desc: 'Textbooks, course notes & PDFs' },
-    { label: 'Topic Explorer', path: '/app/explore', glyph: GlyphDag, desc: 'Prerequisites & topic roadmap' },
-    { label: 'Learning Studio', path: '/app/studio', glyph: GlyphEvidence, desc: 'Interactive lessons & handwritten notes' },
-    { label: 'Practice & Mastery', path: '/app/assessment', glyph: GlyphCheckmark, desc: 'Mock questions & skill checkpoints' },
-    { label: 'Roadmap & Progress', path: '/app/progress', glyph: GlyphRotate, desc: 'Detailed scoring & review topics' },
-    { label: 'Video Studio', path: '/app/video', glyph: GlyphPlay, desc: 'Generated lesson videos & storyboard' },
-    { label: 'Profile & Settings', path: '/app/profile', glyph: GlyphUser, desc: 'Course settings & study preferences' }
+    { label: 'Dashboard', path: '/app/dashboard', glyph: GlyphGrid, desc: 'Choose what to learn next' },
+    { label: 'My Learning', path: '/app/explore', glyph: GlyphEvidence, desc: 'Create or resume a lesson' },
+    { label: 'My Materials', path: '/app/library', glyph: GlyphDocument, desc: 'Upload and view study material' },
+    { label: 'Learning Workspace', path: '/app/studio', glyph: GlyphDag, desc: 'Learn, practice, ask and watch' },
+    { label: 'Profile', path: '/app/profile', glyph: GlyphUser, desc: 'Account and preferences' }
   ];
 
   return (
@@ -47,7 +41,10 @@ export default function AppLayout() {
             type="button"
             className="app-brand-lockup-btn"
             onClick={() => setSidebarOpen(prev => !prev)}
-            title="Click to open left workspace toolbar"
+             title="Click to open left workspace toolbar"
+             aria-label={sidebarOpen ? 'Close workspace navigation' : 'Open workspace navigation'}
+             aria-expanded={sidebarOpen}
+             aria-controls="workspace-navigation"
             style={{
               background: 'none',
               border: 'none',
@@ -81,22 +78,12 @@ export default function AppLayout() {
 
         <div className="app-top-center">
           <div className="app-context-crumb">
-            <span className="crumb-source">{activeSource?.name || 'Database Systems'}</span>
-            <span className="crumb-sep">→</span>
-            <span className="crumb-concept">{activeConcept?.title || 'Primary Keys'}</span>
+              <span className="crumb-source">{activeConcept?.title || activeSource?.name || 'Choose something to learn'}</span>
+              {activeConcept && <><span className="crumb-sep">·</span><span className="crumb-concept">Learning Workspace</span></>}
           </div>
         </div>
 
         <div className="app-top-right">
-          <button 
-            type="button" 
-            className="role-switch-btn"
-            onClick={toggleRole}
-            title="Switch between Student Workspace and Educator Hub"
-          >
-            Switch to {user.role === 'student' ? 'Educator Hub' : 'Student Studio'}
-          </button>
-          
           <Link to="/app/profile" className="app-user-pill">
             <span className="user-avatar-tag">{user.avatarLabel}</span>
             <span className="user-name-tag">{user.name}</span>
@@ -115,7 +102,7 @@ export default function AppLayout() {
         )}
 
         {/* Left Architectural Navigation Toolbar (Opens when VisualAI is clicked) */}
-        <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <aside id="workspace-navigation" className={`app-sidebar ${sidebarOpen ? 'open' : ''}`} inert={!sidebarOpen} onKeyDown={event => { if (event.key === 'Escape') { setSidebarOpen(false); document.querySelector('.app-brand-lockup-btn')?.focus(); } }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <div className="sidebar-section-title" style={{ margin: 0, padding: 0 }}>
               {user.role === 'educator' ? 'INSTRUCTOR CONSOLE' : 'STUDENT WORKSPACE'}
@@ -147,6 +134,7 @@ export default function AppLayout() {
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon size={14} className="sidebar-glyph" />
                   <span className="sidebar-label">{item.label}</span>
@@ -185,8 +173,8 @@ export default function AppLayout() {
               ← Exit to Home
             </Link>
             <div className="sidebar-system-spec">
-              <span>CANONICAL SANDBOX</span>
-              <span>v0.4.0 · OPTICAL PROVENANCE</span>
+              <Link to="/terms">Terms</Link>
+              <Link to="/privacy">Privacy</Link>
             </div>
           </div>
         </aside>

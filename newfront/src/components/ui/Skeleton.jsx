@@ -16,12 +16,15 @@ export function SkeletonBox({ width = '100%', height = '20px', className = '', s
         border: '1px solid var(--border)',
         borderRadius: 'var(--radius-sharp)',
         opacity: 0.75,
-        animation: 'atelierShimmer 1.8s ease-in-out infinite',
         ...style
       }}
       aria-hidden="true"
     />
   );
+}
+
+export function LoadingContent({ label = 'Loading content…', lines = 3 }) {
+  return <div className="loading-content" role="status" aria-busy="true"><span className="sr-only">{label}</span><SkeletonText lines={lines} /></div>;
 }
 
 export function SkeletonText({ lines = 3, gap = '8px', className = '' }) {

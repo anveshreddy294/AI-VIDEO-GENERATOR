@@ -19,7 +19,7 @@ export default function HowItWorksPage() {
       step: 'PHASE 01 · DOCUMENT INGESTION',
       num: '01',
       title: 'Upload Course Materials & Textbooks',
-      plate: '/assets/library_books_hall.jpg',
+      plate: '/assets/chapter_source.jpg',
       tag: 'SOURCE INGESTION · TEXTBOOKS & NOTES',
       detail: 'Upload course materials in PDF, DOCX, PNG, or lecture slide formats. VisualAI parses the contents, identifies key concepts, and indexes definitions accurately from your syllabus.',
       input: 'Course Textbook, Slides, or Lecture Notes',
@@ -30,7 +30,7 @@ export default function HowItWorksPage() {
       step: 'PHASE 02 · CITATION GROUNDING',
       num: '02',
       title: 'Source-Grounded Evidence & Formulas',
-      plate: '/assets/notebook_handwritten.jpg',
+      plate: '/assets/chapter_evidence.jpg',
       tag: 'TEXTBOOK CITATIONS · 100% GROUNDED',
       detail: 'Every explanation, rule, and formula is anchored directly to its exact page and section in your source material, guaranteeing reliable information without hallucinations.',
       input: 'Textbook Concepts & Formulas',
@@ -41,7 +41,7 @@ export default function HowItWorksPage() {
       step: 'PHASE 03 · KNOWLEDGE ROADMAP',
       num: '03',
       title: 'Prerequisite Progression Mapping',
-      plate: '/assets/database_code_screen.jpg',
+      plate: '/assets/chapter_knowledge.jpg',
       tag: 'LEARNING PATHWAY · STEP-BY-STEP',
       detail: 'Concepts are organized into an intuitive prerequisite roadmap, guiding you logically through foundational fundamentals before tackling advanced theorems.',
       input: 'Course Topics & Principles',
@@ -52,7 +52,7 @@ export default function HowItWorksPage() {
       step: 'PHASE 04 · INTERACTIVE LESSONS',
       num: '04',
       title: 'Animated Video Lessons & Handwritten Notes',
-      plate: '/assets/study_desk_mac.jpg',
+      plate: '/assets/act4_learning_experience.jpg',
       tag: 'LEARNING STUDIO · HD VIDEO & NOTES',
       detail: 'Explore an intuitive learning workspace featuring clear animated video walkthroughs, authentic handwritten study notes, and concise takeaways tailored to your topic.',
       input: 'Key Concept Explanations',
@@ -63,7 +63,7 @@ export default function HowItWorksPage() {
       step: 'PHASE 05 · PRACTICE & MASTERY',
       num: '05',
       title: 'Interactive Mock Questions & Progress',
-      plate: '/assets/student_studying.jpg',
+      plate: '/assets/chapter_mastery.jpg',
       tag: 'SELF-ASSESSMENT · TARGETED REVIEW',
       detail: 'Reinforce learning with realistic practice questions. Get immediate friendly feedback and targeted review suggestions whenever a concept needs extra practice.',
       input: 'Student Practice Checkpoints',
@@ -91,7 +91,7 @@ export default function HowItWorksPage() {
           {/* Workflow Cards Stack */}
           <div className="workflow-steps-stack">
             {steps.map(s => (
-              <div key={s.num} className="workflow-step-card">
+              <div key={s.num} className="blueprint-frame workflow-step-card">
                 <div className="workflow-step-media">
                   <img src={s.plate} alt={s.title} className="workflow-step-img floating-media-core" />
                   <div className="workflow-step-overlay-tag">
