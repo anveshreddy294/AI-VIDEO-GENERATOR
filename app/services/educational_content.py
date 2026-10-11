@@ -18,7 +18,9 @@ from ..core.reasoning import Message, ReasoningProvider, ReasoningProviderRouter
 from .repositories.source_repository import SupabaseSourceRepository
 from .security.content_sanitizer import SanitizedContent
 from .security.source_scope import require_source_scope
-from .storage import atomic_json, serialized, store_lock, validate_id
+from .storage import validate_id
+from .repositories.lesson_store import (lesson_store_lock as store_lock,
+    lesson_serialized as serialized, read_lesson, write_lesson, lesson_ids)
 from .interest_personalization import personalize_request, build_context
 from .learning_profile import repository_preferences
 from .video.scene_schema import ScenePlan, SceneType, NarrationSegment, VideoPlan, VideoArtifact
@@ -334,7 +336,7 @@ class EducationalLesson(BaseModel):
 
 
 def save_educational_lesson(lesson: EducationalLesson) -> None:
-    path = LESSONS_DIR / str(lesson.user_id) / f"{validate_id(lesson.lesson_id)}.json"
+    validate_id(lesson.lesson_id)
     with store_lock():
         if lesson.video and (generation := lesson.video_generations.get(lesson.video.get("job_id"))):
             generation.status = lesson.video["status"]
@@ -345,7 +347,8 @@ def save_educational_lesson(lesson: EducationalLesson) -> None:
                 generation.completed_at = datetime.now(timezone.utc).isoformat()
         own_state = lesson.model_dump(mode="json")
         baseline = lesson._persisted_state
-        merged = json.loads(path.read_text(encoding="utf-8")) if baseline and path.exists() else dict(own_state)
+        saved = read_lesson(LESSONS_DIR, lesson.user_id, lesson.lesson_id) if baseline else None
+        merged = saved if saved is not None else dict(own_state)
         before_video, current_video = baseline.get("video") or {}, merged.get("video") or {}
         own_video = own_state.get("video") or {}
         stale_video = bool(baseline and own_video.get("job_id") == before_video.get("job_id")
@@ -374,7 +377,7 @@ def save_educational_lesson(lesson: EducationalLesson) -> None:
                 merged[key] = existing
             else:
                 merged[key] = value
-        atomic_json(path, merged)
+        write_lesson(LESSONS_DIR, lesson.user_id, lesson.lesson_id, merged)
         lesson._persisted_state = own_state
 
 
@@ -383,11 +386,15 @@ def get_educational_lesson(user_id: UUID, lesson_id: str | UUID) -> EducationalL
         vid = validate_id(str(lesson_id))
     except ValueError:
         return None
-    path = LESSONS_DIR / str(user_id) / f"{vid}.json"
-    if not path.exists():
+    # Database failures must reach the safe 503 handler, never look like missing rows.
+    try:
+        data = read_lesson(LESSONS_DIR, user_id, vid)
+    except (OSError, json.JSONDecodeError):
+        logger.warning("[educational_lesson] Local lesson is unreadable: %s", vid)
+        return None
+    if data is None:
         return None
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data.get("user_id"), str):
             data["user_id"] = UUID(data["user_id"])
         if isinstance(data.get("content"), dict):
@@ -433,13 +440,15 @@ def recover_educational_video(user_id: UUID, lesson_id: str) -> EducationalLesso
 
 
 def list_educational_lessons(user_id: UUID) -> list[dict[str, Any]]:
-    user_dir = LESSONS_DIR / str(user_id)
-    if not user_dir.exists():
-        return []
     lessons = []
-    for p in user_dir.glob("*.json"):
+    for lesson_id in lesson_ids(LESSONS_DIR, user_id):
         try:
-            data = json.loads(p.read_text(encoding="utf-8"))
+            data = read_lesson(LESSONS_DIR, user_id, lesson_id)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data is None:
+            continue
+        try:
             lessons.append({
                 "lesson_id": data.get("lesson_id"),
                 "topic": data.get("topic"),

@@ -164,6 +164,19 @@ class Settings:
 
         # --- Database & Persistence Architecture (Supabase / Local) ---
         self.database_provider: str = os.getenv("DATABASE_PROVIDER", "file").strip().lower()
+        # Independent of Supabase Auth/canonical source persistence; never auto-fallback.
+        self.lesson_persistence_provider = os.getenv("LESSON_PERSISTENCE_PROVIDER", "file").strip().lower()
+        self.postgres_dsn = SecretStr(os.getenv("POSTGRES_DSN", "").strip())
+        self.postgres_pool_size = int(os.getenv("POSTGRES_POOL_SIZE", "4"))
+        self.postgres_timeout_seconds = float(os.getenv("POSTGRES_TIMEOUT_SECONDS", "10"))
+        if self.lesson_persistence_provider not in {"file", "postgres"}:
+            raise ValueError("LESSON_PERSISTENCE_PROVIDER must be file or postgres")
+        if not 1 <= self.postgres_pool_size <= 32:
+            raise ValueError("POSTGRES_POOL_SIZE must be between 1 and 32")
+        if not 0 < self.postgres_timeout_seconds <= 60:
+            raise ValueError("POSTGRES_TIMEOUT_SECONDS must be between 0 and 60")
+        if self.lesson_persistence_provider == "postgres" and not self.postgres_dsn.get_secret_value():
+            raise ValueError("POSTGRES_DSN is required for PostgreSQL lesson persistence")
         self.supabase_auth_redirect_url: str = os.getenv("SUPABASE_AUTH_REDIRECT_URL", "").strip()
         self.supabase_url: str = os.getenv("SUPABASE_URL", "").strip()
         self.supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "").strip()

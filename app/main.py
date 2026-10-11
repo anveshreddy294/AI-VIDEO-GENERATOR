@@ -12,6 +12,7 @@ if sys.platform == "win32":
 
 from contextlib import asynccontextmanager
 from .core.config import settings
+from .core import postgres
 
 from fastapi import Depends, FastAPI, Request, Response
 from .services.security.legacy_boundary import legacy_learning_boundary
@@ -55,6 +56,9 @@ async def lifespan(app: FastAPI):
     for warning in configuration["warnings"]:
         logging.getLogger(__name__).warning("RUNTIME_CONFIGURATION %s", warning)
     try:
+        if postgres.enabled():
+            from starlette.concurrency import run_in_threadpool
+            await run_in_threadpool(postgres.readiness)
         yield
     finally:
         # Drain pipeline work before releasing shared infrastructure.
@@ -62,7 +66,17 @@ async def lifespan(app: FastAPI):
         try:
             await job_manager.shutdown_active_jobs(timeout=5.0)
         finally:
-            close_supabase_runtime()
+            try:
+                # Educational jobs use a separate task registry from ingestion.
+                from .services.educational_content import _video_tasks
+                tasks = [task for task in _video_tasks if task.get_loop() is asyncio.get_running_loop()]
+                for task in tasks:
+                    task.cancel()
+                if tasks:
+                    await asyncio.wait(tasks, timeout=5.0)
+            finally:
+                postgres.close_pool()
+                close_supabase_runtime()
 
 
 app = FastAPI(
@@ -123,6 +137,23 @@ async def source_processing_failure(request: Request, error: SourceIngestionFail
 async def supabase_failure(request: Request, error: SupabaseError):
     boundary = auth_http_error(error)
     return JSONResponse(status_code=boundary.status_code, content={"detail": boundary.detail}, headers=boundary.headers)
+
+
+@app.exception_handler(postgres.VideoDatabaseError)
+async def video_database_failure(request: Request, error: postgres.VideoDatabaseError):
+    return JSONResponse(status_code=503, content={"detail": {"code": error.code}},
+                        headers={"Cache-Control": "private, no-store"})
+
+
+@app.get("/health/database")
+def health_database() -> JSONResponse:
+    if not postgres.enabled():
+        return JSONResponse(content={"provider": "file", "status": "not_enabled"})
+    try:
+        postgres.readiness()
+    except postgres.VideoDatabaseError as error:
+        return JSONResponse(status_code=503, content={"provider": "postgres", "status": "unavailable", "code": error.code})
+    return JSONResponse(content={"provider": "postgres", "status": "ready"})
 
 
 @app.get("/health/supabase")

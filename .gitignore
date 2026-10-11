@@ -29,6 +29,8 @@ scratch/
 .env
 __pycache__/
 .pytest_cache/
+*.dump
+.env.postgres
 *.pyc
 
 stabilization-final-backup.patch

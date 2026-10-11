@@ -14,6 +14,10 @@ python-dotenv==1.2.3
 httpx==0.28.1
 requests==2.34.2
 
+# Durable educational lessons/video metadata (existing repositories are synchronous)
+psycopg[binary]==3.3.6
+psycopg-pool==3.3.3
+
 # LLM Providers & AI Models (Local Ollama HTTP Client via urllib/httpx)
 
 # Vector Database & Retrieval

@@ -17,7 +17,8 @@ from qdrant_client import models as qm
 
 from ...core.config import settings
 from ..security.source_scope import require_source_scope
-from ..storage import store_lock, validate_id
+from ..storage import validate_id
+from ..repositories.lesson_store import lesson_store_lock as store_lock, lesson_ids
 from .scene_schema import VideoPlan, ScenePlan, SceneType, NarrationSegment, SceneEvidenceReference, SceneTimelineEntry
 from .scene_validator import validate_video_plan, SceneValidationError
 
@@ -529,12 +530,12 @@ def scenes_for_source(repo, source_id: str, version: int, chunk_id: str | None,
                       content_id: str | None, offset: int, limit: int) -> dict:
     from .. import educational_content as ec
     require_source_scope(repo, source_id, version)
-    files = sorted((ec.LESSONS_DIR / str(repo.user.user_id)).glob("*.json"))
-    if len(files) > 5000:
+    identifiers = lesson_ids(ec.LESSONS_DIR, repo.user.user_id, limit=5001)
+    if len(identifiers) > 5000:
         raise HTTPException(503, {"code":"VIDEO_SOURCE_LOOKUP_LIMIT"})
     results = []
-    for path in files:
-        lesson = ec.get_educational_lesson(repo.user.user_id, path.stem)
+    for lesson_id in identifiers:
+        lesson = ec.get_educational_lesson(repo.user.user_id, lesson_id)
         if lesson is None:
             continue
         for generation in lesson.video_generations.values():
