@@ -624,3 +624,37 @@ def test_source_size_limit_never_calls_provider(monkeypatch: pytest.MonkeyPatch)
         pytest.fail("Oversized source reached provider")
     with pytest.raises(UnderstandingError, match="SOURCE_TOO_LARGE"):
         understand_content(SCOPE, envelopes("multi_topic"), forbidden)
+
+
+def test_normalize_hierarchy_child_evidence_and_relational_verbs() -> None:
+    from app.services.content_understanding import (
+        EvidenceProposal,
+        ConceptProposal,
+        SubtopicProposal,
+        TopicProposal,
+        StructureProposal,
+        normalize_hierarchy_child_evidence,
+        validate_proposal,
+    )
+    units = envelopes("textbook")
+    proposal = StructureProposal(
+        topics=[TopicProposal(key="t1", title="Osmosis", evidence=[EvidenceProposal(content_id=units[0].content_id, quote="Osmosis", role="GENERAL_CONTENT")])],
+        subtopics=[SubtopicProposal(key="s1", topic_key="t1", title="Osmosis", evidence=[EvidenceProposal(content_id=units[0].content_id, quote="Osmosis", role="GENERAL_CONTENT")])],
+        concepts=[
+            ConceptProposal(
+                key="c1",
+                subtopic_key="s1",
+                name="Osmosis",
+                definition="water movement through a membrane",
+                evidence=[EvidenceProposal(content_id=units[0].content_id, quote="Osmosis is water movement through a membrane.", role="DEFINITION")],
+            )
+        ],
+        prerequisites=[],
+    )
+    normalized, repairs = normalize_hierarchy_child_evidence(proposal)
+    assert any(e.quote == "Osmosis is water movement through a membrane." for e in normalized.subtopics[0].evidence)
+    assert any(e.quote == "Osmosis is water movement through a membrane." for e in normalized.topics[0].evidence)
+    assert len(repairs) >= 1
+    # Validates cleanly without CHILD_SUPPORT rejection
+    validated, _ = validate_proposal(SCOPE, units, normalized)
+    assert validated.concepts[0].name == "Osmosis"

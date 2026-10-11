@@ -22,7 +22,7 @@ export default function TransformationSpecimen() {
       title: 'Original Course Material',
       desc: 'Upload your textbooks, class slides, or lecture notes. VisualAI extracts verified text and formulas directly from your curriculum.',
       meta: 'SOURCE: Database Systems (Chapter 3) · Page 7',
-      plate: '/assets/library_books_hall.jpg',
+      plate: '/assets/chapter_source.jpg',
       annotation: 'ORIGINAL TEXTBOOK: § 3.2 PRIMARY KEYS'
     },
     {
@@ -31,7 +31,7 @@ export default function TransformationSpecimen() {
       title: 'Core Concept Identification',
       desc: 'The platform identifies essential rules, key definitions, and examples, ensuring accurate study materials without hallucinations.',
       meta: 'FOUNDATION: Entity Integrity & Non-Null Rule',
-      plate: '/assets/database_code_screen.jpg',
+      plate: '/assets/chapter_evidence.jpg',
       annotation: 'KEY RULE: UNIQUE IDENTIFIER FOR EVERY ROW'
     },
     {
@@ -40,7 +40,7 @@ export default function TransformationSpecimen() {
       title: 'Structured Topic Map',
       desc: 'Topics are organized into clear prerequisite paths so you understand foundational basics before tackling advanced concepts.',
       meta: 'ROADMAP: Tables → Primary Keys → Foreign Keys → Normalization',
-      plate: '/assets/student_studying.jpg',
+      plate: '/assets/chapter_knowledge.jpg',
       annotation: 'TOPIC ROADMAP: 8 CONNECTED LESSONS'
     },
     {
@@ -49,7 +49,7 @@ export default function TransformationSpecimen() {
       title: 'Video Lessons & Handwritten Notes',
       desc: 'Watch step-by-step video lessons and review authentic handwritten study notes designed for effortless understanding.',
       meta: 'LESSON: Visualizing Key Constraints in Practice',
-      plate: '/assets/study_desk_mac.jpg',
+      plate: '/assets/act4_learning_experience.jpg',
       annotation: 'LESSON WALKTHROUGH: 3 MIN VIDEO'
     },
     {
@@ -58,7 +58,7 @@ export default function TransformationSpecimen() {
       title: 'Diagnostic Practice Questions',
       desc: 'Solve realistic practice questions that pinpoint common mistakes and help you master the topic before exams.',
       meta: 'PRACTICE: Identifying Surrogate vs Candidate Keys',
-      plate: '/assets/notebook_handwritten.jpg',
+      plate: '/assets/chapter_mastery.jpg',
       annotation: 'PRACTICE CHECKPOINT: MOCK QUESTIONS READY'
     },
     {
@@ -67,7 +67,7 @@ export default function TransformationSpecimen() {
       title: 'Score Tracking & Targeted Review',
       desc: 'Track your live topic scores and jump straight into focused reviews whenever a concept needs a quick refresher.',
       meta: 'PROGRESS: 74% Current Mastery · 1 Review Topic',
-      plate: '/assets/library_books_hall.jpg',
+      plate: '/assets/specimen_analog_notebook.jpg',
       annotation: 'MASTERY ROADMAP: TARGETED REVIEW'
     }
   ];

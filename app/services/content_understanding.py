@@ -487,7 +487,7 @@ def validate_proposal(
             any(label_supported(name, e.quote, derived_labels) for name in names)
             and bool(
                 re.search(
-                    r"\b(is|are|means|uses?|studies|describes?|includes?|contains?|consists|comprises?|explains?|requires?|depends?|defined|represents?|converts?|branches|components?|types? of|kinds? of|divided into)\b|[=∑∫≈]",
+                    r"\b(is|are|means|uses?|studies|describes?|states?|shows?|relates?|equals?|includes?|contains?|consists|comprises?|explains?|requires?|depends?|defined|represents?|converts?|branches|components?|types? of|kinds? of|divided into)\b|[=∑∫≈]",
                     e.quote,
                     re.I,
                 )
@@ -856,6 +856,52 @@ def normalize_visual_presentation(
     return proposal.model_copy(update={"subtopics": subs}), repairs
 
 
+def normalize_hierarchy_child_evidence(
+    proposal: StructureProposal,
+) -> tuple[StructureProposal, list[str]]:
+    """Ensure parents cite evidence naming their descendants for valid child support."""
+    repairs: list[str] = []
+    concept_ev_by_sub: dict[str, list[EvidenceProposal]] = {}
+    for c in proposal.concepts:
+        concept_ev_by_sub.setdefault(c.subtopic_key, []).extend(c.evidence)
+
+    subs: list[SubtopicProposal] = []
+    for s in proposal.subtopics:
+        existing = {(e.content_id, e.char_start, e.char_end, e.quote) for e in s.evidence}
+        additions = []
+        for e in concept_ev_by_sub.get(s.key, []):
+            sig = (e.content_id, e.char_start, e.char_end, e.quote)
+            if sig not in existing:
+                additions.append(e)
+                existing.add(sig)
+        if additions:
+            subs.append(s.model_copy(update={"evidence": list(s.evidence) + additions}))
+            repairs.append("hierarchy_child_evidence_subtopic:" + s.key)
+        else:
+            subs.append(s)
+
+    sub_ev_by_topic: dict[str, list[EvidenceProposal]] = {}
+    for s in subs:
+        sub_ev_by_topic.setdefault(s.topic_key, []).extend(s.evidence)
+
+    topics: list[TopicProposal] = []
+    for t in proposal.topics:
+        existing = {(e.content_id, e.char_start, e.char_end, e.quote) for e in t.evidence}
+        additions = []
+        for e in sub_ev_by_topic.get(t.key, []):
+            sig = (e.content_id, e.char_start, e.char_end, e.quote)
+            if sig not in existing:
+                additions.append(e)
+                existing.add(sig)
+        if additions:
+            topics.append(t.model_copy(update={"evidence": list(t.evidence) + additions}))
+            repairs.append("hierarchy_child_evidence_topic:" + t.key)
+        else:
+            topics.append(t)
+
+    return proposal.model_copy(update={"topics": topics, "subtopics": subs}), repairs
+
+
 def understand_content(
     scope: SourceScope,
     units: list[ScopedContentUnit],
@@ -1069,7 +1115,8 @@ def understand_content(
             proposal, presentation_repairs = normalize_visual_presentation(
                 scope, units, proposal
             )
-            deterministic_repairs = anchor_repairs + presentation_repairs
+            proposal, hierarchy_repairs = normalize_hierarchy_child_evidence(proposal)
+            deterministic_repairs = anchor_repairs + presentation_repairs + hierarchy_repairs
             stage_timings["structure_repair_ms"] += (
                 time.perf_counter() - repair_started
             ) * 1000

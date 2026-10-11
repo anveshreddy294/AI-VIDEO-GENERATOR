@@ -3,31 +3,25 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAtelierWorkspace } from '../../context/WorkspaceContext';
 import { 
   GlyphBrandMark, 
-  GlyphDocument, 
-  GlyphEvidence, 
-  GlyphDag, 
-  GlyphPlay, 
-  GlyphCheckmark, 
+  GlyphDocument,
+  GlyphEvidence,
+  GlyphDag,
   GlyphUser, 
-  GlyphRotate,
   GlyphGrid
 } from '../ui/AtelierGlyphs';
 
 export default function AppLayout() {
-  const { user, toggleRole, activeSource, activeConcept, notification } = useAtelierWorkspace();
+  const { user, activeSource, activeConcept, notification } = useAtelierWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
-    { label: 'Dashboard', path: '/app/dashboard', glyph: GlyphGrid, desc: 'Active topics, progress & recommendations' },
-    { label: 'Source Library', path: '/app/library', glyph: GlyphDocument, desc: 'Textbooks, course notes & PDFs' },
-    { label: 'Topic Explorer', path: '/app/explore', glyph: GlyphDag, desc: 'Prerequisites & topic roadmap' },
-    { label: 'Learning Studio', path: '/app/studio', glyph: GlyphEvidence, desc: 'Interactive lessons & handwritten notes' },
-    { label: 'Practice & Mastery', path: '/app/assessment', glyph: GlyphCheckmark, desc: 'Mock questions & skill checkpoints' },
-    { label: 'Roadmap & Progress', path: '/app/progress', glyph: GlyphRotate, desc: 'Detailed scoring & review topics' },
-    { label: 'Video Studio', path: '/app/video', glyph: GlyphPlay, desc: 'Generated lesson videos & storyboard' },
-    { label: 'Profile & Settings', path: '/app/profile', glyph: GlyphUser, desc: 'Course settings & study preferences' }
+    { label: 'Dashboard', path: '/app/dashboard', glyph: GlyphGrid, desc: 'Choose what to learn next' },
+    { label: 'My Learning', path: '/app/explore', glyph: GlyphEvidence, desc: 'Create or resume a lesson' },
+    { label: 'My Materials', path: '/app/library', glyph: GlyphDocument, desc: 'Upload and view study material' },
+    { label: 'Learning Workspace', path: '/app/studio', glyph: GlyphDag, desc: 'Learn, practice, ask and watch' },
+    { label: 'Profile', path: '/app/profile', glyph: GlyphUser, desc: 'Account and preferences' }
   ];
 
   return (
@@ -81,22 +75,16 @@ export default function AppLayout() {
 
         <div className="app-top-center">
           <div className="app-context-crumb">
-            <span className="crumb-source">{activeSource?.name || 'Database Systems'}</span>
-            <span className="crumb-sep">→</span>
-            <span className="crumb-concept">{activeConcept?.title || 'Primary Keys'}</span>
+              <span className="crumb-source">{activeConcept?.title || activeSource?.name || 'Choose something to learn'}</span>
+              {activeConcept && <><span className="crumb-sep">·</span><span className="crumb-concept">Learning Workspace</span></>}
           </div>
         </div>
 
         <div className="app-top-right">
-          <button 
-            type="button" 
-            className="role-switch-btn"
-            onClick={toggleRole}
-            title="Switch between Student Workspace and Educator Hub"
-          >
-            Switch to {user.role === 'student' ? 'Educator Hub' : 'Student Studio'}
-          </button>
-          
+          <span className="app-telemetry-chip" style={{ marginRight: '8px' }}>
+            <span className="status-live-beacon" style={{ width: '6px', height: '6px', margin: 0 }} />
+            <span>37°N · v3.0</span>
+          </span>
           <Link to="/app/profile" className="app-user-pill">
             <span className="user-avatar-tag">{user.avatarLabel}</span>
             <span className="user-name-tag">{user.name}</span>

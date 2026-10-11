@@ -3,13 +3,14 @@ import { Link } from 'react-router-dom';
 import PublicNavbar from '../../components/navigation/PublicNavbar';
 import PublicFooter from '../../components/navigation/PublicFooter';
 import TransformationSpecimen from '../../components/ui/TransformationSpecimen';
+import { useHeroEntrance } from '../../animations';
 import { 
   GlyphArrowRight, 
   GlyphArrowUpRight, 
   GlyphDocument, 
   GlyphEvidence, 
   GlyphDag, 
-  GlyphCheckmark,
+  GlyphCheckmark, 
   GlyphCrosshair,
   GlyphPlay
 } from '../../components/ui/AtelierGlyphs';
@@ -17,6 +18,9 @@ import {
 export default function LandingPage() {
   const heroRef = useRef(null);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+
+  // GSAP 3 entrance sequence with safe React cleanup and reduced-motion fallback
+  useHeroEntrance(heroRef);
 
   const handleMouseMove = (e) => {
     if (!heroRef.current) return;
@@ -66,40 +70,40 @@ export default function LandingPage() {
 
   const streamItems = [
     {
-      plate: '/assets/study_desk_mac.jpg',
-      code: 'STUDIO 01 · STUDY SETUP',
-      title: 'Interactive Study Workspace',
-      formula: 'Active Lecture Note Ingestion'
+      plate: '/assets/chapter_source.jpg',
+      code: 'INGESTION 01 · TEXTBOOK SCAN',
+      title: 'Multimodal Source Ingestion',
+      formula: 'Optical OCR Grounded Proof'
     },
     {
-      plate: '/assets/notebook_handwritten.jpg',
-      code: 'NOTES 02 · STUDENT NOTES',
-      title: 'Handwritten Key Takeaways',
-      formula: 'Summary Checkpoints & Rules'
+      plate: '/assets/specimen_math_wave.jpg',
+      code: 'HARMONICS 02 · WAVE MECHANICS',
+      title: 'Fourier Harmonic Transforms',
+      formula: 'f(t) = a_0/2 + ∑ [a_n cos(nωt)]'
     },
     {
-      plate: '/assets/library_books_hall.jpg',
-      code: 'ARCHIVE 03 · TEXTBOOK REPOSITORY',
-      title: 'Course Literature Archive',
-      formula: 'Full Library Ingestion'
+      plate: '/assets/specimen_biology_dna.jpg',
+      code: 'GENOMICS 03 · BIOMOLECULAR',
+      title: 'Cellular Base Pairing Dynamics',
+      formula: 'Hydrogen Bond Affinity: A-T, G-C'
     },
     {
-      plate: '/assets/student_studying.jpg',
-      code: 'SESSION 04 · ACTIVE PRACTICE',
-      title: 'Focused Concept Checkpoints',
-      formula: 'Mock Questions & Self-Tests'
+      plate: '/assets/plate_quantum.jpg',
+      code: 'QUANTUM 04 · PROBABILITY',
+      title: 'Quantum State Traversal',
+      formula: '|ψ⟩ = α|0⟩ + β|1⟩, |α|² + |β|² = 1'
     },
     {
-      plate: '/assets/physics_blackboard.jpg',
-      code: 'DERIVATION 05 · APPLIED PHYSICS',
-      title: 'Classroom Formula Proofs',
-      formula: 'Step-by-Step Derivations'
+      plate: '/assets/plate_tensor.jpg',
+      code: 'TENSORS 05 · MULTILINEAR',
+      title: 'Multilinear Manifold Projection',
+      formula: 'T_{ijk} = ∑ U_{ia} V_{jb} W_{kc}'
     },
     {
-      plate: '/assets/astronomy_telescope_galaxy.jpg',
-      code: 'COSMOLOGY 06 · ASTROPHYSICS',
-      title: 'Planetary Mechanics & Orbits',
-      formula: 'Gravitational Field Calculations'
+      plate: '/assets/plate_interferometer.jpg',
+      code: 'OPTICS 06 · INTERFEROMETRY',
+      title: 'Laser Phase Interference',
+      formula: 'I(δ) = 2 I_0 [1 + cos(δ)]'
     }
   ];
 
@@ -191,7 +195,7 @@ export default function LandingPage() {
                   </div>
                   <div className="sat-plate-media">
                     <img 
-                      src="/assets/astronomy_telescope_galaxy.jpg" 
+                      src="/assets/specimen_physics_orbit.jpg" 
                       alt="Planetary Mechanics and Orbits" 
                       className="sat-plate-img floating-media-core" 
                     />
@@ -237,7 +241,7 @@ export default function LandingPage() {
                   </div>
                   <div className="sat-plate-media">
                     <img 
-                      src="/assets/notebook_handwritten.jpg" 
+                      src="/assets/specimen_analog_notebook.jpg" 
                       alt="Student Study Notebook" 
                       className="sat-plate-img floating-media-core" 
                     />

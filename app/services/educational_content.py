@@ -452,6 +452,7 @@ def list_educational_lessons(user_id: UUID) -> list[dict[str, Any]]:
                 "has_video": bool(data.get("video") and data["video"].get("status") == "COMPLETED"),
                 "status": data.get("status") or "READY",
                 "progress": data.get("progress", {}),
+                "concept_count": len(data.get("content", {}).get("key_concepts", [])) if isinstance(data.get("content"), dict) else 0,
             })
         except Exception:
             continue

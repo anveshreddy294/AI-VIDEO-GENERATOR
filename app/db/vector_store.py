@@ -21,6 +21,7 @@ Every chunk carries layer: "A" and full provenance payload metadata:
 """
 
 import logging
+import os
 import time
 import uuid
 from typing import Any

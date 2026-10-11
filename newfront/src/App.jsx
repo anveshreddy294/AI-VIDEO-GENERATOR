@@ -19,13 +19,28 @@ import DashboardPage from './pages/app/DashboardPage';
 import LibraryPage from './pages/app/LibraryPage';
 import TopicExplorerPage from './pages/app/TopicExplorerPage';
 import LearningStudioPage from './pages/app/LearningStudioPage';
-import AssessmentPage from './pages/app/AssessmentPage';
 import ProgressPage from './pages/app/ProgressPage';
-import VideoStudioPage from './pages/app/VideoStudioPage';
 import ProfilePage from './pages/app/ProfilePage';
 
 // Educator Hub Page
 import EducatorHubPage from './pages/educator/EducatorHubPage';
+import { useAtelierWorkspace } from './context/WorkspaceContext';
+
+function AuthLoading() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--canvas)' }}>
+      <span className="coord-label">RESTORING VERIFIED SESSION…</span>
+    </div>
+  );
+}
+
+function RequireAuth({ children, instructorOnly = false }) {
+  const { authStatus, user } = useAtelierWorkspace();
+  if (authStatus === 'loading') return <AuthLoading />;
+  if (authStatus !== 'authenticated') return <Navigate to="/signin" replace />;
+  if (instructorOnly && !['instructor', 'admin'].includes(user.backendRole)) return <Navigate to="/app/dashboard" replace />;
+  return children;
+}
 
 export default function App() {
   return (
@@ -43,20 +58,25 @@ export default function App() {
       <Route path="/signin" element={<SignInPage />} />
 
       {/* 2. AUTHENTICATED WORKSPACE SHELL */}
-      <Route path="/app" element={<AppLayout />}>
+      <Route path="/app" element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="library" element={<LibraryPage />} />
+        <Route path="materials" element={<Navigate to="/app/library" replace />} />
         <Route path="explore" element={<TopicExplorerPage />} />
+        <Route path="learning" element={<Navigate to="/app/explore" replace />} />
         <Route path="studio" element={<LearningStudioPage />} />
-        <Route path="assessment" element={<AssessmentPage />} />
+        <Route path="workspace" element={<Navigate to="/app/studio" replace />} />
+        <Route path="learning-workspace" element={<Navigate to="/app/studio" replace />} />
+        {/* Backward-compatible deep links: practice and video now open in the active lesson workspace. */}
+        <Route path="assessment" element={<Navigate to="/app/studio?tab=practice" replace />} />
         <Route path="progress" element={<ProgressPage />} />
-        <Route path="video" element={<VideoStudioPage />} />
+        <Route path="video" element={<Navigate to="/app/studio?tab=video" replace />} />
         <Route path="profile" element={<ProfilePage />} />
       </Route>
 
       {/* 3. INSTRUCTOR / EDUCATOR HUB (WITHIN SHELL) */}
-      <Route path="/educator" element={<AppLayout />}>
+      <Route path="/educator" element={<RequireAuth instructorOnly><AppLayout /></RequireAuth>}>
         <Route index element={<EducatorHubPage />} />
       </Route>
 

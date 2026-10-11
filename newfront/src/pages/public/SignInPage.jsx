@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAtelierWorkspace } from '../../context/WorkspaceContext';
+import { toUserMessage } from '../../services/api/errors';
 import { 
   GlyphBrandMark, 
   GlyphArrowRight, 
@@ -12,94 +13,59 @@ import {
 } from '../../components/ui/AtelierGlyphs';
 
 export default function SignInPage() {
-  const { setUser, notify, showNotification } = useAtelierWorkspace();
+  const { login, signup, authStatus } = useAtelierWorkspace();
   const navigate = useNavigate();
 
   // Mode: 'signin' | 'signup'
   const [authMode, setAuthMode] = useState('signin');
 
   // Sign In fields
-  const [signInEmail, setSignInEmail] = useState('elena.rostova@atelier.edu');
-  const [signInPassword, setSignInPassword] = useState('••••••••••••');
-  const [signInRole, setSignInRole] = useState('student'); // 'student' | 'educator'
+  const [signInEmail, setSignInEmail] = useState('');
+  const [signInPassword, setSignInPassword] = useState('');
 
   // Sign Up fields
-  const [signUpName, setSignUpName] = useState('Sophia Chen');
-  const [signUpEmail, setSignUpEmail] = useState('sophia.chen@stanford.edu');
-  const [signUpInstitution, setSignUpInstitution] = useState('Stanford University · Dept of EECS');
-  const [signUpPassword, setSignUpPassword] = useState('••••••••••••');
-  const [signUpRole, setSignUpRole] = useState('student');
-  const [signUpCourse, setSignUpCourse] = useState('CS 304: Relational Database Systems');
+  const [signUpName, setSignUpName] = useState('');
+  const [signUpEmail, setSignUpEmail] = useState('');
+  const [signUpPassword, setSignUpPassword] = useState('');
   const [agreeHonorCode, setAgreeHonorCode] = useState(true);
+  const [formError, setFormError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const sendNotification = (msg) => {
-    if (showNotification) showNotification(msg);
-    else if (notify) notify(msg);
-  };
-
-  const handleSignIn = (e) => {
+  const handleSignIn = async (e) => {
     e.preventDefault();
-    const name = signInRole === 'educator' ? 'Prof. David Vance' : 'Elena Rostova';
-    const avatar = signInRole === 'educator' ? 'DV' : 'ER';
-
-    setUser({
-      name,
-      email: signInEmail,
-      role: signInRole,
-      avatarLabel: avatar,
-      course: 'CS 304: Relational Database Systems'
-    });
-
-    sendNotification(`Authenticated as ${name}. Workspace loaded.`);
-
-    if (signInRole === 'educator') {
-      navigate('/educator');
-    } else {
-      navigate('/app/dashboard');
+    setFormError(null);
+    setIsSubmitting(true);
+    try {
+      const identity = await login(signInEmail, signInPassword);
+      navigate(['instructor', 'admin'].includes(identity?.profile?.role) ? '/educator' : '/app/dashboard');
+    } catch (error) {
+      setFormError(toUserMessage(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleSignUp = (e) => {
+  const handleSignUp = async (e) => {
     e.preventDefault();
     if (!agreeHonorCode) {
-      alert('Please agree to the truthful citation and academic integrity principles.');
+      setFormError('Please agree to the truthful citation and academic integrity principles.');
       return;
     }
-
-    // Compute initials from name
-    const initials = signUpName
-      .trim()
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2) || 'SC';
-
-    setUser({
-      name: signUpName,
-      email: signUpEmail,
-      role: signUpRole,
-      institution: signUpInstitution,
-      course: signUpCourse,
-      avatarLabel: initials
-    });
-
-    sendNotification(`Scholar account created for ${signUpName}. Workspace initialized.`);
-
-    if (signUpRole === 'educator') {
-      navigate('/educator');
-    } else {
-      navigate('/app/dashboard');
-    }
-  };
-
-  const setPresetProfile = (preset) => {
-    if (preset === 'student') {
-      setSignInEmail('elena.rostova@atelier.edu');
-      setSignInRole('student');
-    } else {
-      setSignInEmail('david.vance@atelier.edu');
-      setSignInRole('educator');
+    setFormError(null);
+    setIsSubmitting(true);
+    try {
+      const result = await signup(signUpEmail, signUpPassword, signUpName);
+      if (result?.confirmationRequired) {
+        setAuthMode('signin');
+        setSignInEmail(signUpEmail);
+        setFormError('Account created. Confirm the email address, then sign in.');
+      } else {
+        navigate(['instructor', 'admin'].includes(result?.profile?.role) ? '/educator' : '/app/dashboard');
+      }
+    } catch (error) {
+      setFormError(toUserMessage(error));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -123,7 +89,7 @@ export default function SignInPage() {
             margin: '24px 0'
           }}>
             <img 
-              src="/assets/study_desk_mac.jpg" 
+              src="/assets/student_studying.jpg" 
               alt="VisualAI Learning Studio" 
               className="floating-media-core"
               style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.88 }} 
@@ -235,62 +201,9 @@ export default function SignInPage() {
                   />
                 </div>
 
-                <div className="form-field-group">
-                  <label className="field-label">Workspace Role</label>
-                  <div className="role-selector-toggle">
-                    <button
-                      type="button"
-                      className={`role-btn ${signInRole === 'student' ? 'active' : ''}`}
-                      onClick={() => setSignInRole('student')}
-                    >
-                      Student Workspace
-                    </button>
-                    <button
-                      type="button"
-                      className={`role-btn ${signInRole === 'educator' ? 'active' : ''}`}
-                      onClick={() => setSignInRole('educator')}
-                    >
-                      Educator Hub
-                    </button>
-                  </div>
-                </div>
-
-                {/* Quick Presets for Pair Programming / Demonstration */}
-                <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
-                  <button
-                    type="button"
-                    onClick={() => setPresetProfile('student')}
-                    style={{
-                      flex: 1,
-                      padding: '4px 8px',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      background: 'var(--surface-subtle)',
-                      border: '1px solid var(--border)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Preset: Elena (Student)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPresetProfile('educator')}
-                    style={{
-                      flex: 1,
-                      padding: '4px 8px',
-                      fontSize: '10px',
-                      fontFamily: 'var(--font-mono)',
-                      background: 'var(--surface-subtle)',
-                      border: '1px solid var(--border)',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Preset: Prof. Vance (Educator)
-                  </button>
-                </div>
-
-                <button type="submit" className="btn-atelier-primary signin-submit-btn">
-                  <span>Enter Workspace</span>
+                {formError && <div className="signin-disclaimer-box" role="alert"><p>{formError}</p></div>}
+                <button type="submit" disabled={isSubmitting || authStatus === 'loading'} className="btn-atelier-primary signin-submit-btn">
+                  <span>{isSubmitting ? 'Authenticating…' : 'Enter Workspace'}</span>
                   <GlyphArrowRight size={13} />
                 </button>
               </form>
@@ -336,19 +249,6 @@ export default function SignInPage() {
                 </div>
 
                 <div className="form-field-group">
-                  <label htmlFor="signup-institution" className="field-label">Academic Institution & Department</label>
-                  <input 
-                    id="signup-institution"
-                    type="text" 
-                    required 
-                    className="atelier-input"
-                    value={signUpInstitution}
-                    onChange={e => setSignUpInstitution(e.target.value)}
-                    placeholder="e.g. Stanford University · School of Engineering"
-                  />
-                </div>
-
-                <div className="form-field-group">
                   <label htmlFor="signup-pass" className="field-label">Create Security Passphrase</label>
                   <input 
                     id="signup-pass"
@@ -360,39 +260,9 @@ export default function SignInPage() {
                   />
                 </div>
 
-                <div className="form-field-group">
-                  <label className="field-label">Academic Role</label>
-                  <div className="role-selector-toggle">
-                    <button
-                      type="button"
-                      className={`role-btn ${signUpRole === 'student' ? 'active' : ''}`}
-                      onClick={() => setSignUpRole('student')}
-                    >
-                      Student Scholar
-                    </button>
-                    <button
-                      type="button"
-                      className={`role-btn ${signUpRole === 'educator' ? 'active' : ''}`}
-                      onClick={() => setSignUpRole('educator')}
-                    >
-                      Course Faculty
-                    </button>
-                  </div>
-                </div>
-
-                <div className="form-field-group">
-                  <label htmlFor="signup-course" className="field-label">Initial Curriculum Focus</label>
-                  <select 
-                    id="signup-course"
-                    className="atelier-input"
-                    value={signUpCourse}
-                    onChange={e => setSignUpCourse(e.target.value)}
-                  >
-                    <option value="CS 304: Relational Database Systems">CS 304: Relational Database Systems</option>
-                    <option value="PHYS 201: Celestial Mechanics & Orbits">PHYS 201: Celestial Mechanics & Orbits</option>
-                    <option value="BIO 110: Molecular Genetics & Transcription">BIO 110: Molecular Genetics & Transcription</option>
-                    <option value="EE 205: Analog Feedback & Linear Circuits">EE 205: Analog Feedback & Linear Circuits</option>
-                  </select>
+                <div className="signin-disclaimer-box">
+                  <span className="coord-label">ROLE AUTHORITY</span>
+                  <p>Your account role is assigned by the backend profile. This form cannot grant educator access.</p>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '11px', marginTop: '4px' }}>
@@ -408,8 +278,9 @@ export default function SignInPage() {
                   </label>
                 </div>
 
-                <button type="submit" className="btn-atelier-primary signin-submit-btn">
-                  <span>Initialize Scholar Account</span>
+                {formError && <div className="signin-disclaimer-box" role="alert"><p>{formError}</p></div>}
+                <button type="submit" disabled={isSubmitting || authStatus === 'loading'} className="btn-atelier-primary signin-submit-btn">
+                  <span>{isSubmitting ? 'Creating…' : 'Initialize Scholar Account'}</span>
                   <GlyphArrowRight size={13} />
                 </button>
               </form>
