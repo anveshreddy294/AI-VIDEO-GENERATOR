@@ -128,6 +128,12 @@ app.include_router(educational_content_router)
 @app.exception_handler(SourceIngestionFailed)
 async def source_processing_failure(request: Request, error: SourceIngestionFailed) -> JSONResponse:
     """Expose safe stage/reason categories for direct uploads as well as background jobs."""
+    import logging
+    logging.getLogger(__name__).warning(
+        "SOURCE_PROCESSING_FAILED stage=%s code=%s reason=%s validation=%s object=%s repair=%s",
+        error.failure.stage, error.failure.code, error.failure.reason_code,
+        error.failure.validation_detail, error.failure.failed_object_type,
+        error.failure.repair_attempted)
     unavailable=error.failure.reason_code in {'MODEL_TIMEOUT','MODEL_UNAVAILABLE'} or error.failure.code in {'PROVIDER_UNAVAILABLE','SOURCE_METADATA_COPY_PENDING'}
     return JSONResponse(status_code=503 if unavailable else 422,
         content={'detail':error.failure.model_dump(mode='json')},headers={'Cache-Control':'private, no-store'})
@@ -207,6 +213,8 @@ def health_qdrant() -> dict:
             "service": "Qdrant",
             "status": "connected",
             "collections": [c.name for c in collections],
+            "active_collection": settings.collection_name,
+            "active_collection_exists": any(c.name == settings.collection_name for c in collections),
         }
     except Exception as exc:
         return {

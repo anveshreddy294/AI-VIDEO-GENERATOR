@@ -16,6 +16,7 @@ os.environ['PYTHON_DOTENV_DISABLED'] = '1'
 # Import-time defaults are test-only. Supabase suites explicitly select their own mode.
 os.environ['DATABASE_PROVIDER'] = 'file'
 os.environ['LESSON_PERSISTENCE_PROVIDER'] = 'file'
+os.environ['SOURCE_PERSISTENCE_PROVIDER'] = 'supabase'
 os.environ.pop('POSTGRES_DSN', None)
 os.environ['LLM_PROVIDER'] = 'mock'
 os.environ['EMBEDDING_PROVIDER'] = 'mock'

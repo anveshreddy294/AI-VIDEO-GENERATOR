@@ -1,5 +1,9 @@
 # Local PostgreSQL integration for educational lessons and videos
 
+For the newer, separately activated canonical upload and dependent learning
+storage, see [PostgreSQL learning persistence](postgres-learning-persistence.md).
+The original scope below describes the video-only integration baseline.
+
 ## Baseline and scope
 
 Branch `video-generation`, initial commit `b098de7`. Before edits, the targeted

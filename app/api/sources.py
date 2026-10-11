@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials
 from starlette.concurrency import run_in_threadpool
 
@@ -69,10 +69,13 @@ def read_units(source_id: str, repository: SourceDependency, version: int | None
 
 
 @router.post('/{source_id}/retry-index')
-def retry_index(source_id: str, repository: SourceDependency) -> dict[str, JsonValue]:
+def retry_index(source_id: str, repository: SourceDependency,
+                version: Annotated[int | None, Query(ge=1)] = None) -> dict[str, JsonValue]:
     from ..services.ingestion.source_ingestion import index_committed_source
     repo = require_source_repository(repository)
     record = repo.get_source(source_id)
     if record is None:
         raise HTTPException(404, 'Source not found')
-    return index_committed_source(repo, record)
+    if version is not None and version != record.version:
+        raise HTTPException(409, {'code': 'SOURCE_VERSION_CHANGED'})
+    return index_committed_source(repo, record, force=True)

@@ -95,7 +95,10 @@ def update_profile(user: AuthenticatedUser, token: str, runtime: SupabaseRuntime
 def repository_preferences(repository) -> LearningPreferences | None:
     """Request-local lazy load; no cross-user cache or local fallback."""
     if not hasattr(repository, '_learning_preferences'):
-        if not isinstance(getattr(repository, '_token', None), str) or not isinstance(getattr(repository, 'runtime', None), SupabaseRuntime):
+        from .repositories.learning_storage import LearningStorage
+        runtime = getattr(repository, 'runtime', None)
+        auth_runtime = runtime.auth if isinstance(runtime, LearningStorage) else runtime
+        if not isinstance(getattr(repository, '_token', None), str) or not isinstance(auth_runtime, SupabaseRuntime):
             return None  # Local/legacy contexts have no authenticated account preferences.
         from ..core.supabase import SupabaseError
         try:

@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 
 def index_committed_source(
-    repo: SupabaseSourceRepository, record: SourceRecord
+    repo: SupabaseSourceRepository, record: SourceRecord, *, force: bool = False
 ) -> dict[str, JsonValue]:
     """Retry from durable DB chunks; no extraction, ID regeneration or local JSON reads."""
     from ...db.vector_store import upsert_chunks
@@ -89,11 +89,11 @@ def index_committed_source(
     content_count = len(repo.get_content_units(record.source_id, record.version))
     diagnostics = None
     count = len(chunks)
-    if record.status == "READY" and not optional:
+    if record.status == "READY" and not optional and not force:
         metrics.update(qdrant_writes=0, indexing_latency_seconds=0.0)
     else:
         report("INDEXING_SOURCE")
-        if not optional:
+        if not optional and record.status != "READY":
             repo.mark_status(record, "INDEXING")
         started = time.monotonic()
         logger.info(
@@ -118,7 +118,7 @@ def index_committed_source(
                 if isinstance(error, ProcessingError)
                 else "QDRANT_INDEX_FAILED:" + type(error).__name__
             )
-            if not optional:
+            if not optional and record.status != "READY":
                 repo.mark_status(record, "FAILED", persisted_error)
             logger.warning(
                 "INDEXING_FAILED",
@@ -176,7 +176,7 @@ def ingest_source(
     *, routing_signals: VisualSignals | None = None, file_truth: FileTruth | None = None,
     enrich: bool = False,
 ) -> dict[str, JsonValue]:
-    """Binary files stay on disk; source/version/content state exists only in Supabase."""
+    """Binary files stay on disk; the canonical repository owns source/content state."""
     total_started = time.perf_counter()
     if repo.runtime.verify_user(repo._token).user_id != repo.user.user_id:
         raise KnowledgeError("NOT_FOUND")

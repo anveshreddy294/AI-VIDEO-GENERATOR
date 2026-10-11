@@ -218,3 +218,14 @@ test('new upload clears prior failure and successful completion replaces progres
  status.error(new Error(message));assert.equal(element.textContent,'The image is damaged or unreadable.');
  assert(!ui.safeError(422,{detail:{code:'secret token'}}).includes('secret'));
 });
+
+test('direct source retry reports safe preparation diagnostics without upstream content',()=>{
+ const failure={stage:'STRUCTURING',code:'INVALID_HIERARCHY',validation_detail:'PARENT_REFERENCE',retryable:true,
+   message:'Canonical source saved; knowledge preparation failed. Retry this source.',label_reference:'Bearer secret'};
+ for(const status of [422,503]) {
+   const message=ui.safeError(status,{detail:failure});
+   assert.match(message,/STRUCTURING.*INVALID_HIERARCHY.*PARENT_REFERENCE/);
+   assert.match(message,/canonical source was saved/);
+   assert(!message.includes('secret'));
+ }
+});

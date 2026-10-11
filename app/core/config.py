@@ -17,12 +17,22 @@ class Settings:
         self.qdrant_url: str = os.getenv("QDRANT_URL", "http://localhost:6333")
         self.qdrant_api_key: str = os.getenv("QDRANT_API_KEY", "")
         self.qdrant_path: Path = BASE_DIR / os.getenv("QDRANT_PATH", "storage/runtime/qdrant")
-        self.collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_v1")
+        self.requested_collection_name: str = os.getenv("COLLECTION_NAME", "visualai_layer_a_v1").strip()
 
         # --- Models ---
         self.embedding_model: str = (os.getenv("OLLAMA_EMBED_MODEL") or os.getenv("EMBEDDING_MODEL", "embeddinggemma")).strip()
         self.embedding_provider: str = os.getenv("EMBEDDING_PROVIDER", "ollama").strip().lower()
         self.embedding_fallback_model: str = os.getenv("EMBEDDING_FALLBACK_MODEL", "embeddinggemma").strip()
+        # Retire the two unqualified historical namespaces for the intended model.
+        # Never relabel their unknown vectors or silently migrate custom collections.
+        semantic_collection = os.getenv("SEMANTIC_COLLECTION_NAME", "").strip()
+        legacy_embeddinggemma = (self.embedding_provider == "ollama"
+            and self.embedding_model.removesuffix(":latest") == "embeddinggemma"
+            and self.requested_collection_name in {"visualai_layer_a", "visualai_layer_a_v1"})
+        self.collection_name: str = semantic_collection or (
+            "visualai_embeddinggemma_v2" if legacy_embeddinggemma else self.requested_collection_name)
+        if not self.collection_name or not all(c.isalnum() or c in "_-" for c in self.collection_name):
+            raise ValueError("Collection name must contain only letters, digits, underscores or hyphens")
         self.generation_model: str = os.getenv("GENERATION_MODEL", "llama3.2:3b")
 
         # --- Storage Architecture (Separation of Fixtures & Runtime) ---
@@ -164,6 +174,11 @@ class Settings:
 
         # --- Database & Persistence Architecture (Supabase / Local) ---
         self.database_provider: str = os.getenv("DATABASE_PROVIDER", "file").strip().lower()
+        # Supabase remains the authentication/legacy provider. This switch controls
+        # canonical writes for NEW sources and their dependent learning records.
+        self.source_persistence_provider = os.getenv("SOURCE_PERSISTENCE_PROVIDER", "supabase").strip().lower()
+        if self.source_persistence_provider not in {"supabase", "postgres"}:
+            raise ValueError("SOURCE_PERSISTENCE_PROVIDER must be supabase or postgres")
         # Independent of Supabase Auth/canonical source persistence; never auto-fallback.
         self.lesson_persistence_provider = os.getenv("LESSON_PERSISTENCE_PROVIDER", "file").strip().lower()
         self.postgres_dsn = SecretStr(os.getenv("POSTGRES_DSN", "").strip())
@@ -177,6 +192,8 @@ class Settings:
             raise ValueError("POSTGRES_TIMEOUT_SECONDS must be between 0 and 60")
         if self.lesson_persistence_provider == "postgres" and not self.postgres_dsn.get_secret_value():
             raise ValueError("POSTGRES_DSN is required for PostgreSQL lesson persistence")
+        if self.source_persistence_provider == "postgres" and (self.database_provider != "supabase" or self.lesson_persistence_provider != "postgres"):
+            raise ValueError("PostgreSQL sources require Supabase authentication mode and PostgreSQL lesson persistence")
         self.supabase_auth_redirect_url: str = os.getenv("SUPABASE_AUTH_REDIRECT_URL", "").strip()
         self.supabase_url: str = os.getenv("SUPABASE_URL", "").strip()
         self.supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "").strip()
@@ -210,6 +227,8 @@ class Settings:
         status: dict[str, Any] = {
             "llm_provider": self.llm_provider,
             "embedding_model": self.embedding_model,
+            "requested_collection": self.requested_collection_name,
+            "active_collection": self.collection_name,
             "qdrant_url": self.qdrant_url,
             "database_provider": self.database_provider,
             "supabase_connected": bool(self.supabase_url and (self.supabase_publishable_key or self.supabase_anon_key)),

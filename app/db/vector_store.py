@@ -150,7 +150,7 @@ def _deterministic_embedding(text: str, dim: int | None = None) -> list[float]:
     return vec
 
 
-_QUERY_EMBED_CACHE: dict[tuple[str, str, str], list[float]] = {}
+_QUERY_EMBED_CACHE: dict[tuple, tuple[list[float], StageDiagnostics]] = {}
 _QUERY_EMBED_CACHE_MAX = 512
 
 
@@ -173,9 +173,12 @@ def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> li
     if not texts:
         return []
     if len(texts) == 1 and task_type == "retrieval_query" and "PYTEST_CURRENT_TEST" not in os.environ:
-        cache_key = (texts[0], task_type, settings.embedding_model)
+        cache_key = (texts[0], task_type, settings.ollama_base_url, settings.embedding_model,
+                     settings.embedding_fallback_model, _active_embedding_dim)
         if cache_key in _QUERY_EMBED_CACHE:
-            return [_QUERY_EMBED_CACHE[cache_key]]
+            vector, diagnostic = _QUERY_EMBED_CACHE[cache_key]
+            _embed_diagnostics_var.set(diagnostic.model_copy(deep=True))
+            return [list(vector)]
     global _resolved_ollama_model
     _resolved_ollama_model = None
     primary = settings.embedding_model
@@ -229,7 +232,7 @@ def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> li
                 return None
             clean.append(row)
         resolved = data.get('model', model)
-        if not isinstance(resolved, str) or resolved.split(':')[0] != model.split(':')[0]:
+        if not isinstance(resolved, str) or resolved.removesuffix(':latest') != model.removesuffix(':latest'):
             _embedding_failed('EMBEDDING_FAILED')
             return None
         _resolved_ollama_model = resolved
@@ -238,13 +241,14 @@ def _embed_ollama(texts: list[str], task_type: str = "retrieval_document") -> li
             grounding_verified=True, dimension_validated=True, configured_model=primary,
             model_used=resolved, vector_dimension=len(clean[0])))
         if len(texts) == 1 and len(clean) == 1 and task_type == "retrieval_query" and "PYTEST_CURRENT_TEST" not in os.environ:
-            cache_key = (texts[0], task_type, settings.embedding_model)
+            cache_key = (texts[0], task_type, settings.ollama_base_url, settings.embedding_model,
+                         settings.embedding_fallback_model, _active_embedding_dim)
             if len(_QUERY_EMBED_CACHE) >= _QUERY_EMBED_CACHE_MAX:
                 try:
                     _QUERY_EMBED_CACHE.pop(next(iter(_QUERY_EMBED_CACHE)))
                 except KeyError:
                     pass
-            _QUERY_EMBED_CACHE[cache_key] = clean[0]
+            _QUERY_EMBED_CACHE[cache_key] = (list(clean[0]), get_last_embed_diagnostics().model_copy(deep=True))
         return clean
     _embedding_failed('EMBEDDING_MODEL_UNAVAILABLE')
     return None
@@ -296,6 +300,8 @@ def ensure_collection(client: QdrantClient, expected_dim: int | None = None) -> 
         current_dim = getattr(params, "size", None)
         if current_dim != expected_dim:
             raise RuntimeError(f"Collection dimension {current_dim} does not match embedding dimension {expected_dim}; configure a new collection and reingest")
+        if getattr(params, "distance", None) != qmodels.Distance.COSINE:
+            raise RuntimeError("Collection must use unnamed Cosine vectors; configure a new compatible collection")
     else:
         client.create_collection(
             collection_name=settings.collection_name,
@@ -381,6 +387,15 @@ def _require_supported_retrieval_mode() -> None:
         raise RetrievalUnavailable('Canonical evidence verification is required for this database provider')
 
 
+def embedding_contract(model: str) -> dict[str, str | int]:
+    """Identity shared by stored documents, scene vectors and query filters."""
+    return {"embedding_provider": "ollama", "embedding_model": model.removesuffix(":latest"),
+            "embedding_dimension": _active_embedding_dim, "embedding_kind": "semantic",
+            "embedding_version": "1", "embedding_collection": settings.collection_name,
+            "embedding_collection_version": "2", "embedding_preprocessing": (
+                "nomic-search-prefix-v1" if "nomic-embed" in model else "ollama-raw-v1")}
+
+
 def embedding_provenance() -> dict[str, str | int]:
     """Describe the model that actually produced the last validated vector batch."""
     diagnostic = get_last_embed_diagnostics()
@@ -392,19 +407,14 @@ def embedding_provenance() -> dict[str, str | int]:
             diagnostic.provider_used != "ollama" or not diagnostic.model_used or
             diagnostic.vector_dimension != _active_embedding_dim):
         raise ProcessingError("EMBEDDING_FAILED", "Validated embedding provenance unavailable")
-    return {"embedding_provider": diagnostic.provider_used,
-            "embedding_model": diagnostic.model_used.removesuffix(":latest"),
-            "embedding_dimension": _active_embedding_dim,
-            "embedding_kind": "semantic", "embedding_version": "1"}
+    return embedding_contract(diagnostic.model_used)
 
 
 def semantic_filter_conditions(model: str | None = None) -> list[qmodels.FieldCondition]:
     """Confine production queries to the exact validated query embedding space."""
     if settings.embedding_provider == "mock":
         return []  # Explicit isolated test mode retains historical fixture compatibility.
-    expected = (embedding_provenance() if model is None else {
-        "embedding_provider": "ollama", "embedding_model": model.removesuffix(":latest"),
-        "embedding_dimension": _active_embedding_dim, "embedding_kind": "semantic", "embedding_version": "1"})
+    expected = embedding_provenance() if model is None else embedding_contract(model)
     return [qmodels.FieldCondition(key=key, match=qmodels.MatchValue(value=value))
             for key, value in expected.items()]
 

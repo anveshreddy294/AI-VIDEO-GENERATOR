@@ -67,6 +67,18 @@ test('completion alone without backend content readiness never enables learning'
     const {root,controller}=setup();const key=controller.begin({name:'file.txt'});controller.update(key,{status:'completed',is_finished:true,result:{source_id:'s',version:1}});
     assert(!text(root).includes('Learn with VisualAI'));
 });
+test('source search preparation requires ready owned material and passes its exact version',async()=>{
+    const root=new Element();const calls=[];
+    const controller=analysis.createController({getElementById:()=>root,createElement:tag=>new Element(tag)},
+        {index:async item=>calls.push([item.source_id,item.version]),learn:async()=>{}});
+    controller.sources([{source_id:'s',version:3,filename:'physics.pdf',content_ready:true,status:'READY'}]);
+    const button=all(root).find(el=>el.tag==='button' && el.textContent==='Prepare source search');
+    assert(button);await button.events.click();assert.deepEqual(calls,[['s',3]]);
+    controller.sources([{source_id:'failed',version:1,status:'FAILED',content_ready:false}]);
+    const failedCard=root.children.find(el=>el.attributes['data-analysis-key']==='failed:1');
+    assert(failedCard);
+    assert(!all(failedCard).some(el=>el.tag==='button' && el.textContent==='Prepare source search'));
+});
 test('restored failed job merges with its unique owned source card and respects retry limit',()=>{
     const {root,controller}=setup();controller.sources([{source_id:'s',version:1,filename:'bad.png',status:'FAILED'}]);
     controller.update('JOB_failed',{job_id:'JOB_failed',status:'failed',is_finished:true,metadata:{source_id:'s',filename:'bad.png',retry_count:3},failure:{retryable:true}},'Analysis failed.');

@@ -24,6 +24,7 @@
                 if(Array.isArray(item.topic_previews) && item.topic_previews.length) card.append(node('p',item.topic_previews.slice(0,3).filter(v=>typeof v==='string').join(' · '),'muted'));
                 const action=(title,fn)=>{const b=node('button',title);b.type='button';b.addEventListener('click',async()=>{if(b.disabled)return;b.disabled=true;try{await fn();}catch{card.append(node('p','This action is temporarily unavailable. Please try again.'));}finally{b.disabled=false;}});card.append(b);};
                 if(ready && item.source_id && item.version) action('Learn with VisualAI',()=>actions.learn(item));
+                if(ready && item.source_id && item.version && actions.index) action('Prepare source search',()=>actions.index(item));
                 if(ready && item.status==='READY' && actions.explore) action('Explore topics',()=>actions.explore(item));
                 if(failed) {
                     card.append(node('p',item.message || 'Analysis could not finish. Check the material and upload it again.'));

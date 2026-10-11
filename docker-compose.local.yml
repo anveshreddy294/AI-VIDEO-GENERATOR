@@ -1,0 +1,5 @@
+# Local host API access. Merge with docker-compose.yml; keep the same storage volume.
+services:
+  qdrant:
+    ports:
+      - "127.0.0.1:6333:6333"

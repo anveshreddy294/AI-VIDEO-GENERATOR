@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.api.sources import source_repository
 from app.services.video.video_compositor import probe_media, validate_video_artifact
+from app.services.video.caption_validation import validate_scene_captions
 from app.services.educational_content import (
     EducationalContentService,
     get_educational_lesson,
@@ -162,7 +163,10 @@ def test_journey_a_topic_only_binary_search_trees(context: Context, monkeypatch:
         assert len(ask_resp.json()['answer']) > 20
 
         # 7. Video Generation Pipeline
-        v_resp = client.post(f'/educational-content/{lesson_id}/video')
+        # README documents 45s for intermediate lessons. This is the requested
+        # planning budget; measured duration can grow to accommodate narration.
+        v_resp = client.post(f'/educational-content/{lesson_id}/video',
+                             json={'target_seconds': 45, 'difficulty': 'intermediate'})
         assert v_resp.status_code == 200, f"Video trigger failed: {v_resp.text}"
 
         # Poll status
@@ -189,7 +193,15 @@ def test_journey_a_topic_only_binary_search_trees(context: Context, monkeypatch:
             meta = validate_video_artifact(t_path, expect_audio=True)
             assert meta["video_codec"] is not None, "Video stream missing"
             assert meta["audio_codec"] is not None, "Audio narration stream missing"
-            assert 18 <= meta["duration"] <= 40, f"Unexpected duration: {meta['duration']}s"
+            persisted_video = get_educational_lesson(OWNER, UUID(lesson_id))
+            generation = persisted_video.video_generations[st['job_id']]
+            assert generation.plan.provenance['requested_seconds'] == 45
+            assert 45 <= generation.plan.target_seconds <= 180
+            assert generation.timing_status == 'MEASURED'
+            assert abs(meta['duration'] - generation.actual_duration_seconds) <= .15
+            assert abs(generation.artifact.scene_timeline[-1].end_seconds - meta['duration']) <= .15
+            validate_scene_captions(Path(generation.artifact.subtitle_path), generation.plan,
+                                    generation.artifact.scene_timeline, meta['duration'])
         finally:
             if t_path.exists():
                 t_path.unlink()

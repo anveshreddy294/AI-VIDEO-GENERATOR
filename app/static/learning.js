@@ -71,6 +71,7 @@
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             const detail = row(value).detail;
             if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+                if ((status === 422 || status === 503) && typeof row(detail).stage === 'string') return sourceJobFailure(detail);
                 const code = row(detail).code;
                 if (typeof code === 'string' && Object.hasOwn(failures, code)) return Reflect.get(failures, code);
             }
@@ -351,8 +352,20 @@
             await trackAnalysis(key,job);
         },
         explore: async item => openSource(item,item.version),
+        index: prepareSourceSearch,
         failure: sourceJobFailure
     });
+    async function prepareSourceSearch(item) {
+        el('status').textContent = 'Preparing source search for ' + item.filename + '…';
+        try {
+            await post('/sources/' + encodeURIComponent(item.source_id) + '/retry-index?version=' + item.version);
+            await loadSources();
+            el('status').textContent = 'Source search is ready.';
+        } catch (error) {
+            el('status').textContent = error instanceof Error ? error.message : 'Source search preparation failed. Please retry.';
+            throw error;
+        }
+    }
     function show(panel) {
         diagramExport = ''; diagramScope = null;
         for (const name of ['notes','diagram','lesson']) el(name + '-export-status').textContent = '';
@@ -394,6 +407,9 @@
         player.pause(); player.removeAttribute('src'); player.load();
         if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
         videoObjectURL = '';
+        el('download-video').hidden = true;
+        el('download-video').removeAttribute('href');
+        el('download-video').removeAttribute('download');
         if (captionObjectURL) URL.revokeObjectURL(captionObjectURL);
         captionObjectURL = '';
         el('video-captions-track').removeAttribute('src');
@@ -728,6 +744,10 @@
             (sceneId ? '&scene=' + encodeURIComponent(sceneId) : ''));
         if (videoObjectURL) URL.revokeObjectURL(videoObjectURL);
         videoObjectURL = URL.createObjectURL(blob);
+        const download = el('download-video');
+        download.setAttribute('href', videoObjectURL);
+        download.setAttribute('download', 'visualai-' + lessonId + (generationId ? '-' + generationId : '') + '.mp4');
+        download.hidden = false;
         const player = /** @type {HTMLVideoElement} */ (el('video-player'));
         player.src = videoObjectURL; player.load();
         el('video-player-container').style.display = 'block';
@@ -1105,6 +1125,7 @@
                 }));
             }
             if (isReady) {
+                card.append(button('Prepare source search', () => prepareSourceSearch(item)));
                 card.append(button('Explore topics', () => openSource(item, item.version)));
             }
             el('source-cards').append(card);

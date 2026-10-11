@@ -1,4 +1,4 @@
-"""Authenticated canonical source aggregate; all writes use atomic database RPCs."""
+"""Authenticated source aggregate; atomic local or historical database transactions."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -41,7 +41,8 @@ class SupabaseSourceRepository:
     def __init__(self, user: AuthenticatedUser, token: str, runtime: SupabaseRuntime) -> None:
         self.user = user
         self._token = token
-        self.runtime = runtime
+        from .learning_storage import wrap
+        self.runtime = wrap(runtime, user, token)
 
     @property
     def owner_id(self) -> str:

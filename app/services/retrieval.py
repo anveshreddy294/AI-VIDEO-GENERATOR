@@ -61,6 +61,9 @@ class EmbeddingSpace(Contract):
     embedding_dimension: Literal[768] = 768
     embedding_kind: Literal["semantic"] = "semantic"
     embedding_version: Literal["1"] = "1"
+    embedding_collection: str = Field(default_factory=lambda: settings.collection_name)
+    embedding_collection_version: Literal["2"] = "2"
+    embedding_preprocessing: Literal["ollama-raw-v1"] = "ollama-raw-v1"
 
 
 class EvidenceItem(Contract):

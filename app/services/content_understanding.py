@@ -391,6 +391,11 @@ def validate_proposal(
         or {s.topic_key for s in proposal.subtopics} != topic_keys
         or {c.subtopic_key for c in proposal.concepts} != sub_keys
     ):
+        logger.warning("HIERARCHY_PARENT_REJECTED missing_topic_refs=%s missing_subtopic_refs=%s empty_topics=%s empty_subtopics=%s",
+            sum(s.topic_key not in topic_keys for s in proposal.subtopics),
+            sum(c.subtopic_key not in sub_keys for c in proposal.concepts),
+            len(topic_keys - {s.topic_key for s in proposal.subtopics}),
+            len(sub_keys - {c.subtopic_key for c in proposal.concepts}))
         raise UnderstandingError("INVALID_HIERARCHY", "PARENT_REFERENCE")
     for labels in (
         [t.title for t in proposal.topics],
@@ -800,6 +805,31 @@ def visual_literal_supported(label: str, values: list[str]) -> bool:
     return literal_supported(label, values)
 
 
+def prune_empty_proposal_parents(proposal: StructureProposal) -> tuple[StructureProposal, list[str]]:
+    """Discard unused candidate headings; never invent or move a child's parent.
+
+    Invalid references and duplicate identities remain validation failures. Only
+    model proposals are changed, before canonical publication and full validation.
+    """
+    topic_keys = {t.key for t in proposal.topics}
+    sub_keys = {s.key for s in proposal.subtopics}
+    concept_keys = {c.key for c in proposal.concepts}
+    if (len(topic_keys) != len(proposal.topics) or len(sub_keys) != len(proposal.subtopics)
+        or len(concept_keys) != len(proposal.concepts)
+        or any(s.topic_key not in topic_keys for s in proposal.subtopics)
+        or any(c.subtopic_key not in sub_keys for c in proposal.concepts)):
+        return proposal, []
+    used_subs = {c.subtopic_key for c in proposal.concepts}
+    subtopics = [s for s in proposal.subtopics if s.key in used_subs]
+    used_topics = {s.topic_key for s in subtopics}
+    topics = [t for t in proposal.topics if t.key in used_topics]
+    if not topics or not subtopics or not proposal.concepts:
+        return proposal, []
+    repairs = ["empty_subtopic_removed:" + s.key for s in proposal.subtopics if s.key not in used_subs]
+    repairs += ["empty_topic_removed:" + t.key for t in proposal.topics if t.key not in used_topics]
+    return proposal.model_copy(update={"topics": topics, "subtopics": subtopics}), repairs
+
+
 def normalize_visual_presentation(
     scope: SourceScope, units: list[ScopedContentUnit], proposal: StructureProposal
 ) -> tuple[StructureProposal, list[str]]:
@@ -1066,10 +1096,11 @@ def understand_content(
                 time.perf_counter() - parse_started
             ) * 1000
             repair_started = time.perf_counter()
+            proposal, hierarchy_repairs = prune_empty_proposal_parents(proposal)
             proposal, presentation_repairs = normalize_visual_presentation(
                 scope, units, proposal
             )
-            deterministic_repairs = anchor_repairs + presentation_repairs
+            deterministic_repairs = anchor_repairs + hierarchy_repairs + presentation_repairs
             stage_timings["structure_repair_ms"] += (
                 time.perf_counter() - repair_started
             ) * 1000

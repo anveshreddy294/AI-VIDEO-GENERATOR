@@ -164,6 +164,16 @@ test('completed video restores from nested lesson status',async()=>{
     assert(s.calls.some(call=>call.path.endsWith('/video/stream')));
 });
 
+test('older ready sources can be prepared individually with exact version authority',async()=>{
+    const sources=Array.from({length:6},(_,i)=>({source_id:'source-'+i,filename:'material-'+i+'.txt',status:'READY',version:3}));
+    const s=setup({'/sources':{sources}});await flush();
+    s.ids.get('sources-nav').dispatch('click');await flush();
+    const card=s.ids.get('source-cards').children.find(el=>text(el).includes('material-5.txt'));
+    assert(card);
+    card.children.find(el=>el.textContent==='Prepare source search').dispatch('click');await flush();
+    assert(s.calls.some(call=>call.path==='/sources/source-5/retry-index?version=3' && call.options.method==='POST'));
+});
+
 function enhancedVideoReplies() {
     const base='/educational-content/lesson-a/video';
     return {
@@ -187,12 +197,18 @@ test('regeneration submits selected controls and pins authenticated media and ca
     assert(s.calls.some(c=>c.path.endsWith('/stream?generation_id=generation-a')));
     assert(s.calls.some(c=>c.path.endsWith('/captions?generation_id=generation-a')));
     assert.equal(s.ids.get('video-captions-track').src,'blob:owned-video');
+    const download=s.ids.get('download-video');
+    assert.equal(download.hidden,false);
+    assert.equal(download.attributes.href,'blob:owned-video');
+    assert.equal(download.attributes.download,'visualai-lesson-a-generation-a.mp4');
     const button=s.ids.get('video-scenes').children[0];assert.match(button.textContent,/0:04/);
     s.ids.get('video-player').readyState=1;button.dispatch('click');
     assert.equal(s.ids.get('video-player').currentTime,4);
     assert.match(text(s.ids.get('video-evidence')),/Page 2.*<script>literal source quote<\/script>/);
     s.ids.get('sources-nav').dispatch('click');await flush();
     assert.equal(s.revoked.length,2);
+    assert.equal(download.hidden,true);
+    assert(!download.attributes.href);
 });
 
 test('scene search deep link restores exact generation and seeks after media metadata loads',async()=>{

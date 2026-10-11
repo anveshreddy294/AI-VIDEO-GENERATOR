@@ -105,3 +105,6 @@ def readiness():
                 ('visualai_video.' + table,)).fetchone()
             if not permitted or not permitted[0]:
                 raise VideoDatabaseError('VIDEO_DATABASE_PERMISSIONS_REQUIRED')
+    if settings.source_persistence_provider == 'postgres':
+        from ..db.learning_migrations import readiness as learning_readiness
+        learning_readiness()

@@ -162,6 +162,36 @@ def fixture_provider(prompt: str) -> str:
     return json.dumps(proposed(material))
 
 
+def test_unused_proposed_headings_are_removed_without_changing_grounded_children() -> None:
+    units = envelopes('multi_topic')
+    expected = understand_content(SCOPE, units, fixture_provider)
+    def unused_headings(prompt: str) -> str:
+        data = json.loads(fixture_provider(prompt))
+        data['topics'].append({**data['topics'][0], 'key': 't_unused'})
+        data['subtopics'].append({**data['subtopics'][0], 'key': 's_unused', 'topic_key': 't_unused'})
+        return json.dumps(data)
+    actual = understand_content(SCOPE, units, unused_headings)
+    assert actual.snapshot == expected.snapshot
+    assert actual.repair_model_calls == 0
+    assert set(actual.deterministic_repairs) == {'empty_topic_removed:t_unused', 'empty_subtopic_removed:s_unused'}
+
+
+@pytest.mark.parametrize('kind', ['dangling_topic', 'dangling_subtopic', 'no_children'])
+def test_empty_heading_repair_never_reparents_or_accepts_empty_knowledge(kind: str) -> None:
+    def invalid(prompt: str) -> str:
+        data = json.loads(fixture_provider(prompt))
+        if kind == 'dangling_topic':
+            data['subtopics'][0]['topic_key'] = 'missing'
+        elif kind == 'dangling_subtopic':
+            data['concepts'][0]['subtopic_key'] = 'missing'
+        else:
+            data['concepts'] = []
+        return json.dumps(data)
+    with pytest.raises(UnderstandingError) as error:
+        understand_content(SCOPE, envelopes('multi_topic'), invalid)
+    assert error.value.code in {'INVALID_HIERARCHY', 'INVALID_MODEL_OUTPUT'}
+
+
 @pytest.mark.parametrize(
     "case",
     [

@@ -20,6 +20,7 @@ TEXT = 'Photosynthesis is the conversion of light energy into chemical energy.'
 
 @pytest.fixture
 def fixture(monkeypatch: pytest.MonkeyPatch) -> Generator[RepairFixture, None, None]:
+    monkeypatch.setattr(settings, 'collection_name', 'repair')
     client = QdrantClient(':memory:')
     client.create_collection('repair', vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE))
     chunk = RichChunk(source_id='SRC_test', asset_id='asset', chunk_id='chunk', user_id='owner',

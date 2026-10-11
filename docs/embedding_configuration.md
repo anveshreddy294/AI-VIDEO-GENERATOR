@@ -34,4 +34,27 @@ synthetic vectors or vectors produced by another model need an explicitly planne
 reindex before semantic retrieval can be trusted. Configuration cleanup does not
 silently rewrite historical vectors.
 
+The active production namespace for embeddinggemma is `visualai_embeddinggemma_v2`.
+For this model, the generic legacy `COLLECTION_NAME` values `visualai_layer_a` and
+`visualai_layer_a_v1` resolve to that new namespace; their existing points remain
+untouched. Explicit custom collection names remain unchanged. The optional
+`SEMANTIC_COLLECTION_NAME` overrides this selection. Runtime diagnostics show both
+the requested and active names. Existing collections must use unnamed
+768-dimensional Cosine vectors; incompatible collections are rejected.
+
+New points include provider, actual model tag, dimension, semantic kind, embedding
+version, collection name, collection version `2`, and preprocessing identity.
+Queries require this complete provenance. Canonical evidence retrieval additionally
+checks owned source versions and rehydrates supporting content from Supabase.
+Unknown-provenance legacy points are excluded. Changing model weights or
+preprocessing requires a separately validated namespace and controlled reindex.
+
+To prepare an existing source, use **My sources → Prepare source search**. This
+calls the existing authenticated `POST /sources/{source_id}/retry-index?version=N`
+route and refreshes even a READY source. A stale version returns HTTP 409. A failed
+refresh preserves canonical READY content; it does not prove that vectors in the
+active collection are available. No automatic bulk migration is performed.
+
+See [the repair evidence and rollback report](qdrant-embedding-repair.md).
+
 API contract: [Ollama embedding documentation](https://docs.ollama.com/api/embed).

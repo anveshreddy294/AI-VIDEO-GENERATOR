@@ -1,5 +1,9 @@
 # VisualAI
 
+New canonical upload storage can use the existing Docker PostgreSQL database.
+See [PostgreSQL learning persistence](docs/postgres-learning-persistence.md) for
+the explicit migration, activation setting, legacy routing and test evidence.
+
 > **Personalized Educational Video & Knowledge Profiling Platform**  
 > *Transform raw study materials into structured knowledge graphs, diagnose individual student learning gaps with adaptive assessments, and generate targeted remedial video blueprints.*
 
@@ -332,7 +336,7 @@ WHISPER_MODEL_SIZE=base              # Local subtitle & speech alignment
 
 # --- Vector Database ---
 QDRANT_URL=http://localhost:6333     # Falls back to embedded if unreachable
-COLLECTION_NAME=visualai_layer_a_v1
+COLLECTION_NAME=visualai_embeddinggemma_v2
 
 # --- Step 2 Assessment & Pedagogical Rules ---
 MAX_QUESTIONS=10

@@ -1,4 +1,4 @@
-"""Caller-JWT, exact-version canonical reads; no disk or admin credential path."""
+"""Verified-caller, exact-version canonical reads in local or historical storage."""
 
 from __future__ import annotations
 
@@ -96,7 +96,8 @@ class KnowledgeRepository:
             raise KnowledgeError("NOT_FOUND")
         self.user = verified
         self._token = token
-        self.runtime = runtime
+        from .learning_storage import wrap
+        self.runtime = wrap(runtime, verified, token)
         self._scopes: set[SourceScope] = set()
         self.database_calls = 0
 

@@ -80,8 +80,7 @@ def semantic_metadata(payload: Mapping[str, object]) -> bool:
 
 
 def provenance() -> dict[str, str | int]:
-    return {'embedding_provider': 'ollama', 'embedding_model': 'embeddinggemma',
-            'embedding_dimension': DIMENSION, 'embedding_kind': 'semantic', 'embedding_version': '1'}
+    return vector_store.embedding_contract('embeddinggemma')
 
 
 def read_points(client: QdrantClient, collection: str) -> list[models.Record]:

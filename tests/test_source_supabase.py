@@ -305,6 +305,36 @@ def test_background_source_job_has_no_assessment_or_token_leak(context: Context,
     assert len(remote.sources) == len(remote.versions) == 1
 
 
+def test_explicit_retry_rejects_stale_version_before_vector_write(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.db import vector_store
+    from app.api.sources import source_repository
+    from app.main import app
+    _, repo, path = context
+    monkeypatch.setattr(vector_store, 'upsert_chunks', lambda chunks: len(chunks))
+    initial = ingest_source(repo, path, 'fixture.txt', enrich=True)
+    monkeypatch.setattr(vector_store, 'upsert_chunks', lambda chunks: pytest.fail('Stale version wrote vectors'))
+    app.dependency_overrides[source_repository] = lambda: repo
+    response = TestClient(app).post('/sources/' + initial['source_id'] + '/retry-index?version=2')
+    assert response.status_code == 409
+    assert response.json()['detail']['code'] == 'SOURCE_VERSION_CHANGED'
+
+
+def test_failed_forced_index_preserves_ready_canonical_source(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.db import vector_store
+    from app.core.processing_errors import ProcessingError
+    from app.services.ingestion.failures import SourceIndexFailed
+    remote, repo, path = context
+    monkeypatch.setattr(vector_store, 'upsert_chunks', lambda chunks: len(chunks))
+    initial = ingest_source(repo, path, 'fixture.txt', enrich=True)
+    def fail(chunks):
+        raise ProcessingError('EMBEDDING_MODEL_UNAVAILABLE', 'Unavailable')
+    monkeypatch.setattr(vector_store, 'upsert_chunks', fail)
+    record = repo.get_source(initial['source_id'])
+    with pytest.raises(SourceIndexFailed):
+        index_committed_source(repo, record, force=True)
+    assert remote.sources[0]['status'] == 'READY'
+
+
 def test_graph_artifact_is_not_needed_for_canonical_ready(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.ingestion import source_ingestion
     from app.db import vector_store
@@ -484,6 +514,27 @@ def test_ready_duplicate_never_reindexes_or_downgrades(context: Context, monkeyp
     assert initial["source_id"]==repeated["source_id"]
     assert repeated["understanding_metrics"]["qdrant_writes"]==0
     assert remote.sources[0]["status"]=="READY" and len(remote.sources)==len(remote.versions)==1
+
+
+def test_explicit_retry_refreshes_ready_source_in_active_collection(context: Context, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.db import vector_store
+    from app.api.sources import source_repository
+    from app.main import app
+    remote, repo, path = context
+    writes = []
+    def index(chunks):
+        writes.append((settings.collection_name, [c.chunk_id for c in chunks]))
+        return len(chunks)
+    monkeypatch.setattr(vector_store, 'upsert_chunks', index)
+    initial = ingest_source(repo, path, 'fixture.txt', enrich=True)
+    monkeypatch.setattr(settings, 'collection_name', 'replacement_semantic_v2')
+    app.dependency_overrides[source_repository] = lambda: repo
+    response = TestClient(app).post('/sources/' + initial['source_id'] + '/retry-index')
+    assert response.status_code == 200
+    assert len(writes) == 2 and writes[-1][0] == 'replacement_semantic_v2'
+    assert writes[0][1] == writes[-1][1]
+    assert remote.sources[0]['status'] == 'READY'
+    assert len(remote.sources) == len(remote.versions) == 1
 
 
 def test_source_cancel_waits_for_actual_publication(context: Context,monkeypatch: pytest.MonkeyPatch) -> None:
