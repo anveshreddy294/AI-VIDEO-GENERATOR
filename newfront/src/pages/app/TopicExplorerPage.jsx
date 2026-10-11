@@ -4,7 +4,7 @@ import { useAtelierWorkspace } from '../../context/WorkspaceContext';
 import { toUserMessage } from '../../services/api/errors';
 import { humanSourceStatus } from '../../services/api/adapters';
 import { GlyphArrowRight, GlyphCheckmark, GlyphDag, GlyphDocument } from '../../components/ui/AtelierGlyphs';
-import { useAnimatedCounter, animateTapFeedback } from '../../animations';
+import { LoadingContent } from '../../components/ui/Skeleton';
 
 const SUGGESTED_TOPICS = [
   'Relational Normalization',
@@ -56,7 +56,6 @@ export default function TopicExplorerPage() {
     }
   };
 
-  const animatedLessons = useAnimatedCounter(lessons.length, 600);
 
   return (
     <div className="workspace-page-root dashboard-vertical-flow">
@@ -64,18 +63,18 @@ export default function TopicExplorerPage() {
       <section className="atelier-page-header">
         <div className="header-meta-row">
           <span className="status-live-beacon" />
-          <span className="coord-label">MY LEARNING · SERVER-SYNCHRONIZED CURRICULUM</span>
+          <span className="coord-label">YOUR SAVED LESSONS</span>
         </div>
         <div className="header-title-split">
           <div>
             <h1 className="page-heading">My Learning</h1>
             <p className="page-subheading">
-              Start a topic lesson or continue one you have already saved. All lessons are grounded to real concepts and verified citations.
+              Start a topic lesson or continue one you have already saved.
             </p>
           </div>
           <div className="header-stat-tag">
-            <span className="coord-label">LESSONS ON SERVER:</span>
-            <strong style={{ fontSize: '24px', color: 'var(--ink-primary)' }}>{animatedLessons}</strong>
+            <span className="coord-label">SAVED LESSONS:</span>
+            <strong style={{ fontSize: '24px', color: 'var(--ink-primary)' }}>{workspaceStatus === 'loading' ? 'Loading…' : lessons.length}</strong>
           </div>
         </div>
       </section>
@@ -87,7 +86,7 @@ export default function TopicExplorerPage() {
             <span className="coord-label">CREATE NEW LESSON</span>
             <h2 id="learn-topic-heading" className="dashboard-card-heading">What would you like to learn?</h2>
             <p className="page-subheading" style={{ margin: '4px 0 0 0' }}>
-              Enter any concept name to generate an authoritative explanation, flowchart DAG, and practice assessment.
+              Enter a topic to create an explanation. Add notes, diagrams and practice when you need them.
             </p>
           </div>
         </div>
@@ -109,27 +108,19 @@ export default function TopicExplorerPage() {
           <div className="topic-suggestions-strip" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '4px 0' }}>
             <span className="coord-label" style={{ alignSelf: 'center', marginRight: '4px' }}>QUICK PICKS:</span>
             {SUGGESTED_TOPICS.map(item => (
-              <span
-                key={item}
-                role="button"
-                tabIndex={0}
+              <button
+                 key={item}
+                type="button"
+                aria-pressed={topic === item}
                 className="hero-topic-chip"
                 style={{
                   borderColor: topic === item ? 'var(--terracotta)' : 'var(--border)',
                   backgroundColor: topic === item ? 'var(--terracotta-subtle)' : 'var(--canvas)'
                 }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setTopic(item);
-                  }
-                }}
-                onClick={e => {
-                  animateTapFeedback(e.currentTarget);
-                  setTopic(item);
-                }}
+                onClick={() => setTopic(item)}
               >
                 {item}
-              </span>
+              </button>
             ))}
           </div>
 
@@ -183,7 +174,7 @@ export default function TopicExplorerPage() {
               <span className="coord-label">ACTIVE WORKSPACE LESSON</span>
               <h2 id="current-lesson-heading" className="dashboard-card-heading">{activeLesson.topic}</h2>
               <p className="coord-label" style={{ marginTop: '4px' }}>
-                LESSON ID {activeLesson.id} {activeLesson.source_id ? `· GROUNDED TO SOURCE ${activeLesson.source_id}` : '· TOPIC ONLY'}
+                {activeLesson.source_id ? 'From your study material' : 'Topic lesson'}
               </p>
             </div>
             <button 
@@ -207,13 +198,13 @@ export default function TopicExplorerPage() {
             <span className="coord-label">SAVED LESSONS ARCHIVE</span>
             <h2 id="continue-learning-heading" className="dashboard-card-heading">Continue Learning</h2>
             <p className="page-subheading" style={{ margin: '4px 0 0 0' }}>
-              Your server-persisted curriculum. Choose any lesson to resume notes, flowchart DAG, and practice questions.
+              Choose a saved lesson to resume its explanation, notes and practice questions.
             </p>
           </div>
         </div>
 
         <div className="saved-lessons-vertical-list">
-          {workspaceStatus === 'loading' && <p className="coord-label">Loading lessons…</p>}
+          {workspaceStatus === 'loading' && <LoadingContent label="Loading lessons…" />}
           {workspaceStatus !== 'loading' && lessons.length === 0 && (
             <p className="coord-label">No saved lessons yet. Start with a topic above.</p>
           )}

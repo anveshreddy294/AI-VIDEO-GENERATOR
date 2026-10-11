@@ -4,7 +4,10 @@ import { useAtelierWorkspace } from '../../context/WorkspaceContext';
 import { lessonApi } from '../../services/api/lessonApi';
 import { videoApi } from '../../services/api/videoApi';
 import { toUserMessage } from '../../services/api/errors';
-import { useAnimatedCounter, useDiagramAnimation, animateTapFeedback } from '../../animations';
+import { useDiagramAnimation } from '../../animations';
+import { WorkflowStepper } from '../../components/ui/WorkflowStepper';
+import { VIDEO_WORKFLOW_STEPS, videoWorkflowState } from '../../services/workflowState';
+import { LoadingContent } from '../../components/ui/Skeleton';
 import {
   GlyphArrowRight,
   GlyphCheckmark,
@@ -79,7 +82,7 @@ function VisualizePanel({ lesson, loadLesson, onTabChange }) {
       <SectionIntro 
         eyebrow="VISUALIZE" 
         title="See how the ideas connect" 
-        description="The flowchart below is returned by the backend for this lesson. Generate it only when you want a visual view." 
+         description="Explore the connections in this lesson. Generate a flowchart when you want a visual view." 
         action={
           <button type="button" className="btn-atelier-primary" disabled={busy} onClick={generate}>
             {busy ? 'Generating diagram…' : diagram ? 'Regenerate Flowchart' : 'Generate Flowchart'} <GlyphEvidence size={12} />
@@ -104,9 +107,7 @@ function VisualizePanel({ lesson, loadLesson, onTabChange }) {
                   onMouseLeave={() => setHoveredNode(null)}
                   style={{
                     cursor: 'pointer',
-                    transition: 'all 0.18s ease',
                     borderColor: isHovered ? 'var(--terracotta)' : undefined,
-                    transform: isHovered ? 'translateY(-2px)' : undefined
                   }}
                 >
                   <span>{String(index + 1).padStart(2, '0')}</span>
@@ -125,7 +126,6 @@ function VisualizePanel({ lesson, loadLesson, onTabChange }) {
                     className={`workspace-diagram-edge ${isConnected ? 'active-highlight' : ''}`} 
                     key={`${edge.from_node}-${edge.to_node}-${index}`}
                     style={{
-                      transition: 'all 0.18s ease',
                       borderColor: isConnected ? 'var(--terracotta)' : undefined,
                       backgroundColor: isConnected ? 'var(--terracotta-subtle)' : undefined
                     }}
@@ -165,7 +165,6 @@ function VisualizePanel({ lesson, loadLesson, onTabChange }) {
 }
 
 function PracticeResultCard({ result, onReset }) {
-  const animatedScore = useAnimatedCounter(result.percentage || 0, 750);
   const isPassed = (result.percentage || 0) >= 70;
 
   return (
@@ -174,9 +173,9 @@ function PracticeResultCard({ result, onReset }) {
         <div>
           <span className="coord-label">SERVER-GRADED ASSESSMENT RESULT</span>
           <div className="workspace-score-display">
-            <strong className="workspace-score-number">{animatedScore}%</strong>
+            <strong className="workspace-score-number">{result.percentage}%</strong>
             <span className={`workspace-score-badge ${isPassed ? 'passed' : 'review'}`}>
-              {isPassed ? '✓ Passed' : 'Needs Review'}
+              {isPassed ? 'Passed' : 'Needs review'}
             </span>
           </div>
         </div>
@@ -366,7 +365,7 @@ function PracticePanel({ lesson, loadLesson }) {
                   {questionIndex + 1}. {question.prompt}
                   {graded && (
                     <span className={`grade-badge ${isCorrect ? 'correct' : 'incorrect'}`}>
-                      {isCorrect ? '✓ Correct' : '✗ Incorrect'}
+                      {isCorrect ? 'Correct' : 'Incorrect'}
                     </span>
                   )}
                 </legend>
@@ -435,10 +434,10 @@ function PracticePanel({ lesson, loadLesson }) {
                 <span className="coord-label">SUBMISSION CHECKLIST</span>
                 <div className="checklist-items">
                   <span className={`checklist-item ${answeredMcqs === totalMcqs ? 'complete' : 'pending'}`}>
-                    {answeredMcqs === totalMcqs ? '✓' : '○'} Multiple Choice: {answeredMcqs}/{totalMcqs} answered
+                    Multiple choice: {answeredMcqs}/{totalMcqs} answered
                   </span>
                   <span className={`checklist-item ${hasDescriptive ? 'complete' : 'pending'}`}>
-                    {hasDescriptive ? '✓' : '○'} Written Response: {hasDescriptive ? 'Answer provided' : 'Required for grading'}
+                    Written response: {hasDescriptive ? 'Answer provided' : 'Required for grading'}
                   </span>
                 </div>
               </div>
@@ -481,7 +480,7 @@ function AskPanel({ lesson }) {
       <SectionIntro 
         eyebrow="ASK VISUALAI" 
         title="Ask a question about this lesson" 
-        description="VisualAI will answer using the current lesson context and will show the evidence status returned by the backend." 
+        description="Ask about this lesson. Each answer includes its available evidence status." 
       />
       <ErrorNotice error={error} />
       <div className="workspace-ask-card">
@@ -569,7 +568,23 @@ function VideoPanel({ lesson, videoJobStatus, setVideoJobStatus, active }) {
   const download = () => { if (!mediaUrl) return; const anchor = document.createElement('a'); anchor.href = mediaUrl; anchor.download = `${lesson.topic.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.mp4`; document.body.appendChild(anchor); anchor.click(); anchor.remove(); };
   const current = status;
   const isCompleted = current?.status === 'COMPLETED' && mediaUrl;
-  return <section className="workspace-panel" aria-labelledby="video-panel-heading"><SectionIntro eyebrow="VIDEO" title={isCompleted ? 'Watch your explanation video' : 'Generate an explanation video'} description="Video generation uses the existing renderer. Opening this tab never starts a job automatically." action={current?.status ? <span className="workspace-status-chip">{current.status.replaceAll('_', ' ')}</span> : null} /><ErrorNotice error={error} />{isCompleted ? <div className="workspace-video-card"><video controls preload="metadata" src={mediaUrl} aria-label={`Explanation video for ${lesson.topic}`} /><div className="workspace-video-actions"><span className="coord-label">BACKEND-CONFIRMED MP4 · {current.duration_seconds ? `${current.duration_seconds}s` : 'duration available in player'}</span><button type="button" className="btn-atelier-outline" onClick={download}>Download Video <GlyphArrowRight size={12} /></button></div></div> : <div className="workspace-empty-panel"><GlyphPlay size={24} /><h3 id="video-panel-heading">{ACTIVE_VIDEO_STATUSES.has(current?.status) ? 'Your video is being prepared' : current?.status === 'FAILED' ? 'Video generation failed' : 'Video is optional'}</h3><p>{ACTIVE_VIDEO_STATUSES.has(current?.status) ? `${current.stage || 'The renderer is working'} · ${current.progress ?? 0}%` : current?.status === 'FAILED' ? 'The backend reported a failed video job. You can retry when the service is ready.' : 'Create a narrated explanation when you want another way to review this lesson.'}</p><button type="button" className="btn-atelier-primary" disabled={busy || ACTIVE_VIDEO_STATUSES.has(current?.status)} onClick={start}>{busy ? 'Starting video…' : current?.status === 'FAILED' ? 'Retry Video' : 'Generate Explanation Video'} <GlyphPlay size={12} /></button></div>}</section>;
+  return (
+    <section className="workspace-panel" aria-label="Lesson video">
+      <SectionIntro eyebrow="VIDEO" title={isCompleted ? 'Watch your explanation video' : 'Generate an explanation video'} description="Create a narrated explanation when you want another way to review this lesson." />
+      <ErrorNotice error={error} />
+      <div className="video-workflow"><WorkflowStepper steps={VIDEO_WORKFLOW_STEPS} {...videoWorkflowState(current)} label="Video preparation" /></div>
+      {isCompleted ? <div className="workspace-video-card">
+        <video controls preload="metadata" src={mediaUrl} aria-label={`Explanation video for ${lesson.topic}`} />
+        <div className="workspace-video-actions"><span className="coord-label">MP4{current.duration_seconds ? ` · ${current.duration_seconds}s` : ''}</span><button type="button" className="btn-atelier-outline" onClick={download}>Download Video <GlyphArrowRight size={12} /></button></div>
+      </div> : current?.status === 'COMPLETED' ? <div className="workspace-empty-panel">
+        {error ? <button type="button" className="btn-atelier-outline" onClick={loadMedia}>Retry loading video</button> : <LoadingContent label="Loading your video…" />}
+      </div> : <div className="workspace-empty-panel">
+        <h3>{ACTIVE_VIDEO_STATUSES.has(current?.status) ? 'Your video is being prepared' : current?.status === 'FAILED' ? 'Video generation failed' : 'Video is optional'}</h3>
+        <p>{ACTIVE_VIDEO_STATUSES.has(current?.status) ? 'You can continue studying while the video is prepared.' : 'Generation starts only when you choose the button below.'}</p>
+        <button type="button" className="btn-atelier-primary" disabled={busy || ACTIVE_VIDEO_STATUSES.has(current?.status)} onClick={start}>{busy ? 'Starting video…' : current?.status === 'FAILED' ? 'Retry Video' : 'Generate Explanation Video'} <GlyphPlay size={12} /></button>
+      </div>}
+    </section>
+  );
 }
 
 export default function LearningStudioPage() {
@@ -589,6 +604,8 @@ export default function LearningStudioPage() {
     navigate(`/app/studio?${params.toString()}`);
   };
   const openLessonList = () => navigate('/app/explore');
+
+  if (!activeLesson && workspaceStatus === 'loading') return <div className="workspace-page-root"><LoadingContent label="Loading your lesson…" lines={6} /></div>;
 
   if (!activeLesson) return <div className="workspace-page-root"><section className="atelier-page-header"><div className="header-meta-row"><span className="coord-label">LEARNING WORKSPACE</span></div><h1 className="page-heading">Choose a lesson to begin</h1><p className="page-subheading">Your explanation, notes, visualization, practice, questions and video all live here once you open a saved lesson.</p>{workspaceStatus === 'loading' && <p className="coord-label">Loading your learning context…</p>}{workspaceError && <ErrorNotice error={workspaceError} />}<button type="button" className="btn-atelier-primary" onClick={openLessonList}>Open My Learning <GlyphArrowRight size={12} /></button></section></div>;
 

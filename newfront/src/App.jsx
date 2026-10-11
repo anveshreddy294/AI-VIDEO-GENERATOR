@@ -25,11 +25,12 @@ import ProfilePage from './pages/app/ProfilePage';
 // Educator Hub Page
 import EducatorHubPage from './pages/educator/EducatorHubPage';
 import { useAtelierWorkspace } from './context/WorkspaceContext';
+import { LoadingContent } from './components/ui/Skeleton';
 
 function AuthLoading() {
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--canvas)' }}>
-      <span className="coord-label">RESTORING VERIFIED SESSION…</span>
+      <div style={{ width: 'min(360px, 80vw)' }}><LoadingContent label="Restoring your session…" /></div>
     </div>
   );
 }

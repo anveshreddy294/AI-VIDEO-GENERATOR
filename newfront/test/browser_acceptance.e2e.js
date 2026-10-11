@@ -41,8 +41,9 @@ async function runBrowserAcceptance() {
     assert.match(await text(page), /Learn a Topic/i);
     assert.match(await text(page), /Upload Study Material/i);
     assert.match(await text(page), /Continue Learning/i);
-    await page.reload({ waitUntil: 'networkidle0' });
+    await page.reload({ waitUntil: 'networkidle2' });
     assert.ok(page.url().includes('/app/dashboard'));
+    await page.waitForSelector('.user-name-tag', { timeout: 10000 });
     assert.ok(await page.$('.user-name-tag'));
 
     console.log('\n--- 3. My Learning and one lesson workspace ---');

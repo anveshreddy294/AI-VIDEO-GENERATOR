@@ -74,11 +74,12 @@ export function statusLabel(status) {
 export function humanSourceStatus(status) {
   const value = String(status || '').toUpperCase();
   if (value === 'READY') return 'Ready to learn';
-  if (value === 'CONTENT_READY') return 'Material read · search preparing';
+  if (value === 'CONTENT_READY') return 'Material read · search optional';
   if (['PROCESSING', 'EXTRACTING', 'NORMALIZING', 'PERSISTING'].includes(value)) return 'Reading your material';
   if (value === 'INDEXING') return 'Preparing document search';
   if (value === 'FAILED' || value.includes('FAILED')) return 'Could not process this file';
-  return 'Preparing learning content';
+  if (['CANCELLED', 'CANCELED'].includes(value)) return 'Processing cancelled';
+  return 'Status not available';
 }
 
 export function humanJobStage(stage, status) {

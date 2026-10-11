@@ -10,7 +10,7 @@
 }
 
 html {
-  font-size: 17.5px;
+  font-size: 16px;
   background-color: var(--canvas);
   color: var(--ink-primary);
   font-family: var(--font-sans);
@@ -24,8 +24,8 @@ body {
   min-height: 100vh;
   background-color: var(--canvas);
   color: var(--ink-primary);
-  font-size: 17px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.55;
   overflow-x: hidden;
 }
 
@@ -37,15 +37,15 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1.3;
 }
 
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 26px; }
-h4 { font-size: 22px; }
+h1 { font-size: clamp(2rem, 4vw, 3.5rem); }
+h2 { font-size: clamp(1.5rem, 2.5vw, 2rem); }
+h3 { font-size: 1.35rem; }
+h4 { font-size: 1.1rem; }
 
 p, li, span, label, input, button, select, textarea {
-  font-family: var(--font-sans);
+  font-family: inherit;
   color: inherit;
-  font-size: 17px;
+  font-size: inherit;
 }
 
 code, pre, kbd, samp, .mono {
@@ -63,6 +63,18 @@ button {
   cursor: pointer;
   color: inherit;
   font: inherit;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 img, svg, video {
@@ -91,10 +103,10 @@ img, svg, video {
 }
 
 .coord-label {
-  font-family: var(--font-mono);
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--ink-muted);
 }

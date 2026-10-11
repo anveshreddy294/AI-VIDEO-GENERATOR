@@ -23,11 +23,10 @@ export default function ProductDemoPage() {
       <main className="demo-page-main">
         <div className="atelier-container">
           <div className="demo-header-strip">
-            <span className="coord-label">INTERACTIVE VERIFICATION SUITE · FIXTURE CONTRACT V1</span>
+            <span className="coord-label">EXPLORE VISUALAI</span>
             <h1 className="demo-title">Interactive Product Demonstration</h1>
             <p className="demo-subtitle">
-              Inspect the end-to-end pedagogical pipeline backed by canonical curriculum contracts. 
-              No fake interfaces or mock fabrications.
+              Explore illustrated examples of a learning workspace. Sign in to create lessons and see your own results.
             </p>
           </div>
 
@@ -36,19 +35,19 @@ export default function ProductDemoPage() {
               className={`demo-tab-btn ${activeTab === 'transformation' ? 'active' : ''}`}
               onClick={() => setActiveTab('transformation')}
             >
-              01 · Six-Stage Transformation
+               Learning guide
             </button>
             <button 
               className={`demo-tab-btn ${activeTab === 'ask' ? 'active' : ''}`}
               onClick={() => setActiveTab('ask')}
             >
-              02 · Source-Grounded ASK Demo
+               Example question
             </button>
             <button 
               className={`demo-tab-btn ${activeTab === 'video' ? 'active' : ''}`}
               onClick={() => setActiveTab('video')}
             >
-              03 · Visual Lesson Studio
+               Video guide
             </button>
           </div>
 
@@ -73,7 +72,7 @@ export default function ProductDemoPage() {
                     </div>
                   </div>
                   <div className="ask-response-col">
-                    <span className="coord-label">GROUNDED CITATION OUTPUT</span>
+                    <span className="coord-label">ILLUSTRATIVE ANSWER</span>
                     <p className="ask-answer-text">
                       According to <em>Database Systems Architecture (v2 · § 3.2)</em>: 
                       "Entity Integrity dictates that primary key attributes identify distinct entities 
@@ -81,7 +80,7 @@ export default function ProductDemoPage() {
                     </p>
                     <div className="ask-citation-pill">
                       <GlyphCrosshair size={12} />
-                      <span>Verified Citation: Page 7 · Bounding Box [142, 288, 480, 320]</span>
+                       <span>Example citation format: chapter, page and source passage</span>
                     </div>
                   </div>
                 </div>
@@ -93,8 +92,8 @@ export default function ProductDemoPage() {
                 <div className="video-demo-viewport-box">
                   <img src="/assets/database_code_screen.jpg" alt="Video frame" className="video-demo-img" />
                   <div className="video-demo-overlay">
-                    <span className="video-demo-tag">LESSON DEMO · HD 1080P</span>
-                    <span className="video-demo-status">INTERACTIVE VIDEO PLAYER READY</span>
+                    <span className="video-demo-tag">VIDEO LESSON ILLUSTRATION</span>
+                    <span className="video-demo-status">Generate and play your video in the workspace</span>
                   </div>
                 </div>
                 <div className="video-demo-caption">

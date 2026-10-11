@@ -73,17 +73,18 @@
   background-color: var(--evergreen);
   color: var(--canvas);
   border: 1px solid var(--evergreen);
-  border-radius: var(--radius-sharp);
-  padding: 10px 22px;
-  font-family: var(--font-mono);
-  font-size: 14px;
+  min-height: var(--control-height);
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-family: var(--font-sans);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
   box-shadow: none !important;
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .btn-atelier-primary:hover:not(:disabled) {
@@ -104,17 +105,18 @@
   background-color: transparent;
   color: var(--ink-primary);
   border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sharp);
-  padding: 10px 20px;
-  font-family: var(--font-mono);
-  font-size: 14px;
+  min-height: var(--control-height);
+  border-radius: 999px;
+  padding: 9px 17px;
+  font-family: var(--font-sans);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
   box-shadow: none !important;
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 0.15s ease, border-color 0.15s ease;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .btn-atelier-outline:hover:not(:disabled) {
@@ -130,13 +132,14 @@
   background-color: var(--terracotta);
   color: #FAF8F5;
   border: 1px solid var(--terracotta);
-  border-radius: var(--radius-sharp);
-  padding: 10px 20px;
-  font-family: var(--font-mono);
-  font-size: 14px;
+  min-height: var(--control-height);
+  border-radius: 999px;
+  padding: 9px 17px;
+  font-family: var(--font-sans);
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  text-transform: none;
   box-shadow: none !important;
   cursor: pointer;
   text-decoration: none;
@@ -4736,6 +4739,161 @@
   margin-bottom: 14px;
 }
 
+/* Modern workflow nodes: state is driven by backend lifecycle values. */
+.workflow-stepper {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  padding: 16px 4px 8px;
+}
+
+.workflow-step {
+  display: flex;
+  min-width: 108px;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.workflow-step-node {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  color: var(--ink-muted);
+  background: var(--canvas);
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.workflow-step-copy strong,
+.workflow-step-copy small {
+  display: block;
+}
+
+.workflow-step-copy strong {
+  color: var(--ink-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workflow-step-copy small {
+  margin-top: 2px;
+  color: var(--ink-muted);
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.workflow-step-line {
+  flex: 1;
+  height: 1px;
+  margin-top: 16px;
+  background: var(--border);
+}
+
+.workflow-step-completed .workflow-step-node {
+  color: var(--canvas);
+  background: var(--evergreen);
+  border-color: var(--evergreen);
+}
+
+.workflow-step-completed .workflow-step-copy strong { color: var(--evergreen); }
+.workflow-step-active .workflow-step-node { color: var(--evergreen); border: 2px solid var(--evergreen); }
+.workflow-step-active .workflow-step-copy strong { color: var(--ink-primary); }
+.workflow-step-failed .workflow-step-node { color: #7B352B; border-color: #A46047; background: #F3E4DE; }
+.workflow-step-failed .workflow-step-copy strong { color: #7B352B; }
+.workflow-step-line.complete { background: var(--evergreen); }
+
+.materials-workflow {
+  padding: 15px 18px 4px;
+  margin-bottom: 18px;
+  background: var(--surface-panel);
+  border: 1px solid var(--border);
+}
+
+.materials-workflow-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.materials-workflow-header strong { font-size: 14px; }
+
+.video-workflow {
+  padding: 8px 0 18px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 18px;
+}
+
+/* App dashboard: quieter, data-led and free of infrastructure telemetry. */
+.modern-dashboard-hero {
+  padding: 14px 0 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.modern-dashboard-hero h1 {
+  max-width: 760px;
+  margin: 13px 0 9px;
+  font-size: clamp(2.5rem, 5vw, 4.4rem);
+  line-height: 1.02;
+}
+
+.modern-dashboard-hero p {
+  max-width: 680px;
+  color: var(--ink-secondary);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.modern-dashboard-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.modern-action-primary,
+.modern-action-secondary {
+  display: flex;
+  min-height: 188px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border);
+}
+
+.modern-action-primary { color: var(--canvas); background: var(--evergreen); border-color: var(--evergreen); }
+.modern-action-secondary { background: var(--surface-panel); }
+.modern-action-primary h2, .modern-action-primary p, .modern-action-primary .coord-label { color: var(--canvas); }
+.modern-action-primary h2, .modern-action-secondary h2 { margin: 6px 0; font-family: var(--font-serif); font-size: 25px; }
+.modern-action-primary p, .modern-action-secondary p { max-width: 45ch; font-size: 13px; line-height: 1.55; }
+.modern-action-secondary p { color: var(--ink-secondary); }
+.modern-action-primary .btn-atelier-primary { color: var(--evergreen); background: var(--canvas); border-color: var(--canvas); }
+.modern-dashboard-section { padding-top: 28px; }
+.modern-dashboard-section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.modern-dashboard-section-header h2 { margin-top: 5px; font-family: var(--font-serif); font-size: 25px; }
+.modern-dashboard-list { border-top: 1px solid var(--border); }
+.modern-dashboard-list-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+.modern-dashboard-list-row strong, .modern-dashboard-list-row small { display: block; }
+.modern-dashboard-list-row strong { font-size: 14px; }
+.modern-dashboard-list-row small { margin-top: 4px; color: var(--ink-muted); font-family: var(--font-mono); font-size: 10px; }
+
+@media (max-width: 760px) {
+  .workflow-stepper { overflow-x: auto; padding-bottom: 12px; }
+  .workflow-step { min-width: 92px; }
+  .workflow-step-copy small { max-width: 84px; }
+  .modern-dashboard-actions { grid-template-columns: 1fr; }
+  .modern-dashboard-hero h1 { font-size: 2.8rem; }
+  .modern-dashboard-section-header { align-items: flex-start; flex-direction: column; }
+}
+
 /* Connected learning workspace and simplified dashboard */
 /* Dashboard Master Hero & Visual Showcase */
 .dashboard-hero-master-stage {
@@ -6689,5 +6847,3 @@
   color: var(--ink-secondary);
   margin: 0;
 }
-
-

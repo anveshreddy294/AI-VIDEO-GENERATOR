@@ -127,8 +127,7 @@ export default function LandingPage() {
           <div className="atelier-container" style={{ position: 'relative', zIndex: 2 }}>
             {/* Top Registration Index */}
             <div className="hero-registration-line">
-              <span className="coord-label">LAT 37.7749° N · SYSTEM DESIGN SPECIFICATION · REF 2026.4</span>
-              <span className="coord-label">ARCHITECTURAL EDITION · THE KNOWLEDGE ATELIER</span>
+              <span className="coord-label">VISUALAI · THE KNOWLEDGE ATELIER</span>
             </div>
 
             <div className="hero-grid-layout">
@@ -142,9 +141,7 @@ export default function LandingPage() {
                 </h1>
 
                 <p className="hero-lead-text">
-                  Turn dense textbooks, technical notes, and problem sets into 
-                  optically verified evidence, topological concept graphs, and 
-                  adaptive video lessons.
+                   Bring a topic or your own study material. Build understanding with clear explanations, connected concepts, practice and narrated video.
                 </p>
 
                 <div className="hero-actions-group">
@@ -179,7 +176,7 @@ export default function LandingPage() {
                 {/* Floating Precision Micro-Chips */}
                 <div className="hero-floating-chip chip-top-left">
                   <GlyphEvidence size={12} />
-                  <span>OCR REGISTRATION [142, 288]</span>
+                  <span>EXPLORE CONNECTED IDEAS</span>
                 </div>
 
                 <div className="hero-floating-chip chip-mid-left">
@@ -209,7 +206,7 @@ export default function LandingPage() {
                 <div className="hero-mount-card floating-hero-plate">
                   <div className="mount-meta-header">
                     <span className="coord-label">FIG 01 · OPTICAL KNOWLEDGE STAGE</span>
-                    <span className="mount-status-dot">ACTIVE ENGINE</span>
+                    <span className="mount-status-dot">ILLUSTRATED EXAMPLE</span>
                   </div>
 
                   <div className="mount-contained-media">
@@ -220,7 +217,7 @@ export default function LandingPage() {
                     />
                     <div className="mount-overlay-badge">
                       <GlyphCrosshair size={13} />
-                      <span>VERIFIED CURRICULUM · OPTICALLY GROUNDED</span>
+                      <span>LEARNING THROUGH WORDS AND VISUALS</span>
                     </div>
                   </div>
 
@@ -268,7 +265,7 @@ export default function LandingPage() {
               <span className="coord-label">01 / THE CORE PEDAGOGICAL INSTRUMENT</span>
               <h2 className="section-title">The Complete Knowledge Transformation</h2>
               <p className="section-subtext">
-                Every learning journey follows six verified states: from raw textbook scan to targeted cognitive improvement.
+                Explore the tools you can use at your own pace, from reading material to reviewing a lesson.
               </p>
             </div>
 
@@ -283,18 +280,17 @@ export default function LandingPage() {
             <div className="stream-header-strip">
               <div className="stream-header-left">
                 <span className="coord-label">02 / CONTINUOUS EXTRACTION STREAM</span>
-                <h2 className="stream-title">Autonomous Curriculum Specimen Corridor</h2>
+                <h2 className="stream-title">Ideas across disciplines</h2>
                 <p className="stream-subtext">
-                  Continuous optical extraction across mathematics, astrophysics, analog systems, and biology.
+                  Illustrated topics from mathematics, physics and biology.
                 </p>
               </div>
-              <span className="coord-label">AUTONOMOUS GLIDE · 6 CONCURRENT PLATES</span>
             </div>
           </div>
 
           <div className="floating-stream-viewport">
             <div className="floating-stream-track">
-              {[...streamItems, ...streamItems].map((item, idx) => (
+              {streamItems.map((item, idx) => (
                 <div 
                   key={`${item.code}-${idx}`} 
                   className={`floating-stream-card stream-card-alt-${(idx % 3) + 1}`}

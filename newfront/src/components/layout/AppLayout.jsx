@@ -41,7 +41,10 @@ export default function AppLayout() {
             type="button"
             className="app-brand-lockup-btn"
             onClick={() => setSidebarOpen(prev => !prev)}
-            title="Click to open left workspace toolbar"
+             title="Click to open left workspace toolbar"
+             aria-label={sidebarOpen ? 'Close workspace navigation' : 'Open workspace navigation'}
+             aria-expanded={sidebarOpen}
+             aria-controls="workspace-navigation"
             style={{
               background: 'none',
               border: 'none',
@@ -81,10 +84,6 @@ export default function AppLayout() {
         </div>
 
         <div className="app-top-right">
-          <span className="app-telemetry-chip" style={{ marginRight: '8px' }}>
-            <span className="status-live-beacon" style={{ width: '6px', height: '6px', margin: 0 }} />
-            <span>37°N · v3.0</span>
-          </span>
           <Link to="/app/profile" className="app-user-pill">
             <span className="user-avatar-tag">{user.avatarLabel}</span>
             <span className="user-name-tag">{user.name}</span>
@@ -103,7 +102,7 @@ export default function AppLayout() {
         )}
 
         {/* Left Architectural Navigation Toolbar (Opens when VisualAI is clicked) */}
-        <aside className={`app-sidebar ${sidebarOpen ? 'open' : ''}`}>
+        <aside id="workspace-navigation" className={`app-sidebar ${sidebarOpen ? 'open' : ''}`} inert={!sidebarOpen} onKeyDown={event => { if (event.key === 'Escape') { setSidebarOpen(false); document.querySelector('.app-brand-lockup-btn')?.focus(); } }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
             <div className="sidebar-section-title" style={{ margin: 0, padding: 0 }}>
               {user.role === 'educator' ? 'INSTRUCTOR CONSOLE' : 'STUDENT WORKSPACE'}
@@ -135,6 +134,7 @@ export default function AppLayout() {
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                  aria-current={isActive ? 'page' : undefined}
                 >
                   <Icon size={14} className="sidebar-glyph" />
                   <span className="sidebar-label">{item.label}</span>
@@ -173,8 +173,8 @@ export default function AppLayout() {
               ← Exit to Home
             </Link>
             <div className="sidebar-system-spec">
-              <span>CANONICAL SANDBOX</span>
-              <span>v0.4.0 · OPTICAL PROVENANCE</span>
+              <Link to="/terms">Terms</Link>
+              <Link to="/privacy">Privacy</Link>
             </div>
           </div>
         </aside>
