@@ -173,7 +173,7 @@ def test_unused_proposed_headings_are_removed_without_changing_grounded_children
     actual = understand_content(SCOPE, units, unused_headings)
     assert actual.snapshot == expected.snapshot
     assert actual.repair_model_calls == 0
-    assert set(actual.deterministic_repairs) == {'empty_topic_removed:t_unused', 'empty_subtopic_removed:s_unused'}
+    assert set(actual.deterministic_repairs) == set(expected.deterministic_repairs) | {'empty_topic_removed:t_unused', 'empty_subtopic_removed:s_unused'}
 
 
 @pytest.mark.parametrize('kind', ['dangling_topic', 'dangling_subtopic', 'no_children'])
